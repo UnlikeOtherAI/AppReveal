@@ -61,6 +61,7 @@ public final class AppReveal {
 
     private func launch(port: UInt16?) {
         registerBuiltInTools()
+        registerWebViewTools()
         let server = MCPServer(port: port)
         self.server = server
         server.start()

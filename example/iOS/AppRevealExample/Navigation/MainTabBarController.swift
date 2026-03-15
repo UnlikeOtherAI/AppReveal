@@ -21,7 +21,10 @@ class MainTabBarController: UITabBarController {
         let settingsNav = UINavigationController(rootViewController: SettingsViewController())
         settingsNav.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), tag: 3)
 
-        viewControllers = [ordersNav, catalogNav, profileNav, settingsNav]
+        let webViewNav = UINavigationController(rootViewController: WebViewDemoViewController())
+        webViewNav.tabBarItem = UITabBarItem(title: "Web", image: UIImage(systemName: "globe"), tag: 4)
+
+        viewControllers = [ordersNav, catalogNav, profileNav, settingsNav, webViewNav]
 
         // Check if user is logged in; if not, present login
         if !ExampleStateContainer.shared.isLoggedIn {
