@@ -28,6 +28,10 @@ final class MCPRouter {
         tools[tool.name] = tool
     }
 
+    func tool(named name: String) -> MCPToolDefinition? {
+        tools[name]
+    }
+
     func handle(_ request: MCPRequest) async -> MCPResponse {
         switch request.method {
         case "initialize":

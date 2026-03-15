@@ -451,6 +451,83 @@ func registerBuiltInTools() {
             return AnyCodable(["views": tree, "count": tree.count] as [String: Any])
         }
     ))
+
+    // MARK: - batch
+
+    router.register(MCPToolDefinition(
+        name: "batch",
+        description: "Execute multiple tool calls in a single request. Actions run sequentially. Each action can have an optional delay_ms (milliseconds to wait BEFORE executing that action) to account for animations, screen transitions, or loading. Returns results for every action.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "actions": [
+                    "type": "array",
+                    "description": "Array of actions. Each: {\"tool\": \"tool_name\", \"arguments\": {...}, \"delay_ms\": 500}",
+                    "items": [
+                        "type": "object",
+                        "properties": [
+                            "tool": ["type": "string", "description": "Tool name"],
+                            "arguments": ["type": "object", "description": "Tool arguments"],
+                            "delay_ms": ["type": "integer", "description": "Milliseconds to wait before this action (for animations/transitions)"]
+                        ],
+                        "required": ["tool"]
+                    ]
+                ],
+                "stop_on_error": [
+                    "type": "boolean",
+                    "description": "Stop executing remaining actions if one fails (default: false)"
+                ]
+            ] as [String: Any]),
+            "required": AnyCodable(["actions"])
+        ],
+        handler: { params in
+            guard let actionsRaw = params?["actions"]?.arrayValue else {
+                return AnyCodable(["error": "actions array required"])
+            }
+
+            let stopOnError = params?["stop_on_error"]?.boolValue ?? false
+            var results: [[String: Any]] = []
+
+            for (index, actionRaw) in actionsRaw.enumerated() {
+                guard let action = actionRaw as? [String: Any],
+                      let toolName = action["tool"] as? String else {
+                    results.append(["index": index, "error": "Invalid action format"])
+                    if stopOnError { break }
+                    continue
+                }
+
+                // Delay before this action
+                if let delayMs = action["delay_ms"] as? Int, delayMs > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
+                }
+
+                guard let tool = router.tool(named: toolName) else {
+                    results.append(["index": index, "tool": toolName, "error": "Tool not found"])
+                    if stopOnError { break }
+                    continue
+                }
+
+                let arguments: [String: AnyCodable]?
+                if let args = action["arguments"] as? [String: Any] {
+                    arguments = args.mapValues { AnyCodable($0) }
+                } else {
+                    arguments = nil
+                }
+
+                do {
+                    let result = try await tool.handler(arguments)
+                    let resultData = try JSONEncoder().encode(result)
+                    let resultString = String(data: resultData, encoding: .utf8) ?? "{}"
+                    results.append(["index": index, "tool": toolName, "result": resultString])
+                } catch {
+                    results.append(["index": index, "tool": toolName, "error": error.localizedDescription])
+                    if stopOnError { break }
+                }
+            }
+
+            return AnyCodable(["results": results, "count": results.count] as [String: Any])
+        }
+    ))
 }
 
 #endif
