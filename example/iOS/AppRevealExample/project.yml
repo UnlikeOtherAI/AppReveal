@@ -1,0 +1,44 @@
+name: AppRevealExample
+options:
+  bundleIdPrefix: com.appreveal
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+
+packages:
+  AppReveal:
+    path: ../../../iOS
+
+targets:
+  AppRevealExample:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Navigation
+      - path: Screens
+      - path: Services
+      - path: Models
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: AppReveal Example
+        LSRequiresIPhoneOS: true
+        NSLocalNetworkUsageDescription: AppReveal uses the local network for debug MCP connections.
+        NSBonjourServices:
+          - _appreveal._tcp
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        UILaunchScreen: {}
+    dependencies:
+      - package: AppReveal
+        product: AppReveal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.appreveal.example
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
