@@ -367,6 +367,155 @@ func registerWebViewTools() {
             return AnyCodable(["success": true] as [String: Any])
         }
     ))
+
+    // MARK: - get_dom_links
+
+    router.register(MCPToolDefinition(
+        name: "get_dom_links",
+        description: "Get all links on the page — just text and href. Minimal tokens.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            do {
+                let result = try await bridge.evaluate(js: DOMSerializer.linksJS(), webViewId: params?["webview_id"]?.stringValue)
+                return AnyCodable(["result": result] as [String: Any])
+            } catch {
+                return AnyCodable(["error": error.localizedDescription])
+            }
+        }
+    ))
+
+    // MARK: - get_dom_text
+
+    router.register(MCPToolDefinition(
+        name: "get_dom_text",
+        description: "Get visible text content of the page stripped of all markup. Optionally scope to a CSS selector. Minimal tokens.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "selector": ["type": "string", "description": "CSS selector to scope text extraction (default: body)"],
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let js = DOMSerializer.textContentJS(selector: params?["selector"]?.stringValue)
+            do {
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                return AnyCodable(["result": result] as [String: Any])
+            } catch {
+                return AnyCodable(["error": error.localizedDescription])
+            }
+        }
+    ))
+
+    // MARK: - get_dom_forms
+
+    router.register(MCPToolDefinition(
+        name: "get_dom_forms",
+        description: "Get all forms and their fields with types, names, values, options, and selectors. Includes pages without <form> tags.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            do {
+                let result = try await bridge.evaluate(js: DOMSerializer.formsJS(), webViewId: params?["webview_id"]?.stringValue)
+                return AnyCodable(["result": result] as [String: Any])
+            } catch {
+                return AnyCodable(["error": error.localizedDescription])
+            }
+        }
+    ))
+
+    // MARK: - get_dom_headings
+
+    router.register(MCPToolDefinition(
+        name: "get_dom_headings",
+        description: "Get all headings (h1-h6) for page structure overview. Minimal tokens.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            do {
+                let result = try await bridge.evaluate(js: DOMSerializer.headingsJS(), webViewId: params?["webview_id"]?.stringValue)
+                return AnyCodable(["result": result] as [String: Any])
+            } catch {
+                return AnyCodable(["error": error.localizedDescription])
+            }
+        }
+    ))
+
+    // MARK: - get_dom_images
+
+    router.register(MCPToolDefinition(
+        name: "get_dom_images",
+        description: "Get all visible images with src, alt text, and dimensions.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            do {
+                let result = try await bridge.evaluate(js: DOMSerializer.imagesJS(), webViewId: params?["webview_id"]?.stringValue)
+                return AnyCodable(["result": result] as [String: Any])
+            } catch {
+                return AnyCodable(["error": error.localizedDescription])
+            }
+        }
+    ))
+
+    // MARK: - get_dom_tables
+
+    router.register(MCPToolDefinition(
+        name: "get_dom_tables",
+        description: "Get all tables with headers and row data.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            do {
+                let result = try await bridge.evaluate(js: DOMSerializer.tablesJS(), webViewId: params?["webview_id"]?.stringValue)
+                return AnyCodable(["result": result] as [String: Any])
+            } catch {
+                return AnyCodable(["error": error.localizedDescription])
+            }
+        }
+    ))
+
+    // MARK: - get_dom_summary
+
+    router.register(MCPToolDefinition(
+        name: "get_dom_summary",
+        description: "Get a compact page summary: title, meta, headings (h1-h3), element counts (links, images, inputs, buttons), and form overview. Cheapest way to understand a page.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            do {
+                let result = try await bridge.evaluate(js: DOMSerializer.summaryJS(), webViewId: params?["webview_id"]?.stringValue)
+                return AnyCodable(["result": result] as [String: Any])
+            } catch {
+                return AnyCodable(["error": error.localizedDescription])
+            }
+        }
+    ))
 }
 
 #endif

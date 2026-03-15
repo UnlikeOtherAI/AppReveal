@@ -1,6 +1,6 @@
 # AppReveal
 
-Debug-only in-app MCP server for iOS. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, and diagnostics.
+Debug-only in-app MCP server for iOS. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
 
 ## How it works
 
@@ -10,6 +10,7 @@ Your App (debug build)                    External Agent
       +-- MCP Server (Streamable HTTP)  <---+-- MCP client (curl, SDK, Claude, etc.)
       +-- Bonjour advertisement             +-- LLM orchestration
       +-- Screen/element/state bridges
+      +-- WKWebView DOM bridge
 ```
 
 1. App calls `AppReveal.start()` in a debug build
@@ -21,7 +22,9 @@ Your App (debug build)                    External Agent
 
 ### 1. Add the package
 
-Add `iOS/` as a local Swift package dependency (or point to the repo).
+```swift
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.2.0")
+```
 
 ### 2. Start the server
 
@@ -34,7 +37,7 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions ...
     #if DEBUG
     AppReveal.start()
 
-    // Register providers for deeper inspection
+    // Optional: register providers for deeper inspection
     AppReveal.registerStateProvider(myStateContainer)
     AppReveal.registerNavigationProvider(myRouter)
     AppReveal.registerFeatureFlagProvider(myFeatureFlags)
@@ -44,9 +47,11 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions ...
 }
 ```
 
+That's it. WKWebView support works automatically -- no additional integration needed.
+
 ### 3. Add screen identity (optional)
 
-Screen identity is auto-derived from class names — `LoginViewController` becomes key `"login"`, title `"Login"`. Override only when you want a custom key:
+Screen identity is auto-derived from class names -- `LoginViewController` becomes key `"login"`, title `"Login"`. Override only when you want a custom key:
 
 ```swift
 #if DEBUG
@@ -82,31 +87,19 @@ curl -X POST http://localhost:56209/ \
 curl -X POST http://localhost:56209/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_screen","arguments":{}}}'
-# => {"screenKey":"auth.login","confidence":1,"controllerChain":["LoginViewController"],...}
 
-# List interactive elements
+# Fill a form and submit in one call
 curl -X POST http://localhost:56209/ \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_elements","arguments":{}}}'
-# => [{"id":"login.email","type":"textField","actions":"tap,type,clear"}, ...]
-
-# Type into a field
-curl -X POST http://localhost:56209/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"type_text","arguments":{"text":"user@test.com","element_id":"login.email"}}}'
-
-# Tap a button
-curl -X POST http://localhost:56209/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"tap_element","arguments":{"element_id":"login.submit"}}}'
-
-# Take a screenshot (returns base64 PNG)
-curl -X POST http://localhost:56209/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"screenshot","arguments":{}}}'
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"batch","arguments":{"actions":[
+    {"tool":"type_text","arguments":{"element_id":"login.email","text":"user@test.com"}},
+    {"tool":"type_text","arguments":{"element_id":"login.password","text":"secret"}},
+    {"tool":"tap_element","arguments":{"element_id":"login.submit"}},
+    {"tool":"get_screen","arguments":{},"delay_ms":1000}
+  ]}}}'
 ```
 
-## MCP tools
+## MCP tools (43 total)
 
 ### UI and navigation
 
@@ -114,6 +107,7 @@ curl -X POST http://localhost:56209/ \
 |------|-------------|
 | `get_screen` | Current screen identity, controller chain, confidence score |
 | `get_elements` | All visible interactive elements with id, type, frame, actions |
+| `get_view_tree` | Full view hierarchy with class, frame, properties, accessibility info |
 | `tap_element` | Tap by accessibility identifier (buttons, cells, controls) |
 | `tap_point` | Tap at screen coordinates |
 | `type_text` | Type text into a field (by element ID or current responder) |
@@ -137,6 +131,47 @@ curl -X POST http://localhost:56209/ \
 | `get_logs` | Recent app logs from OSLog |
 | `get_recent_errors` | Recent captured errors |
 | `launch_context` | Bundle ID, version, device model, OS version |
+
+### WKWebView -- DOM access
+
+Auto-discovers any WKWebView on screen. No integration code needed.
+
+| Tool | Description |
+|------|-------------|
+| `get_webviews` | List all web views with URL, title, loading state |
+| `get_dom_tree` | Full or partial DOM tree (with `root`, `max_depth`, `visible_only` params) |
+| `get_dom_interactive` | All inputs, buttons, links, selects with selectors and attributes |
+| `query_dom` | CSS selector query -- returns matching elements |
+| `find_dom_text` | Find elements by text content |
+| `web_click` | Click a DOM element by CSS selector |
+| `web_type` | Type into input/textarea (React/Vue/Angular compatible) |
+| `web_select` | Select a dropdown option |
+| `web_toggle` | Check/uncheck a checkbox or radio |
+| `web_scroll_to` | Scroll to a DOM element |
+| `web_evaluate` | Run arbitrary JavaScript |
+| `web_navigate` | Navigate to a URL |
+| `web_back` | Go back in web view history |
+| `web_forward` | Go forward in web view history |
+
+### WKWebView -- token-efficient queries
+
+Purpose-built tools that return only what you need, saving tokens.
+
+| Tool | Description |
+|------|-------------|
+| `get_dom_summary` | Page overview: title, meta, headings, element counts, form structure |
+| `get_dom_text` | Visible text content stripped of all markup (optional CSS selector scope) |
+| `get_dom_links` | All links -- just text and href |
+| `get_dom_forms` | All forms with fields, types, values, options, selectors |
+| `get_dom_headings` | All h1-h6 for page structure |
+| `get_dom_images` | All images with src, alt, dimensions |
+| `get_dom_tables` | All tables with headers and row data |
+
+### Batch operations
+
+| Tool | Description |
+|------|-------------|
+| `batch` | Execute multiple tools in one call. Supports `delay_ms` per action for animations/transitions and `stop_on_error`. Works with all native and web tools. |
 
 ## Integration protocols
 
@@ -183,17 +218,19 @@ AppReveal gives agents structured data instead of pixels:
 - **App state** read directly -- login status, feature flags, cart contents
 - **Navigation state** -- current route, stack depth, presented modals
 - **Network traffic** -- every API call with method, URL, status, timing
-- **Deterministic interactions** -- tap by ID, not by fragile coordinates
+- **DOM access** -- full web view inspection and interaction, no extra setup
+- **Batch operations** -- fill forms, navigate screens, verify state in one call
+- **Deterministic interactions** -- tap by ID or CSS selector, not by fragile coordinates
 
 ## Example app
 
-See [`example/iOS/`](example/iOS/) for a full example app with 10 screens, 60+ identified elements, and all framework features integrated. Run it on a simulator and connect via curl to test every tool.
+See [`example/iOS/`](example/iOS/) for a full example app with 11 screens (including a WKWebView demo), 60+ identified elements, and all framework features integrated. Run it on a simulator and connect via curl to test every tool.
 
 ## Platforms
 
 | Platform | Status |
 |----------|--------|
-| iOS | Working (Phase 1-3 tools functional) |
+| iOS | Working -- 43 tools, native + web view |
 | Android | Planned |
 
 ## Security
@@ -207,9 +244,14 @@ See [`example/iOS/`](example/iOS/) for a full example app with 10 screens, 60+ i
 
 - [Architecture](docs/architecture.md) -- module design, protocols, package structure
 - [Build Brief](docs/brief.md) -- phased implementation plan with task tracking
+- [WKWebView Support](docs/wkwebview-support.md) -- design doc for DOM access
 
 ## Requirements
 
 - iOS 16.0+
 - Swift 5.9+
 - Xcode 15+
+
+## License
+
+MIT
