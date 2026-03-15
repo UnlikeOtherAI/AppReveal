@@ -29,6 +29,7 @@ docs/                   -- architecture and build brief
 ## Workflow
 
 - Always commit and push to the repo after each turn. There should never be uncommitted code when you stop a task.
+- Before every commit, and absolutely before any release/tag: build the example app, launch it on a simulator, and verify changes work end-to-end through the actual MCP protocol (curl against the running server). Do not rely on just compiling — test the real HTTP/JSON-RPC path.
 
 ## Conventions
 
