@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class ProductDetailViewController: UIViewController {
 
     private let product: ExampleProduct
@@ -25,9 +21,6 @@ class ProductDetailViewController: UIViewController {
         title = product.name
         setupUI()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -129,11 +122,3 @@ class ProductDetailViewController: UIViewController {
         favoriteButton.isSelected.toggle()
     }
 }
-
-#if DEBUG
-extension ProductDetailViewController: ScreenIdentifiable {
-    var screenKey: String { "catalog.detail" }
-    var screenTitle: String { product.name }
-    var debugMetadata: [String: Any] { ["productId": product.id, "price": product.price] }
-}
-#endif

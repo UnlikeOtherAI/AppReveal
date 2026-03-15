@@ -26,6 +26,10 @@ iOS/                    -- Swift package (iOS implementation)
 docs/                   -- architecture and build brief
 ```
 
+## Workflow
+
+- Always commit and push to the repo after each turn. There should never be uncommitted code when you stop a task.
+
 ## Conventions
 
 - All framework code behind `#if DEBUG`

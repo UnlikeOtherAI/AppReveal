@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class OrdersListViewController: UITableViewController {
 
     private var orders: [ExampleOrder] = []
@@ -16,9 +12,6 @@ class OrdersListViewController: UITableViewController {
         setupUI()
         loadOrders()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -119,11 +112,3 @@ class OrderCell: UITableViewCell {
 
     required init?(coder: NSCoder) { fatalError() }
 }
-
-#if DEBUG
-extension OrdersListViewController: ScreenIdentifiable {
-    var screenKey: String { "orders.list" }
-    var screenTitle: String { "Orders" }
-    var debugMetadata: [String: Any] { ["orderCount": orders.count] }
-}
-#endif

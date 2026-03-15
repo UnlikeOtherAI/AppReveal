@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class OrderDetailViewController: UIViewController {
 
     private let orderId: String
@@ -31,9 +27,6 @@ class OrderDetailViewController: UIViewController {
         setupUI()
         loadOrderDetail()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -167,11 +160,3 @@ class OrderDetailViewController: UIViewController {
         ratingValueLabel.text = "Rating: \(rounded)"
     }
 }
-
-#if DEBUG
-extension OrderDetailViewController: ScreenIdentifiable {
-    var screenKey: String { "orders.detail" }
-    var screenTitle: String { "Order Detail" }
-    var debugMetadata: [String: Any] { ["orderId": orderId] }
-}
-#endif

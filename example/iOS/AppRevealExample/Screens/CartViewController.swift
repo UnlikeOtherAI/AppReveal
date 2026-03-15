@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class CartViewController: UIViewController {
 
     private let tableView = UITableView()
@@ -20,9 +16,6 @@ class CartViewController: UIViewController {
         super.viewDidLoad()
         setupUI()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     private func setupUI() {
@@ -96,11 +89,3 @@ extension CartViewController: UITableViewDataSource, UITableViewDelegate {
         return cell
     }
 }
-
-#if DEBUG
-extension CartViewController: ScreenIdentifiable {
-    var screenKey: String { "cart.main" }
-    var screenTitle: String { "Cart" }
-    var debugMetadata: [String: Any] { ["itemCount": cartItems.count] }
-}
-#endif

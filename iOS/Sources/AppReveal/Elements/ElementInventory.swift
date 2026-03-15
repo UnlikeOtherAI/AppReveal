@@ -121,6 +121,85 @@ final class ElementInventory {
         return actions
     }
 
+    // MARK: - Full view tree
+
+    func dumpViewTree(maxDepth: Int = 50) -> [[String: Any]] {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene }).first,
+              let window = scene.keyWindow else {
+            return []
+        }
+        return dumpNode(window, depth: 0, maxDepth: maxDepth)
+    }
+
+    private func dumpNode(_ view: UIView, depth: Int, maxDepth: Int) -> [[String: Any]] {
+        guard depth < maxDepth else { return [] }
+
+        let screenFrame = view.convert(view.bounds, to: nil)
+        var node: [String: Any] = [
+            "class": String(describing: type(of: view)),
+            "frame": "\(Int(screenFrame.origin.x)),\(Int(screenFrame.origin.y)),\(Int(screenFrame.size.width)),\(Int(screenFrame.size.height))",
+            "hidden": view.isHidden,
+            "alpha": view.alpha,
+            "userInteraction": view.isUserInteractionEnabled,
+            "depth": depth
+        ]
+
+        if let id = view.accessibilityIdentifier, !id.isEmpty {
+            node["accessibilityId"] = id
+        }
+        if let label = view.accessibilityLabel, !label.isEmpty {
+            node["accessibilityLabel"] = label
+        }
+        if let value = view.accessibilityValue, !value.isEmpty {
+            node["accessibilityValue"] = value
+        }
+
+        // Type-specific properties
+        if let label = view as? UILabel {
+            node["text"] = label.text ?? ""
+            node["font"] = "\(label.font.fontName) \(label.font.pointSize)"
+        } else if let textField = view as? UITextField {
+            node["text"] = textField.text ?? ""
+            node["placeholder"] = textField.placeholder ?? ""
+            node["isEditing"] = textField.isEditing
+        } else if let textView = view as? UITextView {
+            node["text"] = String(textView.text.prefix(200))
+            node["isEditable"] = textView.isEditable
+        } else if let button = view as? UIButton {
+            node["title"] = button.currentTitle ?? ""
+            node["enabled"] = button.isEnabled
+        } else if let imageView = view as? UIImageView {
+            node["hasImage"] = imageView.image != nil
+        } else if let toggle = view as? UISwitch {
+            node["isOn"] = toggle.isOn
+        } else if let slider = view as? UISlider {
+            node["value"] = slider.value
+            node["min"] = slider.minimumValue
+            node["max"] = slider.maximumValue
+        } else if let stepper = view as? UIStepper {
+            node["value"] = stepper.value
+        } else if let segmented = view as? UISegmentedControl {
+            node["selectedIndex"] = segmented.selectedSegmentIndex
+            node["segments"] = (0..<segmented.numberOfSegments).map {
+                segmented.titleForSegment(at: $0) ?? "\($0)"
+            }
+        } else if let control = view as? UIControl {
+            node["enabled"] = control.isEnabled
+            node["selected"] = control.isSelected
+        }
+
+        if let gestures = view.gestureRecognizers, !gestures.isEmpty {
+            node["gestureRecognizers"] = gestures.map { String(describing: type(of: $0)) }
+        }
+
+        var result = [node]
+        for subview in view.subviews {
+            result.append(contentsOf: dumpNode(subview, depth: depth + 1, maxDepth: maxDepth))
+        }
+        return result
+    }
+
     private func findView(withAccessibilityId id: String, in view: UIView) -> UIView? {
         if view.accessibilityIdentifier == id { return view }
         for subview in view.subviews {

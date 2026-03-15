@@ -44,14 +44,15 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions ...
 }
 ```
 
-### 3. Add screen identity
+### 3. Add screen identity (optional)
+
+Screen identity is auto-derived from class names — `LoginViewController` becomes key `"login"`, title `"Login"`. Override only when you want a custom key:
 
 ```swift
 #if DEBUG
 extension LoginViewController: ScreenIdentifiable {
     var screenKey: String { "auth.login" }
     var screenTitle: String { "Login" }
-    var debugMetadata: [String: Any] { [:] }
 }
 #endif
 ```

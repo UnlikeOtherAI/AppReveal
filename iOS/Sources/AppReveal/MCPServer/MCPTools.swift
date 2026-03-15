@@ -433,6 +433,24 @@ func registerBuiltInTools() {
             ] as [String: Any])
         }
     ))
+
+    // MARK: - get_view_tree
+
+    router.register(MCPToolDefinition(
+        name: "get_view_tree",
+        description: "Dump the full view hierarchy of the current screen. Returns every view with class, frame, properties, accessibility info, and depth. Use for discovering all objects on screen.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "max_depth": ["type": "integer", "description": "Max hierarchy depth (default 50)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let maxDepth = params?["max_depth"]?.intValue ?? 50
+            let tree = ElementInventory.shared.dumpViewTree(maxDepth: maxDepth)
+            return AnyCodable(["views": tree, "count": tree.count] as [String: Any])
+        }
+    ))
 }
 
 #endif

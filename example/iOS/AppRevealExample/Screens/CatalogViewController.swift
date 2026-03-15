@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class CatalogViewController: UICollectionViewController {
 
     private var products: [ExampleProduct] = []
@@ -26,9 +22,6 @@ class CatalogViewController: UICollectionViewController {
         setupUI()
         loadProducts()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -146,11 +139,3 @@ class ProductCell: UICollectionViewCell {
         addButton.accessibilityIdentifier = "catalog.add_to_cart_\(index)"
     }
 }
-
-#if DEBUG
-extension CatalogViewController: ScreenIdentifiable {
-    var screenKey: String { "catalog.list" }
-    var screenTitle: String { "Catalog" }
-    var debugMetadata: [String: Any] { ["productCount": products.count] }
-}
-#endif

@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class EditProfileViewController: UIViewController {
 
     private let nameField = UITextField()
@@ -15,9 +11,6 @@ class EditProfileViewController: UIViewController {
         super.viewDidLoad()
         setupUI()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     private func setupUI() {
@@ -92,11 +85,3 @@ class EditProfileViewController: UIViewController {
         ExampleRouter.shared.dismissModal()
     }
 }
-
-#if DEBUG
-extension EditProfileViewController: ScreenIdentifiable {
-    var screenKey: String { "profile.edit" }
-    var screenTitle: String { "Edit Profile" }
-    var debugMetadata: [String: Any] { [:] }
-}
-#endif

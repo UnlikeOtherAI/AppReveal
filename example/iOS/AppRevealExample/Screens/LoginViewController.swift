@@ -1,5 +1,4 @@
 import UIKit
-
 #if DEBUG
 import AppReveal
 #endif
@@ -19,9 +18,6 @@ class LoginViewController: UIViewController {
         super.viewDidLoad()
         setupUI()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     private func setupUI() {
@@ -147,10 +143,11 @@ class LoginViewController: UIViewController {
     }
 }
 
+// Optional: conform to ScreenIdentifiable for a custom screen key.
+// Without this, AppReveal auto-derives "login" from the class name.
 #if DEBUG
 extension LoginViewController: ScreenIdentifiable {
     var screenKey: String { "auth.login" }
     var screenTitle: String { "Login" }
-    var debugMetadata: [String: Any] { ["hasEmailInput": !(emailField.text?.isEmpty ?? true)] }
 }
 #endif

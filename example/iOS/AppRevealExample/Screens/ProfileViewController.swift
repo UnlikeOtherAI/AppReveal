@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class ProfileViewController: UIViewController {
 
     private let avatarImageView = UIImageView()
@@ -21,9 +17,6 @@ class ProfileViewController: UIViewController {
         setupUI()
         loadProfile()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -117,13 +110,3 @@ class ProfileViewController: UIViewController {
         present(alert, animated: true)
     }
 }
-
-#if DEBUG
-extension ProfileViewController: ScreenIdentifiable {
-    var screenKey: String { "profile.main" }
-    var screenTitle: String { "Profile" }
-    var debugMetadata: [String: Any] {
-        ["isLoggedIn": ExampleStateContainer.shared.isLoggedIn]
-    }
-}
-#endif

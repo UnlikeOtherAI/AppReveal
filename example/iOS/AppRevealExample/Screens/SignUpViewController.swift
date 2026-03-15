@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class SignUpViewController: UIViewController {
 
     private let nameField = UITextField()
@@ -17,9 +13,6 @@ class SignUpViewController: UIViewController {
         super.viewDidLoad()
         setupUI()
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     private func setupUI() {
@@ -94,11 +87,3 @@ class SignUpViewController: UIViewController {
         ExampleRouter.shared.dismissModal()
     }
 }
-
-#if DEBUG
-extension SignUpViewController: ScreenIdentifiable {
-    var screenKey: String { "auth.signup" }
-    var screenTitle: String { "Sign Up" }
-    var debugMetadata: [String: Any] { [:] }
-}
-#endif

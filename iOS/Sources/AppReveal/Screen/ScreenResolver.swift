@@ -43,17 +43,19 @@ final class ScreenResolver {
             )
         }
 
-        // Fallback: use class name
+        // Auto-derive from class name — no protocol needed
         let className = topVC.map { String(describing: type(of: $0)) } ?? "unknown"
+        let screenKey = Self.deriveScreenKey(from: className)
+        let title = topVC?.title ?? topVC?.navigationItem.title ?? Self.deriveTitle(from: className)
         return ScreenInfo(
-            screenKey: className,
-            screenTitle: topVC?.title ?? className,
+            screenKey: screenKey,
+            screenTitle: title,
             frameworkType: detectFrameworkType(topVC),
             controllerChain: chain,
             activeTab: tab,
             navigationDepth: navDepth,
             presentedModals: modals,
-            confidence: 0.3
+            confidence: 0.8
         )
     }
 
@@ -125,6 +127,53 @@ final class ScreenResolver {
         let typeName = String(describing: type(of: vc))
         if typeName.contains("HostingController") { return "swiftui" }
         return "uikit"
+    }
+
+    // MARK: - Auto-derivation
+
+    /// "OrderDetailViewController" -> "orders.detail"
+    /// "LoginViewController" -> "login"
+    /// "ProductListVC" -> "product.list"
+    static func deriveScreenKey(from className: String) -> String {
+        var name = className
+        // Strip common suffixes
+        for suffix in ["ViewController", "Controller", "Screen", "View", "VC"] {
+            if name.hasSuffix(suffix) && name.count > suffix.count {
+                name = String(name.dropLast(suffix.count))
+                break
+            }
+        }
+        // Split on camelCase boundaries
+        let parts = splitCamelCase(name)
+        return parts.joined(separator: ".").lowercased()
+    }
+
+    /// "OrderDetailViewController" -> "Order Detail"
+    static func deriveTitle(from className: String) -> String {
+        var name = className
+        for suffix in ["ViewController", "Controller", "Screen", "View", "VC"] {
+            if name.hasSuffix(suffix) && name.count > suffix.count {
+                name = String(name.dropLast(suffix.count))
+                break
+            }
+        }
+        let parts = splitCamelCase(name)
+        return parts.joined(separator: " ")
+    }
+
+    private static func splitCamelCase(_ string: String) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        for char in string {
+            if char.isUppercase && !current.isEmpty {
+                parts.append(current)
+                current = String(char)
+            } else {
+                current.append(char)
+            }
+        }
+        if !current.isEmpty { parts.append(current) }
+        return parts
     }
 }
 

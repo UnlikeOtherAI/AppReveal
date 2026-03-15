@@ -1,9 +1,5 @@
 import UIKit
 
-#if DEBUG
-import AppReveal
-#endif
-
 class SettingsViewController: UITableViewController {
 
     private struct Setting {
@@ -46,9 +42,6 @@ class SettingsViewController: UITableViewController {
         title = "Settings"
         tableView.accessibilityIdentifier = "settings.table"
 
-        #if DEBUG
-        AppReveal.registerScreen(self)
-        #endif
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -106,11 +99,3 @@ class SettingsViewController: UITableViewController {
         }
     }
 }
-
-#if DEBUG
-extension SettingsViewController: ScreenIdentifiable {
-    var screenKey: String { "settings.main" }
-    var screenTitle: String { "Settings" }
-    var debugMetadata: [String: Any] { [:] }
-}
-#endif
