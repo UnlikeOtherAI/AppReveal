@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollView"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:tag="product_detail.scroll">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <ImageView
+            android:id="@+id/productImage"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:scaleType="centerInside"
+            android:tag="product_detail.image"
+            android:contentDescription="Product image"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:id="@+id/productName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:tag="product_detail.name"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/productPrice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="20sp"
+            android:textColor="@color/purple_500"
+            android:tag="product_detail.price"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/productDescription"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:tag="product_detail.description"
+            android:layout_marginBottom="20dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:tag="product_detail.quantity_stepper"
+            android:layout_marginBottom="16dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/decreaseButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="-"
+                style="@style/Widget.Material3.Button.OutlinedButton" />
+
+            <TextView
+                android:id="@+id/quantityLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Qty: 1"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:tag="product_detail.quantity_label"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/increaseButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:text="+"
+                style="@style/Widget.Material3.Button.OutlinedButton" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/addToCartButton"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="Add to Cart"
+            android:tag="product_detail.add_to_cart"
+            android:layout_marginBottom="12dp" />
+
+        <ImageButton
+            android:id="@+id/favoriteButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/btn_star_big_off"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:tag="product_detail.favorite"
+            android:contentDescription="Favorite"
+            android:layout_gravity="center_horizontal" />
+
+    </LinearLayout>
+
+</ScrollView>

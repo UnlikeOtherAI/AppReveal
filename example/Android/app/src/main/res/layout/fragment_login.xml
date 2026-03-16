@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp">
+
+    <ImageView
+        android:id="@+id/logoImageView"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:src="@android:drawable/ic_secure"
+        android:tag="login.logo"
+        android:contentDescription="App logo"
+        android:layout_marginBottom="24dp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/emailField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Email address"
+        android:inputType="textEmailAddress"
+        android:tag="login.email"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/passwordField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Password"
+        android:inputType="textPassword"
+        android:tag="login.password"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:id="@+id/errorLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#FFFF0000"
+        android:textAlignment="center"
+        android:tag="login.error"
+        android:visibility="gone"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/loginButton"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Log In"
+        android:tag="login.submit"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/forgotPasswordButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Forgot Password?"
+        android:tag="login.forgot_password"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_marginBottom="8dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/signUpButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Create Account"
+        android:tag="login.sign_up"
+        style="@style/Widget.Material3.Button.TextButton" />
+
+    <ProgressBar
+        android:id="@+id/loadingIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:tag="login.loading"
+        android:visibility="gone"
+        android:layout_marginTop="12dp" />
+
+</LinearLayout>

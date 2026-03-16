@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Create Account"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="24dp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/nameField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Full Name"
+        android:inputType="textPersonName"
+        android:tag="signup.name"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/emailField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Email"
+        android:inputType="textEmailAddress"
+        android:tag="signup.email"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/passwordField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Password"
+        android:inputType="textPassword"
+        android:tag="signup.password"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/confirmPasswordField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Confirm Password"
+        android:inputType="textPassword"
+        android:tag="signup.confirm_password"
+        android:layout_marginBottom="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/termsSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:tag="signup.terms_toggle" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="I agree to the Terms"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/submitButton"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Create Account"
+        android:tag="signup.submit"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/cancelButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cancel"
+        android:tag="signup.cancel"
+        style="@style/Widget.Material3.Button.TextButton" />
+
+</LinearLayout>

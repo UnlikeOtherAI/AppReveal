@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/navigation_orders">
+
+    <fragment
+        android:id="@+id/navigation_orders"
+        android:name="com.appreveal.example.screens.OrdersListFragment"
+        android:label="Orders"
+        tools:layout="@layout/fragment_orders_list">
+        <action
+            android:id="@+id/action_orders_to_detail"
+            app:destination="@id/orderDetailFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/orderDetailFragment"
+        android:name="com.appreveal.example.screens.OrderDetailFragment"
+        android:label="Order Detail"
+        tools:layout="@layout/fragment_order_detail">
+        <argument
+            android:name="orderId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_catalog"
+        android:name="com.appreveal.example.screens.CatalogFragment"
+        android:label="Catalog"
+        tools:layout="@layout/fragment_catalog">
+        <action
+            android:id="@+id/action_catalog_to_product_detail"
+            app:destination="@id/productDetailFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/productDetailFragment"
+        android:name="com.appreveal.example.screens.ProductDetailFragment"
+        android:label="Product Detail"
+        tools:layout="@layout/fragment_product_detail">
+        <argument
+            android:name="productId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_profile"
+        android:name="com.appreveal.example.screens.ProfileFragment"
+        android:label="Profile"
+        tools:layout="@layout/fragment_profile">
+        <action
+            android:id="@+id/action_profile_to_edit"
+            app:destination="@id/editProfileFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/editProfileFragment"
+        android:name="com.appreveal.example.screens.EditProfileFragment"
+        android:label="Edit Profile"
+        tools:layout="@layout/fragment_edit_profile" />
+
+    <fragment
+        android:id="@+id/navigation_settings"
+        android:name="com.appreveal.example.screens.SettingsFragment"
+        android:label="Settings"
+        tools:layout="@layout/fragment_settings" />
+
+    <fragment
+        android:id="@+id/navigation_web"
+        android:name="com.appreveal.example.screens.WebViewDemoFragment"
+        android:label="Web"
+        tools:layout="@layout/fragment_webview_demo" />
+
+    <dialog
+        android:id="@+id/cartFragment"
+        android:name="com.appreveal.example.screens.CartFragment"
+        android:label="Cart"
+        tools:layout="@layout/fragment_cart" />
+
+    <dialog
+        android:id="@+id/signUpFragment"
+        android:name="com.appreveal.example.screens.SignUpFragment"
+        android:label="Sign Up"
+        tools:layout="@layout/fragment_signup" />
+
+</navigation>

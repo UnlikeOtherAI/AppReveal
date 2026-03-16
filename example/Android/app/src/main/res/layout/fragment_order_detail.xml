@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollView"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:tag="order_detail.scroll">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:tag="order_detail.status"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/totalText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="18sp"
+            android:tag="order_detail.total"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/itemsText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:tag="order_detail.items"
+            android:layout_marginBottom="16dp" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/notesField"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Add delivery notes..."
+            android:tag="order_detail.notes"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:id="@+id/ratingLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Rating"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <SeekBar
+                android:id="@+id/ratingSeekBar"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="4"
+                android:progress="2"
+                android:tag="order_detail.rating_slider" />
+
+            <TextView
+                android:id="@+id/ratingValueText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Rating: 3"
+                android:tag="order_detail.rating_value"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/trackButton"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="Track Shipment"
+            android:tag="order_detail.track"
+            android:layout_marginBottom="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/reorderButton"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="Reorder"
+            android:tag="order_detail.reorder"
+            android:backgroundTint="#FF4CAF50"
+            android:layout_marginBottom="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/cancelButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Cancel Order"
+            android:tag="order_detail.cancel"
+            android:textColor="#FFFF0000"
+            style="@style/Widget.Material3.Button.TextButton" />
+
+    </LinearLayout>
+
+</ScrollView>

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="32dp">
+
+    <ImageView
+        android:id="@+id/avatarImageView"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:src="@android:drawable/ic_menu_myplaces"
+        android:tag="profile.avatar"
+        android:contentDescription="Profile avatar"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/nameText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:tag="profile.name"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/emailText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:tag="profile.email"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/memberSinceText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="?android:attr/textColorTertiary"
+        android:tag="profile.member_since"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/orderCountText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:tag="profile.order_count"
+        android:layout_marginBottom="20dp" />
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabSelector"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:tag="profile.tab_selector"
+        android:layout_marginBottom="20dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/editButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Edit Profile"
+        android:tag="profile.edit"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/logoutButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Log Out"
+        android:tag="profile.logout"
+        android:textColor="#FFFF0000"
+        style="@style/Widget.Material3.Button.TextButton" />
+
+</LinearLayout>

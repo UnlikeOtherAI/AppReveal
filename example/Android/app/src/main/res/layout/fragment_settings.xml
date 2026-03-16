@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:tag="settings.table">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Appearance Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Appearance"
+            android:textSize="14sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:layout_marginTop="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:tag="settings.dark_mode">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Dark Mode"
+                android:textSize="16sp" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/darkModeSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:tag="settings.dark_mode_toggle" />
+        </LinearLayout>
+
+        <!-- Notifications Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Notifications"
+            android:textSize="14sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:layout_marginTop="16dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:tag="settings.push_enabled">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Push Notifications"
+                android:textSize="16sp" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/pushSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:tag="settings.push_enabled_toggle" />
+        </LinearLayout>
+
+        <!-- Account Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Account"
+            android:textSize="14sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Privacy Policy"
+            android:textSize="16sp"
+            android:padding="12dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:tag="settings.privacy" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Terms of Service"
+            android:textSize="16sp"
+            android:padding="12dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:tag="settings.terms" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="12dp"
+            android:tag="settings.app_version">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="App Version"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/versionText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0.1.0"
+                android:textSize="16sp"
+                android:textColor="?android:attr/textColorSecondary" />
+        </LinearLayout>
+
+        <!-- Danger Zone -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Danger Zone"
+            android:textSize="14sp"
+            android:textColor="#FFFF0000"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:layout_marginTop="16dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/deleteAccountButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Delete Account"
+            android:tag="settings.delete_account"
+            android:textColor="#FFFF0000"
+            style="@style/Widget.Material3.Button.TextButton" />
+
+    </LinearLayout>
+
+</ScrollView>

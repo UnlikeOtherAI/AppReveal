@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:id="@+id/titleText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Shopping Cart"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:tag="cart.title" />
+
+        <ImageButton
+            android:id="@+id/closeButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:tag="cart.close"
+            android:contentDescription="Close cart" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/cartRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:tag="cart.items_table" />
+
+    <TextView
+        android:id="@+id/emptyMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Your cart is empty"
+        android:textAlignment="center"
+        android:textColor="?android:attr/textColorSecondary"
+        android:tag="cart.empty_message"
+        android:visibility="gone"
+        android:layout_marginTop="40dp"
+        android:layout_marginBottom="40dp" />
+
+    <TextView
+        android:id="@+id/totalText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:tag="cart.total"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/checkoutButton"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Checkout"
+        android:tag="cart.checkout"
+        android:backgroundTint="#FF4CAF50" />
+
+</LinearLayout>

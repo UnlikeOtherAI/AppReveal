@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AppReveal Example</string>
+    <string name="title_orders">Orders</string>
+    <string name="title_catalog">Catalog</string>
+    <string name="title_profile">Profile</string>
+    <string name="title_settings">Settings</string>
+    <string name="title_web">Web</string>
+    <string name="login">Log In</string>
+    <string name="logout">Log Out</string>
+    <string name="email">Email address</string>
+    <string name="password">Password</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="create_account">Create Account</string>
+    <string name="save">Save Changes</string>
+    <string name="cancel">Cancel</string>
+    <string name="checkout">Checkout</string>
+    <string name="add_to_cart">Add to Cart</string>
+    <string name="search">Search...</string>
+    <string name="shopping_cart">Shopping Cart</string>
+    <string name="cart_empty">Your cart is empty</string>
+    <string name="edit_profile">Edit Profile</string>
+    <string name="delete_account">Delete Account</string>
+</resources>

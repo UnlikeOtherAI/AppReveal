@@ -1,103 +1,57 @@
 # AppReveal
 
-Debug-only in-app MCP server for iOS. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
+Debug-only in-app MCP server for iOS and Android. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
 
 ## How it works
 
 ```
 Your App (debug build)                    External Agent
- +-- AppReveal framework                   +-- Bonjour browse for _appreveal._tcp
+ +-- AppReveal framework                   +-- mDNS browse for _appreveal._tcp
       +-- MCP Server (Streamable HTTP)  <---+-- MCP client (curl, SDK, Claude, etc.)
-      +-- Bonjour advertisement             +-- LLM orchestration
+      +-- mDNS advertisement               +-- LLM orchestration
       +-- Screen/element/state bridges
-      +-- WKWebView DOM bridge
+      +-- WebView DOM bridge
 ```
 
 1. App calls `AppReveal.start()` in a debug build
 2. Framework starts an HTTP server on a dynamic port
-3. Bonjour advertises the service as `_appreveal._tcp` on the LAN
+3. mDNS advertises the service as `_appreveal._tcp` on the LAN
 4. Agent discovers the service, connects, and calls MCP tools
+
+Both platforms expose the **exact same 43 MCP tools** with identical names, parameters, and response shapes.
 
 ## Quick start
 
-### 1. Add the package
+### iOS
 
 ```swift
+// Package.swift
 .package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.2.0")
 ```
 
-### 2. Start the server
-
 ```swift
 #if DEBUG
-import AppReveal
-#endif
-
-func application(_ application: UIApplication, didFinishLaunchingWithOptions ...) -> Bool {
-    #if DEBUG
-    AppReveal.start()
-
-    // Optional: register providers for deeper inspection
-    AppReveal.registerStateProvider(myStateContainer)
-    AppReveal.registerNavigationProvider(myRouter)
-    AppReveal.registerFeatureFlagProvider(myFeatureFlags)
-    AppReveal.registerNetworkObservable(myNetworkClient)
-    #endif
-    return true
-}
-```
-
-That's it. WKWebView support works automatically -- no additional integration needed.
-
-### 3. Add screen identity (optional)
-
-Screen identity is auto-derived from class names -- `LoginViewController` becomes key `"login"`, title `"Login"`. Override only when you want a custom key:
-
-```swift
-#if DEBUG
-extension LoginViewController: ScreenIdentifiable {
-    var screenKey: String { "auth.login" }
-    var screenTitle: String { "Login" }
-}
+AppReveal.start()
 #endif
 ```
 
-### 4. Add accessibility identifiers
+See [iOS guide](docs/ios.md) for full setup.
 
-```swift
-emailField.accessibilityIdentifier = "login.email"
-passwordField.accessibilityIdentifier = "login.password"
-loginButton.accessibilityIdentifier = "login.submit"
+### Android
+
+```kotlin
+// build.gradle.kts
+debugImplementation("com.appreveal:appreveal")
+releaseImplementation("com.appreveal:appreveal-noop")
 ```
 
-### 5. Connect and use
-
-```bash
-# Discover the service
-dns-sd -B _appreveal._tcp local.
-dns-sd -L "AppReveal-com.yourapp" _appreveal._tcp local.
-# => dictator.local.:56209
-
-# Initialize MCP session
-curl -X POST http://localhost:56209/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
-
-# Get current screen
-curl -X POST http://localhost:56209/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_screen","arguments":{}}}'
-
-# Fill a form and submit in one call
-curl -X POST http://localhost:56209/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"batch","arguments":{"actions":[
-    {"tool":"type_text","arguments":{"element_id":"login.email","text":"user@test.com"}},
-    {"tool":"type_text","arguments":{"element_id":"login.password","text":"secret"}},
-    {"tool":"tap_element","arguments":{"element_id":"login.submit"}},
-    {"tool":"get_screen","arguments":{},"delay_ms":1000}
-  ]}}}'
+```kotlin
+if (BuildConfig.DEBUG) {
+    AppReveal.start(this)
+}
 ```
+
+See [Android guide](docs/android.md) for full setup.
 
 ## MCP tools (43 total)
 
@@ -105,10 +59,10 @@ curl -X POST http://localhost:56209/ \
 
 | Tool | Description |
 |------|-------------|
-| `get_screen` | Current screen identity, controller chain, confidence score |
+| `get_screen` | Current screen identity, controller/activity chain, confidence score |
 | `get_elements` | All visible interactive elements with id, type, frame, actions |
 | `get_view_tree` | Full view hierarchy with class, frame, properties, accessibility info |
-| `tap_element` | Tap by accessibility identifier (buttons, cells, controls) |
+| `tap_element` | Tap by element identifier (buttons, cells, controls) |
 | `tap_point` | Tap at screen coordinates |
 | `type_text` | Type text into a field (by element ID or current responder) |
 | `clear_text` | Clear a text field |
@@ -128,13 +82,13 @@ curl -X POST http://localhost:56209/ \
 | `get_navigation_stack` | Current route, nav stack, modal stack |
 | `get_feature_flags` | All active feature flags |
 | `get_network_calls` | Recent HTTP traffic with method, URL, status, duration |
-| `get_logs` | Recent app logs from OSLog |
+| `get_logs` | Recent app logs |
 | `get_recent_errors` | Recent captured errors |
-| `launch_context` | Bundle ID, version, device model, OS version |
+| `launch_context` | App ID, version, device model, OS version |
 
-### WKWebView -- DOM access
+### WebView -- DOM access
 
-Auto-discovers any WKWebView on screen. No integration code needed.
+Auto-discovers any WebView on screen. No integration code needed.
 
 | Tool | Description |
 |------|-------------|
@@ -153,7 +107,7 @@ Auto-discovers any WKWebView on screen. No integration code needed.
 | `web_back` | Go back in web view history |
 | `web_forward` | Go forward in web view history |
 
-### WKWebView -- token-efficient queries
+### WebView -- token-efficient queries
 
 Purpose-built tools that return only what you need, saving tokens.
 
@@ -172,35 +126,6 @@ Purpose-built tools that return only what you need, saving tokens.
 | Tool | Description |
 |------|-------------|
 | `batch` | Execute multiple tools in one call. Supports `delay_ms` per action for animations/transitions and `stop_on_error`. Works with all native and web tools. |
-
-## Integration protocols
-
-All protocol conformance should be wrapped in `#if DEBUG`.
-
-```swift
-/// Expose app state
-protocol StateProviding: AnyObject {
-    func snapshot() -> [String: AnyCodable]
-}
-
-/// Expose navigation state
-protocol NavigationProviding: AnyObject {
-    var currentRoute: String { get }
-    var navigationStack: [String] { get }
-    var presentedModals: [String] { get }
-}
-
-/// Expose feature flags
-protocol FeatureFlagProviding: AnyObject {
-    func allFlags() -> [String: AnyCodable]
-}
-
-/// Expose network traffic
-protocol NetworkObservable: AnyObject {
-    var recentRequests: [CapturedRequest] { get }
-    func addObserver(_ observer: NetworkTrafficObserver)
-}
-```
 
 ## Naming conventions
 
@@ -222,35 +147,33 @@ AppReveal gives agents structured data instead of pixels:
 - **Batch operations** -- fill forms, navigate screens, verify state in one call
 - **Deterministic interactions** -- tap by ID or CSS selector, not by fragile coordinates
 
-## Example app
-
-See [`example/iOS/`](example/iOS/) for a full example app with 11 screens (including a WKWebView demo), 60+ identified elements, and all framework features integrated. Run it on a simulator and connect via curl to test every tool.
-
 ## Platforms
 
-| Platform | Status |
-|----------|--------|
-| iOS | Working -- 43 tools, native + web view |
-| Android | Planned |
+| Platform | Status | Tools |
+|----------|--------|-------|
+| iOS | Working | 43 tools, native + web view |
+| Android | Working | 43 tools, native + web view |
+
+## Example apps
+
+- [iOS example](example/iOS/) -- 11 screens, 60+ elements, all framework features
+- [Android example](example/Android/) -- 11 screens matching the iOS example
 
 ## Security
 
-- All code behind `#if DEBUG` -- zero production footprint
-- Local network only (NWListener)
+- **iOS**: All code behind `#if DEBUG` -- zero production footprint
+- **Android**: Added as `debugImplementation` -- not included in release APK
+- Local network only
 - Sensitive headers (Authorization, Cookie) redacted in network capture
 - No state mutation without explicit opt-in
 
 ## Documentation
 
+- [iOS guide](docs/ios.md) -- installation, setup, protocols
+- [Android guide](docs/android.md) -- installation, setup, interfaces
 - [Architecture](docs/architecture.md) -- module design, protocols, package structure
-- [Build Brief](docs/brief.md) -- phased implementation plan with task tracking
-- [WKWebView Support](docs/wkwebview-support.md) -- design doc for DOM access
-
-## Requirements
-
-- iOS 16.0+
-- Swift 5.9+
-- Xcode 15+
+- [Build Brief](docs/brief.md) -- phased implementation plan
+- [WKWebView Support](docs/wkwebview-support.md) -- iOS DOM access design doc
 
 ## License
 

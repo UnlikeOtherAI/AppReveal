@@ -41,3 +41,17 @@ Package.resolved
 # Archives and distribution
 *.ipa
 *.xcarchive
+
+# Android / Gradle
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+.gradle/
+**/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof

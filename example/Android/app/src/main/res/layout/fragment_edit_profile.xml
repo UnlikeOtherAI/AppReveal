@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Edit Profile"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="24dp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/nameField"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Name"
+        android:tag="edit_profile.name"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Bio"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/bioField"
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:gravity="top"
+        android:inputType="textMultiLine"
+        android:background="@android:drawable/edit_text"
+        android:tag="edit_profile.bio"
+        android:layout_marginBottom="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="20dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Push Notifications" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/notificationsSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:tag="edit_profile.notifications_toggle" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/saveButton"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Save Changes"
+        android:tag="edit_profile.save"
+        android:layout_marginBottom="12dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/cancelButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cancel"
+        android:tag="edit_profile.cancel"
+        style="@style/Widget.Material3.Button.TextButton" />
+
+</LinearLayout>
