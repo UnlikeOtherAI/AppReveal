@@ -1,6 +1,6 @@
 # AppReveal
 
-Debug-only in-app MCP server for iOS and Android. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
+Debug-only in-app MCP server for iOS, Android, and Flutter. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
 
 ## How it works
 
@@ -18,7 +18,7 @@ Your App (debug build)                    External Agent
 3. mDNS advertises the service as `_appreveal._tcp` on the LAN
 4. Agent discovers the service, connects, and calls MCP tools
 
-Both platforms expose the **exact same 43 MCP tools** with identical names, parameters, and response shapes.
+All three platforms expose the **exact same 43 MCP tools** with identical names, parameters, and response shapes.
 
 ## Quick start
 
@@ -52,6 +52,31 @@ if (BuildConfig.DEBUG) {
 ```
 
 See [Android guide](docs/android.md) for full setup.
+
+### Flutter
+
+```dart
+// pubspec.yaml
+dependencies:
+  appreveal:
+    path: Flutter/appreveal
+```
+
+```dart
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  AppReveal.start(); // no-ops in release builds
+  runApp(AppReveal.wrap(const MyApp()));
+}
+
+// In MaterialApp:
+MaterialApp(
+  navigatorObservers: [AppReveal.navigatorObserver],
+  ...
+)
+```
+
+See [Flutter guide](Flutter/README.md) for full setup.
 
 ## MCP tools (43 total)
 
@@ -88,7 +113,7 @@ See [Android guide](docs/android.md) for full setup.
 
 ### WebView -- DOM access
 
-Auto-discovers any WebView on screen. No integration code needed.
+iOS/Android: auto-discovers WebViews from the view hierarchy. Flutter: register via `AppReveal.registerWebView(id, controller)`.
 
 | Tool | Description |
 |------|-------------|
@@ -134,6 +159,14 @@ Purpose-built tools that return only what you need, saving tokens.
 | Screen keys | `section.screen` | `auth.login`, `orders.detail`, `settings.main` |
 | Element IDs | `screen.element` | `login.email`, `login.submit`, `orders.cell_0` |
 
+Element IDs map to platform-specific mechanisms:
+
+| Platform | Mechanism |
+|----------|-----------|
+| iOS | `view.accessibilityIdentifier` |
+| Android | `view.tag` or resource entry name |
+| Flutter | `ValueKey<String>` on the widget |
+
 ## Why this beats screenshot-only automation
 
 AppReveal gives agents structured data instead of pixels:
@@ -153,16 +186,19 @@ AppReveal gives agents structured data instead of pixels:
 |----------|--------|-------|
 | iOS | Working | 43 tools, native + web view |
 | Android | Working | 43 tools, native + web view |
+| Flutter | Working | 43 tools, native + web view |
 
 ## Example apps
 
 - [iOS example](example/iOS/) -- 11 screens, 60+ elements, all framework features
 - [Android example](example/Android/) -- 11 screens matching the iOS example
+- [Flutter example](Flutter/example/) -- 11 screens matching iOS and Android
 
 ## Security
 
 - **iOS**: All code behind `#if DEBUG` -- zero production footprint
 - **Android**: Added as `debugImplementation` -- not included in release APK
+- **Flutter**: `kReleaseMode` check in `AppReveal.start()` -- zero code paths execute in release
 - Local network only
 - Sensitive headers (Authorization, Cookie) redacted in network capture
 - No state mutation without explicit opt-in
@@ -171,6 +207,7 @@ AppReveal gives agents structured data instead of pixels:
 
 - [iOS guide](docs/ios.md) -- installation, setup, protocols
 - [Android guide](docs/android.md) -- installation, setup, interfaces
+- [Flutter guide](Flutter/README.md) -- installation, setup, integration patterns
 - [Architecture](docs/architecture.md) -- module design, protocols, package structure
 - [Build Brief](docs/brief.md) -- phased implementation plan
 - [WKWebView Support](docs/wkwebview-support.md) -- iOS DOM access design doc
