@@ -3,6 +3,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../diagnostics/diagnostics_bridge.dart';
@@ -411,6 +412,95 @@ void registerBuiltInTools() {
                   : Platform.operatingSystem,
           'frameworkType': 'flutter',
           'debugMode': kDebugMode,
+        };
+      } catch (e) {
+        return {'error': e.toString()};
+      }
+    },
+  ));
+
+  // MARK: - device_info
+
+  router.register(MCPToolDefinition(
+    name: 'device_info',
+    description:
+        'Return comprehensive device and app information: package metadata, device hardware, OS version, screen dimensions, locale, timezone, memory, and runtime. Single call to get everything an agent needs to understand the runtime environment.',
+    inputSchema: {'type': 'object', 'properties': <String, dynamic>{}},
+    handler: (_) async {
+      try {
+        final info = await PackageInfo.fromPlatform();
+        final binding = WidgetsBinding.instance;
+        final view = binding.platformDispatcher.views.first;
+        final physicalSize = view.physicalSize;
+        final dpr = view.devicePixelRatio;
+        final locale = binding.platformDispatcher.locale;
+        final tz = DateTime.now().timeZoneName;
+        final tzOffset = DateTime.now().timeZoneOffset;
+
+        // Memory (Dart runtime)
+        final runtimeInfo = <String, dynamic>{
+          'currentRss': ProcessInfo.currentRss,
+          'maxRss': ProcessInfo.maxRss,
+        };
+
+        // Screen
+        final screenInfo = <String, dynamic>{
+          'physicalWidthPx': physicalSize.width.toInt(),
+          'physicalHeightPx': physicalSize.height.toInt(),
+          'logicalWidthDp': (physicalSize.width / dpr).toInt(),
+          'logicalHeightDp': (physicalSize.height / dpr).toInt(),
+          'devicePixelRatio': dpr,
+        };
+
+        return <String, dynamic>{
+          'platform': Platform.isIOS
+              ? 'iOS'
+              : Platform.isAndroid
+                  ? 'Android'
+                  : Platform.operatingSystem,
+          'frameworkType': 'flutter',
+          'debugMode': kDebugMode,
+
+          // App identity
+          'bundleId': info.packageName,
+          'appName': info.appName,
+          'version': info.version,
+          'build': info.buildNumber,
+
+          // Runtime
+          'operatingSystem': Platform.operatingSystem,
+          'operatingSystemVersion': Platform.operatingSystemVersion,
+          'numberOfProcessors': Platform.numberOfProcessors,
+          'localHostname': Platform.localHostname,
+
+          // Screen
+          'screen': screenInfo,
+
+          // Memory
+          'memory': runtimeInfo,
+
+          // Locale & timezone
+          'locale': {
+            'languageCode': locale.languageCode,
+            'countryCode': locale.countryCode ?? '',
+            'scriptCode': locale.scriptCode ?? '',
+            'identifier': locale.toLanguageTag(),
+          },
+          'timeZone': {
+            'name': tz,
+            'offsetSeconds': tzOffset.inSeconds,
+            'offsetHours': tzOffset.inHours,
+          },
+
+          // Environment (non-secret keys only)
+          'environment': Platform.environment.entries
+              .where((e) =>
+                  !e.key.toLowerCase().contains('secret') &&
+                  !e.key.toLowerCase().contains('token') &&
+                  !e.key.toLowerCase().contains('password') &&
+                  !e.key.toLowerCase().contains('key'))
+              .fold(<String, String>{},
+                  (map, e) => map..[e.key] = e.value),
         };
       } catch (e) {
         return {'error': e.toString()};

@@ -434,6 +434,155 @@ func registerBuiltInTools() {
         }
     ))
 
+    // MARK: - device_info
+
+    router.register(MCPToolDefinition(
+        name: "device_info",
+        description: "Return comprehensive device and app information: full Info.plist, device hardware, OS, screen, locale, timezone, battery, memory, processor, and entitlements. Single call to get everything an agent needs to understand the runtime environment.",
+        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
+        handler: { _ in
+            let device = UIDevice.current
+            let screen = UIScreen.main
+            let processInfo = ProcessInfo.processInfo
+            let locale = Locale.current
+            let timeZone = TimeZone.current
+            let bundle = Bundle.main
+            let info = bundle.infoDictionary ?? [:]
+
+            // Full Info.plist — convert all values to strings for safe serialisation
+            var plist: [String: String] = [:]
+            for (k, v) in info {
+                plist[k] = "\(v)"
+            }
+
+            // Battery
+            device.isBatteryMonitoringEnabled = true
+            let batteryLevel = device.batteryLevel  // 0.0–1.0, -1 if unknown
+            let batteryState: String
+            switch device.batteryState {
+            case .charging: batteryState = "charging"
+            case .full:     batteryState = "full"
+            case .unplugged: batteryState = "unplugged"
+            default:        batteryState = "unknown"
+            }
+            device.isBatteryMonitoringEnabled = false
+
+            // Idiom
+            let idiom: String
+            switch device.userInterfaceIdiom {
+            case .phone:   idiom = "phone"
+            case .pad:     idiom = "pad"
+            case .mac:     idiom = "mac"
+            case .tv:      idiom = "tv"
+            case .carPlay: idiom = "carPlay"
+            default:       idiom = "unspecified"
+            }
+
+            // Memory
+            let physicalMemoryMB = Int(processInfo.physicalMemory / 1_048_576)
+
+            // Disk
+            let fileManager = FileManager.default
+            var diskFreeBytes: Int64 = -1
+            var diskTotalBytes: Int64 = -1
+            if let attrs = try? fileManager.attributesOfFileSystem(forPath: NSHomeDirectory()) {
+                diskFreeBytes  = (attrs[.systemFreeSize]  as? NSNumber)?.int64Value ?? -1
+                diskTotalBytes = (attrs[.systemSize]      as? NSNumber)?.int64Value ?? -1
+            }
+
+            return AnyCodable([
+                "platform": "iOS",
+                "frameworkType": "uikit",
+
+                // App identity
+                "bundleId":      info["CFBundleIdentifier"] as? String ?? "unknown",
+                "appName":       info["CFBundleName"] as? String ?? info["CFBundleDisplayName"] as? String ?? "unknown",
+                "displayName":   info["CFBundleDisplayName"] as? String ?? info["CFBundleName"] as? String ?? "unknown",
+                "version":       info["CFBundleShortVersionString"] as? String ?? "unknown",
+                "build":         info["CFBundleVersion"] as? String ?? "unknown",
+                "minOSVersion":  info["MinimumOSVersion"] as? String ?? "unknown",
+                "executableName": info["CFBundleExecutable"] as? String ?? "unknown",
+                "bundlePackageType": info["CFBundlePackageType"] as? String ?? "unknown",
+
+                // Device hardware
+                "deviceModel":       device.model,
+                "deviceName":        device.name,
+                "systemName":        device.systemName,
+                "systemVersion":     device.systemVersion,
+                "userInterfaceIdiom": idiom,
+                "identifierForVendor": device.identifierForVendor?.uuidString ?? "unknown",
+                "isSimulator":       ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil,
+
+                // OS & process
+                "osVersionString":   processInfo.operatingSystemVersionString,
+                "osVersion": [
+                    "major": processInfo.operatingSystemVersion.majorVersion,
+                    "minor": processInfo.operatingSystemVersion.minorVersion,
+                    "patch": processInfo.operatingSystemVersion.patchVersion
+                ] as [String: Any],
+                "processName":       processInfo.processName,
+                "processId":         processInfo.processIdentifier,
+                "hostName":          processInfo.hostName,
+                "processorCount":    processInfo.processorCount,
+                "activeProcessorCount": processInfo.activeProcessorCount,
+                "physicalMemoryMB":  physicalMemoryMB,
+                "isLowPowerMode":    processInfo.isLowPowerModeEnabled,
+                "thermalState":      {
+                    switch processInfo.thermalState {
+                    case .nominal:   return "nominal"
+                    case .fair:      return "fair"
+                    case .serious:   return "serious"
+                    case .critical:  return "critical"
+                    @unknown default: return "unknown"
+                    }
+                }(),
+
+                // Screen
+                "screen": [
+                    "width":          Int(screen.bounds.width),
+                    "height":         Int(screen.bounds.height),
+                    "scale":          screen.scale,
+                    "nativeWidth":    Int(screen.nativeBounds.width),
+                    "nativeHeight":   Int(screen.nativeBounds.height),
+                    "nativeScale":    screen.nativeScale,
+                    "brightness":     screen.brightness
+                ] as [String: Any],
+
+                // Battery
+                "battery": [
+                    "level": batteryLevel >= 0 ? batteryLevel : nil as Float?,
+                    "state": batteryState
+                ] as [String: Any?],
+
+                // Locale & timezone
+                "locale": [
+                    "identifier":     locale.identifier,
+                    "languageCode":   locale.language.languageCode?.identifier ?? "",
+                    "regionCode":     locale.region?.identifier ?? "",
+                    "currencyCode":   locale.currency?.identifier ?? "",
+                    "usesMetricSystem": (locale as NSLocale).object(forKey: .measurementSystem) as? String == "Metric"
+                ] as [String: Any],
+                "timeZone": [
+                    "identifier":       timeZone.identifier,
+                    "abbreviation":     timeZone.abbreviation() ?? "",
+                    "secondsFromGMT":   timeZone.secondsFromGMT()
+                ] as [String: Any],
+
+                // Disk
+                "disk": [
+                    "freeMB":  diskFreeBytes  >= 0 ? Int(diskFreeBytes  / 1_048_576) : -1,
+                    "totalMB": diskTotalBytes >= 0 ? Int(diskTotalBytes / 1_048_576) : -1
+                ] as [String: Any],
+
+                // Declared permissions (keys only — whether granted is runtime)
+                "declaredPermissions": info.keys.filter { $0.hasPrefix("NS") && $0.hasSuffix("UsageDescription") },
+
+                // Full Info.plist
+                "infoPlist": plist
+            ] as [String: Any])
+        }
+    ))
+
     // MARK: - get_view_tree
 
     router.register(MCPToolDefinition(

@@ -488,6 +488,82 @@ internal fun registerBuiltInTools() {
         }
     ))
 
+    // -- device_info --
+
+    router.register(MCPToolDefinition(
+        name = "device_info",
+        description = "Return comprehensive device and app information: manifest metadata, device hardware, OS build details, screen metrics, locale, timezone, battery, memory, and storage. Single call to get everything an agent needs to understand the runtime environment.",
+        inputSchema = jsonSchema(),
+        handler = { _ ->
+            val ctx = ScreenResolver.appContext
+                ?: return@MCPToolDefinition JsonObject().apply { addProperty("error", "no context") }
+            val pm = ctx.packageManager
+            val packageName = ctx.packageName
+            @Suppress("DEPRECATION")
+            val pkgInfo = try { pm.getPackageInfo(packageName, android.content.pm.PackageManager.GET_META_DATA) } catch (_: Exception) { null }
+            val appInfo = pkgInfo?.applicationInfo
+            val metaData = JsonObject()
+            appInfo?.metaData?.keySet()?.forEach { key -> metaData.addProperty(key, appInfo.metaData.get(key)?.toString() ?: "") }
+            val dm = ctx.resources.displayMetrics
+            val wm = ctx.getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager
+            val displaySize = android.graphics.Point()
+            @Suppress("DEPRECATION")
+            wm?.defaultDisplay?.getRealSize(displaySize)
+            val batteryIntent = ctx.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            val batteryLevel = batteryIntent?.let { val l = it.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1); val s = it.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1); if (l >= 0 && s > 0) l.toFloat() / s.toFloat() else -1f } ?: -1f
+            val batteryPlugged = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1) ?: -1
+            val batteryState = when { batteryPlugged > 0 -> "charging"; batteryLevel >= 0.99f -> "full"; batteryLevel >= 0f -> "unplugged"; else -> "unknown" }
+            val actMgr = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            val memInfo = android.app.ActivityManager.MemoryInfo().also { actMgr?.getMemoryInfo(it) }
+            val statFs = try { android.os.StatFs(android.os.Environment.getDataDirectory().path) } catch (_: Exception) { null }
+            @Suppress("DEPRECATION")
+            val locale = java.util.Locale.getDefault()
+            val declaredPerms = try { @Suppress("DEPRECATION") pm.getPackageInfo(packageName, android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions?.toList() ?: emptyList() } catch (_: Exception) { emptyList<String>() }
+
+            JsonObject().apply {
+                addProperty("platform", "Android"); addProperty("frameworkType", "react-native")
+                addProperty("applicationId", packageName)
+                addProperty("appName", appInfo?.loadLabel(pm)?.toString() ?: "unknown")
+                addProperty("versionName", pkgInfo?.versionName ?: "unknown")
+                @Suppress("DEPRECATION")
+                addProperty("versionCode", pkgInfo?.longVersionCode ?: 0L)
+                addProperty("targetSdk", appInfo?.targetSdkVersion ?: -1)
+                addProperty("minSdk", appInfo?.minSdkVersion ?: -1)
+                addProperty("isDebuggable", (appInfo?.flags?.and(android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) ?: 0) != 0)
+                add("manifestMetaData", metaData)
+                addProperty("deviceManufacturer", Build.MANUFACTURER); addProperty("deviceModel", Build.MODEL)
+                addProperty("deviceBrand", Build.BRAND); addProperty("deviceDevice", Build.DEVICE)
+                addProperty("deviceProduct", Build.PRODUCT); addProperty("deviceHardware", Build.HARDWARE)
+                addProperty("deviceDisplay", Build.DISPLAY); addProperty("deviceFingerprint", Build.FINGERPRINT)
+                addProperty("isEmulator", Build.FINGERPRINT.startsWith("generic") || Build.MODEL.contains("Emulator") || Build.MODEL.contains("Android SDK"))
+                addProperty("systemVersion", Build.VERSION.RELEASE); addProperty("sdkInt", Build.VERSION.SDK_INT)
+                addProperty("codename", Build.VERSION.CODENAME)
+                if (Build.VERSION.SDK_INT >= 23) addProperty("securityPatch", Build.VERSION.SECURITY_PATCH)
+                add("screen", JsonObject().apply {
+                    addProperty("widthPx", displaySize.x.takeIf { it > 0 } ?: dm.widthPixels)
+                    addProperty("heightPx", displaySize.y.takeIf { it > 0 } ?: dm.heightPixels)
+                    addProperty("density", dm.density); addProperty("densityDpi", dm.densityDpi)
+                    addProperty("widthDp", (dm.widthPixels / dm.density).toInt())
+                    addProperty("heightDp", (dm.heightPixels / dm.density).toInt())
+                })
+                add("battery", JsonObject().apply { addProperty("level", if (batteryLevel >= 0) batteryLevel else null as Float?); addProperty("state", batteryState) })
+                add("memory", JsonObject().apply {
+                    addProperty("totalRamMB", memInfo.totalMem / 1_048_576); addProperty("availableRamMB", memInfo.availMem / 1_048_576)
+                    addProperty("isLowMemory", memInfo.lowMemory); addProperty("runtimeMaxMB", Runtime.getRuntime().maxMemory() / 1_048_576)
+                })
+                add("disk", JsonObject().apply {
+                    addProperty("freeMB", statFs?.let { (it.availableBlocksLong * it.blockSizeLong) / 1_048_576 } ?: -1L)
+                    addProperty("totalMB", statFs?.let { (it.blockCountLong * it.blockSizeLong) / 1_048_576 } ?: -1L)
+                })
+                addProperty("processorCount", Runtime.getRuntime().availableProcessors())
+                addProperty("supportedAbis", Build.SUPPORTED_ABIS.joinToString(","))
+                add("locale", JsonObject().apply { addProperty("language", locale.language); addProperty("country", locale.country); addProperty("displayName", locale.displayName) })
+                add("timeZone", JsonObject().apply { val tz = java.util.TimeZone.getDefault(); addProperty("id", tz.id); addProperty("offsetSeconds", tz.rawOffset / 1000) })
+                add("declaredPermissions", com.google.gson.JsonArray().also { arr -> declaredPerms.forEach { arr.add(it) } })
+            }
+        }
+    ))
+
     // -- batch --
 
     router.register(MCPToolDefinition(

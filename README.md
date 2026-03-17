@@ -1,6 +1,8 @@
 # AppReveal
 
-Debug-only in-app MCP server for iOS, Android, and Flutter. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
+<img src="icon_180.png" width="180" alt="AppReveal icon" />
+
+Debug-only in-app MCP server for iOS, Android, Flutter, and React Native. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
 
 ## How it works
 
@@ -18,7 +20,7 @@ Your App (debug build)                    External Agent
 3. mDNS advertises the service as `_appreveal._tcp` on the LAN
 4. Agent discovers the service, connects, and calls MCP tools
 
-All three platforms expose the **exact same 43 MCP tools** with identical names, parameters, and response shapes.
+All four platforms expose the **exact same 44 MCP tools** with identical names, parameters, and response shapes.
 
 ## Quick start
 
@@ -78,7 +80,25 @@ MaterialApp(
 
 See [Flutter guide](Flutter/README.md) for full setup.
 
-## MCP tools (43 total)
+### React Native
+
+```sh
+npm install react-native-appreveal
+cd ios && pod install
+```
+
+```tsx
+import { AppReveal, AppRevealFetchInterceptor } from 'react-native-appreveal';
+
+if (__DEV__) {
+  AppReveal.start();
+  AppRevealFetchInterceptor.install();
+}
+```
+
+See [React Native guide](ReactNative/README.md) for full setup.
+
+## MCP tools (44 total)
 
 ### UI and navigation
 
@@ -110,6 +130,7 @@ See [Flutter guide](Flutter/README.md) for full setup.
 | `get_logs` | Recent app logs |
 | `get_recent_errors` | Recent captured errors |
 | `launch_context` | App ID, version, device model, OS version |
+| `device_info` | Full device snapshot: Info.plist / manifest metadata, hardware, OS build, screen metrics, locale, timezone, battery, memory, storage, declared permissions |
 
 ### WebView -- DOM access
 
@@ -184,21 +205,24 @@ AppReveal gives agents structured data instead of pixels:
 
 | Platform | Status | Tools |
 |----------|--------|-------|
-| iOS | Working | 43 tools, native + web view |
-| Android | Working | 43 tools, native + web view |
-| Flutter | Working | 43 tools, native + web view |
+| iOS | Working | 44 tools, native + web view |
+| Android | Working | 44 tools, native + web view |
+| Flutter | Working | 44 tools, native + web view |
+| React Native | In development | 44 tools, native + web view |
 
 ## Example apps
 
 - [iOS example](example/iOS/) -- 11 screens, 60+ elements, all framework features
 - [Android example](example/Android/) -- 11 screens matching the iOS example
 - [Flutter example](Flutter/example/) -- 11 screens matching iOS and Android
+- [React Native example](ReactNative/example/) -- 8 screens, React Navigation v7
 
 ## Security
 
 - **iOS**: All code behind `#if DEBUG` -- zero production footprint
 - **Android**: Added as `debugImplementation` -- not included in release APK
 - **Flutter**: `kReleaseMode` check in `AppReveal.start()` -- zero code paths execute in release
+- **React Native**: `__DEV__` guard -- all methods are no-ops in production builds
 - Local network only
 - Sensitive headers (Authorization, Cookie) redacted in network capture
 - No state mutation without explicit opt-in
@@ -208,7 +232,9 @@ AppReveal gives agents structured data instead of pixels:
 - [iOS guide](docs/ios.md) -- installation, setup, protocols
 - [Android guide](docs/android.md) -- installation, setup, interfaces
 - [Flutter guide](Flutter/README.md) -- installation, setup, integration patterns
+- [React Native guide](ReactNative/README.md) -- installation, setup, integration patterns
 - [Architecture](docs/architecture.md) -- module design, protocols, package structure
+- [Tools reference](docs/tools.md) -- all 44 tools with parameters and response shapes
 - [Build Brief](docs/brief.md) -- phased implementation plan
 - [WKWebView Support](docs/wkwebview-support.md) -- iOS DOM access design doc
 

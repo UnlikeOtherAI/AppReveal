@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import NativeAppReveal from './NativeAppReveal';
 import type { CapturedRequest } from './types';
 
@@ -70,7 +70,7 @@ export class AppReveal {
    * >
    * ```
    */
-  static createNavigationListener(): ReturnType<typeof createNavigationListener> {
+  static createNavigationListener(): (state: NavigationState | undefined) => void {
     return createNavigationListener();
   }
 }
@@ -100,20 +100,24 @@ function collectRouteNames(
   return result;
 }
 
-export function createNavigationListener() {
-  const navRef = useRef<any>(null);
-
-  const onStateChange = (state: NavigationState | undefined) => {
+/**
+ * Returns an `onStateChange` handler for `<NavigationContainer>`.
+ *
+ * Usage:
+ * ```tsx
+ * const navRef = useRef<NavigationContainerRef<any>>(null);
+ * <NavigationContainer ref={navRef} onStateChange={AppReveal.createNavigationListener()}>
+ * ```
+ */
+export function createNavigationListener(): (
+  state: NavigationState | undefined,
+) => void {
+  return (state: NavigationState | undefined) => {
     if (!__DEV__ || !state) return;
     const current = getActiveRouteName(state);
     const routes = collectRouteNames(state);
     AppReveal.setScreen(current.toLowerCase().replace(/\s+/g, '.'), current);
     AppReveal.setNavigationStack(routes, current);
-  };
-
-  return {
-    ref: navRef,
-    onStateChange,
   };
 }
 
