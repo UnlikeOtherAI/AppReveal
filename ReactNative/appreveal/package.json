@@ -1,0 +1,21 @@
+{
+  "name": "react-native-appreveal",
+  "version": "0.1.0",
+  "description": "Debug-only in-app MCP framework for React Native",
+  "main": "src/index",
+  "types": "src/index",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-native": "^0.73.0"
+  },
+  "keywords": ["react-native", "mcp", "testing", "debug"],
+  "license": "MIT"
+}

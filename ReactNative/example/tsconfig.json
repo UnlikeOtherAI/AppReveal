@@ -1,0 +1,12 @@
+{
+  "extends": "@react-native/typescript-config/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "react-native-appreveal": ["../appreveal/src/index"]
+    }
+  },
+  "include": ["src", "index.js"],
+  "exclude": ["node_modules"]
+}
