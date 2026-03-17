@@ -2,13 +2,13 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nsd/nsd.dart';
+import 'package:nsd/nsd.dart' as nsd;
 
 class MdnsAdvertiser {
   static final shared = MdnsAdvertiser._();
   MdnsAdvertiser._();
 
-  Registration? _registration;
+  nsd.Registration? _registration;
 
   Future<void> register({
     required int port,
@@ -16,8 +16,8 @@ class MdnsAdvertiser {
     required String version,
   }) async {
     try {
-      _registration = await startRegistration(
-        Service(
+      _registration = await nsd.register(
+        nsd.Service(
           name: 'AppReveal-$bundleId',
           type: '_appreveal._tcp.',
           port: port,
@@ -38,7 +38,7 @@ class MdnsAdvertiser {
   Future<void> unregister() async {
     final reg = _registration;
     if (reg != null) {
-      await stopRegistration(reg);
+      await nsd.unregister(reg);
       _registration = null;
     }
   }
