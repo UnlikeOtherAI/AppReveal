@@ -14,9 +14,15 @@ func registerWebViewTools() {
     router.register(MCPToolDefinition(
         name: "get_webviews",
         description: "List all WKWebView instances on the current screen with URL, title, loading state, and frame",
-        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
-        handler: { _ in
-            let info = bridge.webViewInfo()
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let windowId = params?["window_id"]?.stringValue
+            let info = bridge.webViewInfo(windowId: windowId)
             return AnyCodable(["webviews": info, "count": info.count] as [String: Any])
         }
     ))
@@ -32,7 +38,8 @@ func registerWebViewTools() {
                 "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
                 "root": ["type": "string", "description": "CSS selector for subtree root (default: body)"],
                 "max_depth": ["type": "integer", "description": "Max tree depth (default: 30)"],
-                "visible_only": ["type": "boolean", "description": "Only visible elements (default: false)"]
+                "visible_only": ["type": "boolean", "description": "Only visible elements (default: false)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
@@ -41,8 +48,9 @@ func registerWebViewTools() {
                 maxDepth: params?["max_depth"]?.intValue ?? 30,
                 visibleOnly: params?["visible_only"]?.boolValue ?? false
             )
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["dom": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -58,13 +66,15 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
             let js = DOMSerializer.interactiveJS()
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -82,7 +92,8 @@ func registerWebViewTools() {
             "properties": AnyCodable([
                 "selector": ["type": "string", "description": "CSS selector"],
                 "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
-                "limit": ["type": "integer", "description": "Max results (default: 50)"]
+                "limit": ["type": "integer", "description": "Max results (default: 50)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["selector"])
         ],
@@ -91,8 +102,9 @@ func registerWebViewTools() {
                 return AnyCodable(["error": "selector required"])
             }
             let js = DOMSerializer.queryJS(selector: selector, limit: params?["limit"]?.intValue ?? 50)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -110,7 +122,8 @@ func registerWebViewTools() {
             "properties": AnyCodable([
                 "text": ["type": "string", "description": "Text to search for"],
                 "tag": ["type": "string", "description": "Optional tag filter (e.g. 'button', 'a')"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["text"])
         ],
@@ -119,8 +132,9 @@ func registerWebViewTools() {
                 return AnyCodable(["error": "text required"])
             }
             let js = DOMSerializer.findTextJS(text: text, tag: params?["tag"]?.stringValue)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -137,7 +151,8 @@ func registerWebViewTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "selector": ["type": "string", "description": "CSS selector"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["selector"])
         ],
@@ -146,8 +161,9 @@ func registerWebViewTools() {
                 return AnyCodable(["error": "selector required"])
             }
             let js = DOMSerializer.clickJS(selector: selector)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -166,7 +182,8 @@ func registerWebViewTools() {
                 "selector": ["type": "string", "description": "CSS selector"],
                 "text": ["type": "string", "description": "Text to type"],
                 "clear": ["type": "boolean", "description": "Clear field first (default: false)"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["selector", "text"])
         ],
@@ -176,8 +193,9 @@ func registerWebViewTools() {
                 return AnyCodable(["error": "selector and text required"])
             }
             let js = DOMSerializer.typeJS(selector: selector, text: text, clear: params?["clear"]?.boolValue ?? false)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -195,7 +213,8 @@ func registerWebViewTools() {
             "properties": AnyCodable([
                 "selector": ["type": "string", "description": "CSS selector for the select element"],
                 "value": ["type": "string", "description": "Option value to select"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["selector", "value"])
         ],
@@ -205,8 +224,9 @@ func registerWebViewTools() {
                 return AnyCodable(["error": "selector and value required"])
             }
             let js = DOMSerializer.selectJS(selector: selector, value: value)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -224,7 +244,8 @@ func registerWebViewTools() {
             "properties": AnyCodable([
                 "selector": ["type": "string", "description": "CSS selector"],
                 "checked": ["type": "boolean", "description": "Desired checked state"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["selector", "checked"])
         ],
@@ -234,8 +255,9 @@ func registerWebViewTools() {
                 return AnyCodable(["error": "selector and checked required"])
             }
             let js = DOMSerializer.toggleJS(selector: selector, checked: checked)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -252,7 +274,8 @@ func registerWebViewTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "selector": ["type": "string", "description": "CSS selector"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["selector"])
         ],
@@ -261,8 +284,9 @@ func registerWebViewTools() {
                 return AnyCodable(["error": "selector required"])
             }
             let js = DOMSerializer.scrollToJS(selector: selector)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -279,7 +303,8 @@ func registerWebViewTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "javascript": ["type": "string", "description": "JavaScript to evaluate"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["javascript"])
         ],
@@ -287,8 +312,9 @@ func registerWebViewTools() {
             guard let js = params?["javascript"]?.stringValue else {
                 return AnyCodable(["error": "javascript required"])
             }
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -305,7 +331,8 @@ func registerWebViewTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "url": ["type": "string", "description": "URL to navigate to"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["url"])
         ],
@@ -314,7 +341,8 @@ func registerWebViewTools() {
                   let url = URL(string: urlStr) else {
                 return AnyCodable(["error": "Invalid URL"])
             }
-            guard let webView = bridge.resolveWebView(id: params?["webview_id"]?.stringValue) else {
+            let windowId = params?["window_id"]?.stringValue
+            guard let webView = bridge.resolveWebView(id: params?["webview_id"]?.stringValue, windowId: windowId) else {
                 return AnyCodable(["error": "WebView not found"])
             }
             webView.load(URLRequest(url: url))
@@ -330,11 +358,13 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
-            guard let webView = bridge.resolveWebView(id: params?["webview_id"]?.stringValue) else {
+            let windowId = params?["window_id"]?.stringValue
+            guard let webView = bridge.resolveWebView(id: params?["webview_id"]?.stringValue, windowId: windowId) else {
                 return AnyCodable(["error": "WebView not found"])
             }
             guard webView.canGoBack else {
@@ -353,11 +383,13 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
-            guard let webView = bridge.resolveWebView(id: params?["webview_id"]?.stringValue) else {
+            let windowId = params?["window_id"]?.stringValue
+            guard let webView = bridge.resolveWebView(id: params?["webview_id"]?.stringValue, windowId: windowId) else {
                 return AnyCodable(["error": "WebView not found"])
             }
             guard webView.canGoForward else {
@@ -376,12 +408,14 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: DOMSerializer.linksJS(), webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: DOMSerializer.linksJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -398,13 +432,15 @@ func registerWebViewTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "selector": ["type": "string", "description": "CSS selector to scope text extraction (default: body)"],
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
             let js = DOMSerializer.textContentJS(selector: params?["selector"]?.stringValue)
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -420,12 +456,14 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: DOMSerializer.formsJS(), webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: DOMSerializer.formsJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -441,12 +479,14 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: DOMSerializer.headingsJS(), webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: DOMSerializer.headingsJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -462,12 +502,14 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: DOMSerializer.imagesJS(), webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: DOMSerializer.imagesJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -483,12 +525,14 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: DOMSerializer.tablesJS(), webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: DOMSerializer.tablesJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -504,12 +548,14 @@ func registerWebViewTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"]
+                "webview_id": ["type": "string", "description": "Web view ID (default: first on screen)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                let result = try await bridge.evaluate(js: DOMSerializer.summaryJS(), webViewId: params?["webview_id"]?.stringValue)
+                let result = try await bridge.evaluate(js: DOMSerializer.summaryJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["result": result] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])

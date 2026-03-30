@@ -1,7 +1,11 @@
 // Registers all built-in MCP tools with the router
 
 import Foundation
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 #if DEBUG
 
@@ -9,14 +13,40 @@ import UIKit
 func registerBuiltInTools() {
     let router = MCPRouter.shared
 
+    // MARK: - list_windows
+
+    router.register(MCPToolDefinition(
+        name: "list_windows",
+        description: "List all visible app windows with IDs, titles, frames, and key status. Use window IDs with other tools to target specific windows.",
+        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
+        handler: { _ in
+            let windows = platformWindowProvider.allWindows()
+            let list = windows.map { w in
+                [
+                    "id": w.id,
+                    "title": w.title,
+                    "isKey": w.isKey,
+                    "frame": "\(Int(w.frame.origin.x)),\(Int(w.frame.origin.y)),\(Int(w.frame.width)),\(Int(w.frame.height))"
+                ] as [String: Any]
+            }
+            return AnyCodable(["windows": list, "count": list.count] as [String: Any])
+        }
+    ))
+
     // MARK: - get_screen
 
     router.register(MCPToolDefinition(
         name: "get_screen",
         description: "Get the currently active screen identity and metadata",
-        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
-        handler: { _ in
-            let info = ScreenResolver.shared.resolve()
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let windowId = params?["window_id"]?.stringValue
+            let info = ScreenResolver.shared.resolve(windowId: windowId)
             return AnyCodable([
                 "screenKey": info.screenKey,
                 "screenTitle": info.screenTitle,
@@ -35,9 +65,15 @@ func registerBuiltInTools() {
     router.register(MCPToolDefinition(
         name: "get_elements",
         description: "List all visible interactive elements on the current screen",
-        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
-        handler: { _ in
-            let elements = ElementInventory.shared.listElements()
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let windowId = params?["window_id"]?.stringValue
+            let elements = ElementInventory.shared.listElements(windowId: windowId)
             let list = elements.map { el in
                 [
                     "id": el.id,
@@ -64,17 +100,19 @@ func registerBuiltInTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "element_id": ["type": "string", "description": "Optional element ID to crop to"],
-                "format": ["type": "string", "enum": ["png", "jpeg"], "description": "Image format (default: png)"]
+                "format": ["type": "string", "enum": ["png", "jpeg"], "description": "Image format (default: png)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
             let format: ImageFormat = params?["format"]?.stringValue == "jpeg" ? .jpeg : .png
+            let windowId = params?["window_id"]?.stringValue
             let result: ScreenshotCapture.CaptureResult?
 
             if let elementId = params?["element_id"]?.stringValue {
-                result = ScreenshotCapture.shared.captureElement(id: elementId, format: format)
+                result = ScreenshotCapture.shared.captureElement(id: elementId, format: format, windowId: windowId)
             } else {
-                result = ScreenshotCapture.shared.captureScreen(format: format)
+                result = ScreenshotCapture.shared.captureScreen(format: format, windowId: windowId)
             }
 
             guard let capture = result else {
@@ -98,15 +136,19 @@ func registerBuiltInTools() {
         description: "Tap an element by its accessibility identifier",
         inputSchema: [
             "type": AnyCodable("object"),
-            "properties": AnyCodable(["element_id": ["type": "string", "description": "Accessibility identifier"]] as [String: Any]),
+            "properties": AnyCodable([
+                "element_id": ["type": "string", "description": "Accessibility identifier"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any]),
             "required": AnyCodable(["element_id"])
         ],
         handler: { params in
             guard let elementId = params?["element_id"]?.stringValue else {
                 return AnyCodable(["error": "element_id required"])
             }
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.tap(elementId: elementId)
+                try InteractionEngine.shared.tap(elementId: elementId, windowId: windowId)
                 return AnyCodable(["success": true, "element_id": elementId] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -121,13 +163,18 @@ func registerBuiltInTools() {
         description: "Tap at specific screen coordinates",
         inputSchema: [
             "type": AnyCodable("object"),
-            "properties": AnyCodable(["x": ["type": "number"], "y": ["type": "number"]] as [String: Any]),
+            "properties": AnyCodable([
+                "x": ["type": "number"],
+                "y": ["type": "number"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any]),
             "required": AnyCodable(["x", "y"])
         ],
         handler: { params in
             let x = params?["x"]?.doubleValue ?? 0
             let y = params?["y"]?.doubleValue ?? 0
-            InteractionEngine.shared.tap(point: CGPoint(x: x, y: y))
+            let windowId = params?["window_id"]?.stringValue
+            InteractionEngine.shared.tap(point: CGPoint(x: x, y: y), windowId: windowId)
             return AnyCodable(["success": true, "x": x, "y": y] as [String: Any])
         }
     ))
@@ -141,7 +188,8 @@ func registerBuiltInTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "text": ["type": "string", "description": "Text to type"],
-                "element_id": ["type": "string", "description": "Optional target element ID"]
+                "element_id": ["type": "string", "description": "Optional target element ID"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["text"])
         ],
@@ -149,8 +197,9 @@ func registerBuiltInTools() {
             guard let text = params?["text"]?.stringValue else {
                 return AnyCodable(["error": "text required"])
             }
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.type(text: text, elementId: params?["element_id"]?.stringValue)
+                try InteractionEngine.shared.type(text: text, elementId: params?["element_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["success": true, "text": text] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -165,15 +214,19 @@ func registerBuiltInTools() {
         description: "Clear a text field",
         inputSchema: [
             "type": AnyCodable("object"),
-            "properties": AnyCodable(["element_id": ["type": "string"]] as [String: Any]),
+            "properties": AnyCodable([
+                "element_id": ["type": "string"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any]),
             "required": AnyCodable(["element_id"])
         ],
         handler: { params in
             guard let elementId = params?["element_id"]?.stringValue else {
                 return AnyCodable(["error": "element_id required"])
             }
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.clear(elementId: elementId)
+                try InteractionEngine.shared.clear(elementId: elementId, windowId: windowId)
                 return AnyCodable(["success": true] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -190,7 +243,8 @@ func registerBuiltInTools() {
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "direction": ["type": "string", "enum": ["up", "down", "left", "right"]],
-                "container_id": ["type": "string", "description": "Optional scroll view ID"]
+                "container_id": ["type": "string", "description": "Optional scroll view ID"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["direction"])
         ],
@@ -199,8 +253,9 @@ func registerBuiltInTools() {
                   let direction = ScrollDirection(rawValue: dirStr) else {
                 return AnyCodable(["error": "Invalid direction"])
             }
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.scroll(direction: direction, containerId: params?["container_id"]?.stringValue)
+                try InteractionEngine.shared.scroll(direction: direction, containerId: params?["container_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["success": true] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -215,15 +270,19 @@ func registerBuiltInTools() {
         description: "Scroll until an element is visible",
         inputSchema: [
             "type": AnyCodable("object"),
-            "properties": AnyCodable(["element_id": ["type": "string"]] as [String: Any]),
+            "properties": AnyCodable([
+                "element_id": ["type": "string"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any]),
             "required": AnyCodable(["element_id"])
         ],
         handler: { params in
             guard let elementId = params?["element_id"]?.stringValue else {
                 return AnyCodable(["error": "element_id required"])
             }
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.scrollTo(elementId: elementId)
+                try InteractionEngine.shared.scrollTo(elementId: elementId, windowId: windowId)
                 return AnyCodable(["success": true] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -297,15 +356,19 @@ func registerBuiltInTools() {
         description: "Switch to a tab by index (0-based)",
         inputSchema: [
             "type": AnyCodable("object"),
-            "properties": AnyCodable(["index": ["type": "integer", "description": "Tab index (0-based)"]] as [String: Any]),
+            "properties": AnyCodable([
+                "index": ["type": "integer", "description": "Tab index (0-based)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any]),
             "required": AnyCodable(["index"])
         ],
         handler: { params in
             guard let index = params?["index"]?.intValue else {
                 return AnyCodable(["error": "index required"])
             }
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.selectTab(index: index)
+                try InteractionEngine.shared.selectTab(index: index, windowId: windowId)
                 return AnyCodable(["success": true, "tab_index": index] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -318,10 +381,16 @@ func registerBuiltInTools() {
     router.register(MCPToolDefinition(
         name: "navigate_back",
         description: "Pop the current navigation stack",
-        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
-        handler: { _ in
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.navigateBack()
+                try InteractionEngine.shared.navigateBack(windowId: windowId)
                 return AnyCodable(["success": true] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -334,10 +403,16 @@ func registerBuiltInTools() {
     router.register(MCPToolDefinition(
         name: "dismiss_modal",
         description: "Dismiss the topmost presented modal",
-        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
-        handler: { _ in
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let windowId = params?["window_id"]?.stringValue
             do {
-                try InteractionEngine.shared.dismissModal()
+                try InteractionEngine.shared.dismissModal(windowId: windowId)
                 return AnyCodable(["success": true] as [String: Any])
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
@@ -360,7 +435,11 @@ func registerBuiltInTools() {
                   let url = URL(string: urlStr) else {
                 return AnyCodable(["error": "Invalid URL"])
             }
+            #if os(iOS)
             await UIApplication.shared.open(url)
+            #elseif os(macOS)
+            NSWorkspace.shared.open(url)
+            #endif
             return AnyCodable(["success": true, "url": urlStr] as [String: Any])
         }
     ))
@@ -422,15 +501,23 @@ func registerBuiltInTools() {
         description: "Get app launch environment info",
         inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
         handler: { _ in
-            return AnyCodable([
+            var result: [String: Any] = [
                 "bundleId": Bundle.main.bundleIdentifier ?? "unknown",
                 "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-                "build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
-                "platform": "iOS",
-                "systemVersion": UIDevice.current.systemVersion,
-                "deviceModel": UIDevice.current.model,
-                "deviceName": UIDevice.current.name
-            ] as [String: Any])
+                "build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+            ]
+            #if os(iOS)
+            result["platform"] = "iOS"
+            result["systemVersion"] = UIDevice.current.systemVersion
+            result["deviceModel"] = UIDevice.current.model
+            result["deviceName"] = UIDevice.current.name
+            #elseif os(macOS)
+            result["platform"] = "macOS"
+            result["systemVersion"] = ProcessInfo.processInfo.operatingSystemVersionString
+            result["deviceModel"] = "Mac"
+            result["deviceName"] = Host.current().localizedName ?? "Mac"
+            #endif
+            return AnyCodable(result)
         }
     ))
 
@@ -441,8 +528,6 @@ func registerBuiltInTools() {
         description: "Return comprehensive device and app information: full Info.plist, device hardware, OS, screen, locale, timezone, battery, memory, processor, and entitlements. Single call to get everything an agent needs to understand the runtime environment.",
         inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
         handler: { _ in
-            let device = UIDevice.current
-            let screen = UIScreen.main
             let processInfo = ProcessInfo.processInfo
             let locale = Locale.current
             let timeZone = TimeZone.current
@@ -453,29 +538,6 @@ func registerBuiltInTools() {
             var plist: [String: String] = [:]
             for (k, v) in info {
                 plist[k] = "\(v)"
-            }
-
-            // Battery
-            device.isBatteryMonitoringEnabled = true
-            let batteryLevel = device.batteryLevel  // 0.0–1.0, -1 if unknown
-            let batteryState: String
-            switch device.batteryState {
-            case .charging: batteryState = "charging"
-            case .full:     batteryState = "full"
-            case .unplugged: batteryState = "unplugged"
-            default:        batteryState = "unknown"
-            }
-            device.isBatteryMonitoringEnabled = false
-
-            // Idiom
-            let idiom: String
-            switch device.userInterfaceIdiom {
-            case .phone:   idiom = "phone"
-            case .pad:     idiom = "pad"
-            case .mac:     idiom = "mac"
-            case .tv:      idiom = "tv"
-            case .carPlay: idiom = "carPlay"
-            default:       idiom = "unspecified"
             }
 
             // Memory
@@ -490,28 +552,16 @@ func registerBuiltInTools() {
                 diskTotalBytes = (attrs[.systemSize]      as? NSNumber)?.int64Value ?? -1
             }
 
-            return AnyCodable([
-                "platform": "iOS",
-                "frameworkType": "uikit",
-
+            // Shared fields
+            var result: [String: Any] = [
                 // App identity
                 "bundleId":      info["CFBundleIdentifier"] as? String ?? "unknown",
                 "appName":       info["CFBundleName"] as? String ?? info["CFBundleDisplayName"] as? String ?? "unknown",
                 "displayName":   info["CFBundleDisplayName"] as? String ?? info["CFBundleName"] as? String ?? "unknown",
                 "version":       info["CFBundleShortVersionString"] as? String ?? "unknown",
                 "build":         info["CFBundleVersion"] as? String ?? "unknown",
-                "minOSVersion":  info["MinimumOSVersion"] as? String ?? "unknown",
                 "executableName": info["CFBundleExecutable"] as? String ?? "unknown",
                 "bundlePackageType": info["CFBundlePackageType"] as? String ?? "unknown",
-
-                // Device hardware
-                "deviceModel":       device.model,
-                "deviceName":        device.name,
-                "systemName":        device.systemName,
-                "systemVersion":     device.systemVersion,
-                "userInterfaceIdiom": idiom,
-                "identifierForVendor": device.identifierForVendor?.uuidString ?? "unknown",
-                "isSimulator":       ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil,
 
                 // OS & process
                 "osVersionString":   processInfo.operatingSystemVersionString,
@@ -536,23 +586,6 @@ func registerBuiltInTools() {
                     @unknown default: return "unknown"
                     }
                 }(),
-
-                // Screen
-                "screen": [
-                    "width":          Int(screen.bounds.width),
-                    "height":         Int(screen.bounds.height),
-                    "scale":          screen.scale,
-                    "nativeWidth":    Int(screen.nativeBounds.width),
-                    "nativeHeight":   Int(screen.nativeBounds.height),
-                    "nativeScale":    screen.nativeScale,
-                    "brightness":     screen.brightness
-                ] as [String: Any],
-
-                // Battery
-                "battery": [
-                    "level": batteryLevel >= 0 ? batteryLevel : nil as Float?,
-                    "state": batteryState
-                ] as [String: Any?],
 
                 // Locale & timezone
                 "locale": [
@@ -579,7 +612,78 @@ func registerBuiltInTools() {
 
                 // Full Info.plist
                 "infoPlist": plist
-            ] as [String: Any])
+            ]
+
+            #if os(iOS)
+            let device = UIDevice.current
+            let screen = UIScreen.main
+
+            // Battery
+            device.isBatteryMonitoringEnabled = true
+            let batteryLevel = device.batteryLevel  // 0.0–1.0, -1 if unknown
+            let batteryState: String
+            switch device.batteryState {
+            case .charging: batteryState = "charging"
+            case .full:     batteryState = "full"
+            case .unplugged: batteryState = "unplugged"
+            default:        batteryState = "unknown"
+            }
+            device.isBatteryMonitoringEnabled = false
+
+            // Idiom
+            let idiom: String
+            switch device.userInterfaceIdiom {
+            case .phone:   idiom = "phone"
+            case .pad:     idiom = "pad"
+            case .mac:     idiom = "mac"
+            case .tv:      idiom = "tv"
+            case .carPlay: idiom = "carPlay"
+            default:       idiom = "unspecified"
+            }
+
+            result["platform"] = "iOS"
+            result["frameworkType"] = "uikit"
+            result["minOSVersion"] = info["MinimumOSVersion"] as? String ?? "unknown"
+            result["deviceModel"] = device.model
+            result["deviceName"] = device.name
+            result["systemName"] = device.systemName
+            result["systemVersion"] = device.systemVersion
+            result["userInterfaceIdiom"] = idiom
+            result["identifierForVendor"] = device.identifierForVendor?.uuidString ?? "unknown"
+            result["isSimulator"] = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil
+            result["screen"] = [
+                "width":          Int(screen.bounds.width),
+                "height":         Int(screen.bounds.height),
+                "scale":          screen.scale,
+                "nativeWidth":    Int(screen.nativeBounds.width),
+                "nativeHeight":   Int(screen.nativeBounds.height),
+                "nativeScale":    screen.nativeScale,
+                "brightness":     screen.brightness
+            ] as [String: Any]
+            result["battery"] = [
+                "level": batteryLevel >= 0 ? batteryLevel : nil as Float?,
+                "state": batteryState
+            ] as [String: Any?]
+            #elseif os(macOS)
+            result["platform"] = "macOS"
+            result["frameworkType"] = "appkit"
+            result["minOSVersion"] = info["LSMinimumSystemVersion"] as? String ?? "unknown"
+            result["deviceModel"] = "Mac"
+            result["deviceName"] = Host.current().localizedName ?? "Mac"
+            result["systemName"] = "macOS"
+            result["systemVersion"] = processInfo.operatingSystemVersionString
+            if let screen = NSScreen.main {
+                result["screen"] = [
+                    "width":          Int(screen.frame.width),
+                    "height":         Int(screen.frame.height),
+                    "scale":          screen.backingScaleFactor,
+                    "visibleWidth":   Int(screen.visibleFrame.width),
+                    "visibleHeight":  Int(screen.visibleFrame.height)
+                ] as [String: Any]
+            }
+            #endif
+
+            return AnyCodable(result)
         }
     ))
 
@@ -591,12 +695,14 @@ func registerBuiltInTools() {
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "max_depth": ["type": "integer", "description": "Max hierarchy depth (default 50)"]
+                "max_depth": ["type": "integer", "description": "Max hierarchy depth (default 50)"],
+                "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
         handler: { params in
             let maxDepth = params?["max_depth"]?.intValue ?? 50
-            let tree = ElementInventory.shared.dumpViewTree(maxDepth: maxDepth)
+            let windowId = params?["window_id"]?.stringValue
+            let tree = ElementInventory.shared.dumpViewTree(maxDepth: maxDepth, windowId: windowId)
             return AnyCodable(["views": tree, "count": tree.count] as [String: Any])
         }
     ))
