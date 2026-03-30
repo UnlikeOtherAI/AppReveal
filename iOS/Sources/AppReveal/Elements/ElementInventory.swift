@@ -12,25 +12,21 @@ final class ElementInventory {
 
     private init() {}
 
-    func listElements() -> [ElementInfo] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+    func listElements(windowId: String? = nil) -> [ElementInfo] {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
             return []
         }
 
         var elements: [ElementInfo] = []
-        walkView(window, elements: &elements, containerId: nil)
+        walkView(ref.nativeWindow, elements: &elements, containerId: nil)
         return elements
     }
 
-    func findElement(byId id: String) -> UIView? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+    func findElement(byId id: String, windowId: String? = nil) -> UIView? {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
             return nil
         }
-        return findView(withAccessibilityId: id, in: window)
+        return findView(withAccessibilityId: id, in: ref.nativeWindow)
     }
 
     // MARK: - Hierarchy walking
@@ -123,13 +119,11 @@ final class ElementInventory {
 
     // MARK: - Full view tree
 
-    func dumpViewTree(maxDepth: Int = 50) -> [[String: Any]] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+    func dumpViewTree(maxDepth: Int = 50, windowId: String? = nil) -> [[String: Any]] {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
             return []
         }
-        return dumpNode(window, depth: 0, maxDepth: maxDepth)
+        return dumpNode(ref.nativeWindow, depth: 0, maxDepth: maxDepth)
     }
 
     private func dumpNode(_ view: UIView, depth: Int, maxDepth: Int) -> [[String: Any]] {
