@@ -28,7 +28,7 @@ All four platforms expose the **exact same 44 MCP tools** with identical names, 
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.2.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.4.0")
 ```
 
 ```swift
@@ -216,6 +216,11 @@ AppReveal gives agents structured data instead of pixels:
 - [Android example](example/Android/) -- 11 screens matching the iOS example
 - [Flutter example](Flutter/example/) -- 11 screens matching iOS and Android
 - [React Native example](ReactNative/example/) -- 8 screens, React Navigation v7
+
+## CLI
+
+There is now a dedicated AppReveal CLI in [CLI/README.md](/System/Volumes/Data/.internal/projects/Projects/AppReveal/CLI/README.md) for discovering `_appreveal._tcp` services, listing available MCP tools, and sending MCP requests without hand-written `dns-sd` and `curl` calls.
+Install it with `npm install -g @unlikeotherai/appreveal`.
 
 ## Security
 

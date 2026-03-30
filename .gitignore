@@ -37,6 +37,8 @@ Package.resolved
 *.sublime-project
 *.sublime-workspace
 .vscode/
+CLI/node_modules/
+CLI/dist/
 
 # Archives and distribution
 *.ipa

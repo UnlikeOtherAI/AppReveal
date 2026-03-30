@@ -11,7 +11,7 @@
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.2.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.4.0")
 ```
 
 ## Quick start

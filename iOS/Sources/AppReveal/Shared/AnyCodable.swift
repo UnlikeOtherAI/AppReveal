@@ -69,8 +69,31 @@ public struct AnyCodable: Codable, Sendable {
 
     // Convenience accessors
     public var stringValue: String? { value as? String }
-    public var intValue: Int? { value as? Int }
-    public var doubleValue: Double? { value as? Double }
+    public var intValue: Int? {
+        switch value {
+        case let int as Int:
+            return int
+        case let double as Double:
+            return Int(double)
+        case let number as NSNumber:
+            return number.intValue
+        default:
+            return nil
+        }
+    }
+
+    public var doubleValue: Double? {
+        switch value {
+        case let double as Double:
+            return double
+        case let int as Int:
+            return Double(int)
+        case let number as NSNumber:
+            return number.doubleValue
+        default:
+            return nil
+        }
+    }
     public var boolValue: Bool? { value as? Bool }
     public var arrayValue: [Any]? { value as? [Any] }
     public var dictionaryValue: [String: AnyCodable]? {
