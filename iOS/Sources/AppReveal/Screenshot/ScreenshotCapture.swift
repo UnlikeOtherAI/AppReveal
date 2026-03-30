@@ -20,12 +20,11 @@ final class ScreenshotCapture {
         let format: String
     }
 
-    func captureScreen(format: ImageFormat = .png) -> CaptureResult? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+    func captureScreen(format: ImageFormat = .png, windowId: String? = nil) -> CaptureResult? {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
             return nil
         }
+        let window = ref.nativeWindow
 
         let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
         let image = renderer.image { context in
@@ -43,8 +42,8 @@ final class ScreenshotCapture {
         )
     }
 
-    func captureElement(id: String, format: ImageFormat = .png) -> CaptureResult? {
-        guard let view = ElementInventory.shared.findElement(byId: id) else { return nil }
+    func captureElement(id: String, format: ImageFormat = .png, windowId: String? = nil) -> CaptureResult? {
+        guard let view = ElementInventory.shared.findElement(byId: id, windowId: windowId) else { return nil }
 
         let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
         let image = renderer.image { context in

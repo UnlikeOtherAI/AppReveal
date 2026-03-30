@@ -15,16 +15,14 @@ final class WebViewBridge {
 
     // MARK: - Discovery
 
-    func findWebViews() -> [(id: String, webView: WKWebView)] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+    func findWebViews(windowId: String? = nil) -> [(id: String, webView: WKWebView)] {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
             return []
         }
 
         var results: [(id: String, webView: WKWebView)] = []
         var counter = 0
-        collectWebViews(in: window, results: &results, counter: &counter)
+        collectWebViews(in: ref.nativeWindow, results: &results, counter: &counter)
         return results
     }
 
@@ -39,8 +37,8 @@ final class WebViewBridge {
         }
     }
 
-    func resolveWebView(id: String?) -> WKWebView? {
-        let webViews = findWebViews()
+    func resolveWebView(id: String?, windowId: String? = nil) -> WKWebView? {
+        let webViews = findWebViews(windowId: windowId)
         if let id = id {
             return webViews.first(where: { $0.id == id })?.webView
         }
@@ -49,8 +47,8 @@ final class WebViewBridge {
 
     // MARK: - Metadata
 
-    func webViewInfo() -> [[String: Any]] {
-        findWebViews().map { item in
+    func webViewInfo(windowId: String? = nil) -> [[String: Any]] {
+        findWebViews(windowId: windowId).map { item in
             let screenFrame = item.webView.convert(item.webView.bounds, to: nil)
             return [
                 "id": item.id,
@@ -66,8 +64,8 @@ final class WebViewBridge {
 
     // MARK: - JavaScript evaluation
 
-    func evaluate(js: String, webViewId: String?) async throws -> String {
-        guard let webView = resolveWebView(id: webViewId) else {
+    func evaluate(js: String, webViewId: String?, windowId: String? = nil) async throws -> String {
+        guard let webView = resolveWebView(id: webViewId, windowId: windowId) else {
             throw WebViewError.notFound(webViewId ?? "default")
         }
 

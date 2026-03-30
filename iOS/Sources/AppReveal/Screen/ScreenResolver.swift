@@ -22,11 +22,11 @@ final class ScreenResolver {
         registeredScreens.removeValue(forKey: ObjectIdentifier(screen))
     }
 
-    func resolve() -> ScreenInfo {
-        let topVC = findTopViewController()
+    func resolve(windowId: String? = nil) -> ScreenInfo {
+        let topVC = findTopViewController(windowId: windowId)
         let chain = buildControllerChain(from: topVC)
-        let tab = findActiveTab()
-        let modals = findPresentedModals()
+        let tab = findActiveTab(windowId: windowId)
+        let modals = findPresentedModals(windowId: windowId)
         let navDepth = findNavigationDepth(from: topVC)
 
         // Check if top VC conforms to ScreenIdentifiable
@@ -61,11 +61,9 @@ final class ScreenResolver {
 
     // MARK: - UIKit hierarchy
 
-    private func findTopViewController() -> UIViewController? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }),
-              let rootVC = scene.keyWindow?.rootViewController else {
+    private func findTopViewController(windowId: String? = nil) -> UIViewController? {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId),
+              let rootVC = ref.rootViewController else {
             return nil
         }
         return topMost(from: rootVC)
@@ -94,10 +92,9 @@ final class ScreenResolver {
         return chain
     }
 
-    private func findActiveTab() -> String? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let root = scene.keyWindow?.rootViewController else { return nil }
+    private func findActiveTab(windowId: String? = nil) -> String? {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId),
+              let root = ref.rootViewController else { return nil }
 
         if let tab = root as? UITabBarController {
             return tab.selectedViewController.map { String(describing: type(of: $0)) }
@@ -105,10 +102,9 @@ final class ScreenResolver {
         return nil
     }
 
-    private func findPresentedModals() -> [String] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              var vc = scene.keyWindow?.rootViewController else { return [] }
+    private func findPresentedModals(windowId: String? = nil) -> [String] {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId),
+              var vc = ref.rootViewController else { return [] }
 
         var modals: [String] = []
         while let presented = vc.presentedViewController {

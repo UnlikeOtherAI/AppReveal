@@ -14,8 +14,8 @@ final class InteractionEngine {
 
     // MARK: - Tap
 
-    func tap(elementId: String) throws {
-        guard let view = ElementInventory.shared.findElement(byId: elementId) else {
+    func tap(elementId: String, windowId: String? = nil) throws {
+        guard let view = ElementInventory.shared.findElement(byId: elementId, windowId: windowId) else {
             throw InteractionError.elementNotFound(elementId)
         }
 
@@ -36,7 +36,7 @@ final class InteractionEngine {
         } else {
             // Simulate tap via gesture recognizers
             let center = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
-            tap(point: center)
+            tap(point: center, windowId: windowId)
         }
     }
 
@@ -58,16 +58,15 @@ final class InteractionEngine {
         return nil
     }
 
-    func tap(point: CGPoint) {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else { return }
+    func tap(point: CGPoint, windowId: String? = nil) {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else { return }
+        let window = ref.nativeWindow
 
         let hitView = window.hitTest(point, with: nil)
 
         // Check if tapping inside a tab bar
         if let tabBar = findParent(of: hitView, type: UITabBar.self),
-           let tabBarController = findTabBarController() {
+           let tabBarController = findTabBarController(windowId: windowId) {
             let localPoint = tabBar.convert(point, from: window)
             if let items = tabBar.items {
                 let itemWidth = tabBar.bounds.width / CGFloat(items.count)
@@ -111,10 +110,9 @@ final class InteractionEngine {
         }
     }
 
-    private func findTabBarController() -> UITabBarController? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let root = scene.keyWindow?.rootViewController else { return nil }
+    private func findTabBarController(windowId: String? = nil) -> UITabBarController? {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId),
+              let root = ref.rootViewController else { return nil }
         return root as? UITabBarController
     }
 
@@ -129,11 +127,11 @@ final class InteractionEngine {
 
     // MARK: - Text
 
-    func type(text: String, elementId: String?) throws {
+    func type(text: String, elementId: String?, windowId: String? = nil) throws {
         let target: UIView?
 
         if let id = elementId {
-            target = ElementInventory.shared.findElement(byId: id)
+            target = ElementInventory.shared.findElement(byId: id, windowId: windowId)
             guard target != nil else {
                 throw InteractionError.elementNotFound(id)
             }
@@ -152,8 +150,8 @@ final class InteractionEngine {
         }
     }
 
-    func clear(elementId: String) throws {
-        guard let view = ElementInventory.shared.findElement(byId: elementId) else {
+    func clear(elementId: String, windowId: String? = nil) throws {
+        guard let view = ElementInventory.shared.findElement(byId: elementId, windowId: windowId) else {
             throw InteractionError.elementNotFound(elementId)
         }
 
@@ -169,16 +167,16 @@ final class InteractionEngine {
 
     // MARK: - Scroll
 
-    func scroll(direction: ScrollDirection, containerId: String?) throws {
+    func scroll(direction: ScrollDirection, containerId: String?, windowId: String? = nil) throws {
         let scrollView: UIScrollView
 
         if let id = containerId {
-            guard let view = ElementInventory.shared.findElement(byId: id) as? UIScrollView else {
+            guard let view = ElementInventory.shared.findElement(byId: id, windowId: windowId) as? UIScrollView else {
                 throw InteractionError.notScrollable(id)
             }
             scrollView = view
         } else {
-            guard let found = findFirstScrollView() else {
+            guard let found = findFirstScrollView(windowId: windowId) else {
                 throw InteractionError.noScrollView
             }
             scrollView = found
@@ -197,8 +195,8 @@ final class InteractionEngine {
         scrollView.setContentOffset(offset, animated: true)
     }
 
-    func scrollTo(elementId: String) throws {
-        guard let view = ElementInventory.shared.findElement(byId: elementId) else {
+    func scrollTo(elementId: String, windowId: String? = nil) throws {
+        guard let view = ElementInventory.shared.findElement(byId: elementId, windowId: windowId) else {
             throw InteractionError.elementNotFound(elementId)
         }
 
@@ -210,8 +208,8 @@ final class InteractionEngine {
 
     // MARK: - Tab switching
 
-    func selectTab(index: Int) throws {
-        guard let tabBarController = findTabBarController() else {
+    func selectTab(index: Int, windowId: String? = nil) throws {
+        guard let tabBarController = findTabBarController(windowId: windowId) else {
             throw InteractionError.noNavigation
         }
         guard index >= 0 && index < (tabBarController.viewControllers?.count ?? 0) else {
@@ -222,10 +220,9 @@ final class InteractionEngine {
 
     // MARK: - Navigation
 
-    func navigateBack() throws {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = scene.keyWindow?.rootViewController else {
+    func navigateBack(windowId: String? = nil) throws {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId),
+              let rootVC = ref.rootViewController else {
             throw InteractionError.noNavigation
         }
 
@@ -236,10 +233,9 @@ final class InteractionEngine {
         }
     }
 
-    func dismissModal() throws {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = scene.keyWindow?.rootViewController else {
+    func dismissModal(windowId: String? = nil) throws {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId),
+              let rootVC = ref.rootViewController else {
             throw InteractionError.noModal
         }
 
@@ -252,11 +248,9 @@ final class InteractionEngine {
 
     // MARK: - Helpers
 
-    private func findFirstScrollView() -> UIScrollView? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else { return nil }
-        return findScrollView(in: window)
+    private func findFirstScrollView(windowId: String? = nil) -> UIScrollView? {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else { return nil }
+        return findScrollView(in: ref.nativeWindow)
     }
 
     private func findScrollView(in view: UIView) -> UIScrollView? {
