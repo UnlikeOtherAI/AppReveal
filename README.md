@@ -2,6 +2,8 @@
 
 <img src="icon_180.png" width="180" alt="AppReveal icon" />
 
+**[unlikeotherai.github.io/AppReveal](https://unlikeotherai.github.io/AppReveal/)**
+
 Debug-only in-app MCP server for iOS, Android, Flutter, and React Native. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
 
 ## How it works
