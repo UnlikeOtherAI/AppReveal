@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AppReveal — MCP Server for Native Apps</title>
-<meta name="description" content="Debug-only in-app MCP server for iOS, Android, Flutter, and React Native. Give LLM agents Playwright-like control over native apps.">
+<meta name="description" content="Debug-only in-app MCP server for iOS, macOS, Android, Flutter, and React Native. Give LLM agents Playwright-like control over native apps.">
 <meta property="og:title" content="AppReveal — MCP Server for Native Apps">
 <meta property="og:description" content="Give LLM agents structured access to native app UI, state, navigation, network traffic, and WebView DOM.">
 <meta property="og:image" content="https://unlikeotherai.github.io/AppReveal/icon_180.png">
@@ -25,6 +25,7 @@
     --android: #3ddc84;
     --flutter: #02569b;
     --rn: #61dafb;
+    --macos: #a855f7;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -306,6 +307,7 @@
       <a href="#tools">Tools</a>
       <a href="#quick-start">Quick start</a>
       <a href="#security">Security</a>
+      <a href="#cli">CLI</a>
     </div>
     <a href="https://github.com/UnlikeOtherAI/AppReveal" class="gh-btn">
       <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -320,7 +322,7 @@
     <img src="icon_180.png" alt="AppReveal icon">
     <h1>MCP server for <span>native apps</span></h1>
     <p class="tagline">
-      Debug-only framework that gives LLM agents structured access to your iOS, Android, Flutter, and React Native apps. Like Playwright, but for native -- with direct access to UI, state, navigation, network traffic, and WebView DOM.
+      Debug-only framework that gives LLM agents structured access to your iOS, macOS, Android, Flutter, and React Native apps. Like Playwright, but for native -- with direct access to UI, state, navigation, network traffic, and WebView DOM.
     </p>
     <div class="hero-cta">
       <a href="#quick-start" class="btn btn-primary">Get started</a>
@@ -335,10 +337,11 @@
 <!-- Platform bar -->
 <div class="platforms-bar">
   <div class="platform-badge"><span class="platform-dot" style="background:var(--ios)"></span> iOS</div>
+  <div class="platform-badge"><span class="platform-dot" style="background:var(--macos)"></span> macOS</div>
   <div class="platform-badge"><span class="platform-dot" style="background:var(--android)"></span> Android</div>
   <div class="platform-badge"><span class="platform-dot" style="background:var(--flutter)"></span> Flutter</div>
   <div class="platform-badge"><span class="platform-dot" style="background:var(--rn)"></span> React Native</div>
-  <div class="platform-badge" style="color:var(--accent)">44 MCP tools</div>
+  <div class="platform-badge" style="color:var(--accent)">48 MCP tools</div>
 </div>
 
 <!-- How it works -->
@@ -458,13 +461,14 @@
 <section id="tools">
   <div class="container">
     <div class="section-label">MCP tools</div>
-    <h2>44 tools, identical across platforms</h2>
-    <p class="subtitle">Every tool works the same way on iOS, Android, Flutter, and React Native.</p>
+    <h2>48 tools across all platforms</h2>
+    <p class="subtitle">Shared tool surface on iOS, macOS, Android, Flutter, and React Native. macOS adds desktop-specific window and menu tools.</p>
 
     <div class="tool-categories">
       <div class="tool-cat">
-        <h3>UI &amp; Navigation <span class="tool-count">14</span></h3>
+        <h3>UI &amp; Navigation <span class="tool-count">15</span></h3>
         <ul class="tool-list">
+          <li><code>list_windows</code> List visible windows with stable IDs</li>
           <li><code>get_screen</code> Current screen identity and metadata</li>
           <li><code>get_elements</code> Visible interactive elements</li>
           <li><code>get_view_tree</code> Full view hierarchy</li>
@@ -514,6 +518,14 @@
         </ul>
       </div>
       <div class="tool-cat">
+        <h3>macOS Desktop <span class="tool-count">3</span></h3>
+        <ul class="tool-list">
+          <li><code>get_menu_bar</code> Read app menu hierarchy</li>
+          <li><code>click_menu_item</code> Invoke menu item by path</li>
+          <li><code>focus_window</code> Bring window to front</li>
+        </ul>
+      </div>
+      <div class="tool-cat">
         <h3>Token-Efficient &amp; Batch <span class="tool-count">8</span></h3>
         <ul class="tool-list">
           <li><code>get_dom_summary</code> Page overview</li>
@@ -539,6 +551,7 @@
 
     <div class="code-tabs">
       <div class="code-tab active" onclick="showTab('ios')">iOS</div>
+      <div class="code-tab" onclick="showTab('macos')">macOS</div>
       <div class="code-tab" onclick="showTab('android')">Android</div>
       <div class="code-tab" onclick="showTab('flutter')">Flutter</div>
       <div class="code-tab" onclick="showTab('rn')">React Native</div>
@@ -546,9 +559,19 @@
 
     <div id="tab-ios" class="code-panel active">
 <pre><span class="cm">// Package.swift dependency</span>
-.<span class="fn">package</span>(url: <span class="str">"https://github.com/UnlikeOtherAI/AppReveal.git"</span>, from: <span class="str">"0.4.0"</span>)
+.<span class="fn">package</span>(url: <span class="str">"https://github.com/UnlikeOtherAI/AppReveal.git"</span>, from: <span class="str">"0.5.0"</span>)
 
 <span class="cm">// In your AppDelegate or @main struct</span>
+<span class="kw">#if</span> DEBUG
+<span class="type">AppReveal</span>.<span class="fn">start</span>()
+<span class="kw">#endif</span></pre>
+    </div>
+
+    <div id="tab-macos" class="code-panel">
+<pre><span class="cm">// Package.swift dependency (same package as iOS)</span>
+.<span class="fn">package</span>(url: <span class="str">"https://github.com/UnlikeOtherAI/AppReveal.git"</span>, from: <span class="str">"0.5.0"</span>)
+
+<span class="cm">// In your AppDelegate</span>
 <span class="kw">#if</span> DEBUG
 <span class="type">AppReveal</span>.<span class="fn">start</span>()
 <span class="kw">#endif</span></pre>
@@ -594,6 +617,35 @@ cd ios && pod install
   </div>
 </section>
 
+<!-- CLI -->
+<section id="cli">
+  <div class="container">
+    <div class="section-label">CLI</div>
+    <h2>Discover and control from the terminal</h2>
+    <p class="subtitle">A dedicated CLI for discovering AppReveal targets, inspecting tools, and sending MCP requests without hand-written curl.</p>
+
+    <div class="code-panel active" style="border-radius: 8px;">
+<pre><span class="cm"># Install</span>
+npm install -g @unlikeotherai/appreveal
+
+<span class="cm"># Discover all targets on the network</span>
+appreveal discover
+
+<span class="cm"># Filter by platform</span>
+appreveal discover --platform ios,macos
+
+<span class="cm"># Snapshot a target: screen, elements, launch context</span>
+appreveal snapshot com.example.shop
+
+<span class="cm"># Find and tap an element across all targets</span>
+appreveal tap <span class="str">"login.submit"</span> --all
+
+<span class="cm"># Call any MCP tool</span>
+appreveal call get_menu_bar --platform macos</pre>
+    </div>
+  </div>
+</section>
+
 <!-- Security -->
 <section id="security">
   <div class="container">
@@ -603,7 +655,7 @@ cd ios && pod install
 
     <div class="security-grid">
       <div class="sec-item">
-        <h3>iOS: #if DEBUG</h3>
+        <h3>iOS / macOS: #if DEBUG</h3>
         <p>All framework code is wrapped in compiler directives. Not a single byte ships in release builds.</p>
       </div>
       <div class="sec-item">
@@ -633,6 +685,8 @@ cd ios && pod install
       <a href="https://github.com/UnlikeOtherAI/AppReveal/blob/main/docs/architecture.md">Architecture</a>
       &nbsp;&middot;&nbsp;
       <a href="https://github.com/UnlikeOtherAI/AppReveal/blob/main/docs/tools.md">Tools Reference</a>
+      &nbsp;&middot;&nbsp;
+      <a href="https://github.com/UnlikeOtherAI/AppReveal/blob/main/CLI/README.md">CLI</a>
       &nbsp;&middot;&nbsp;
       <a href="https://github.com/UnlikeOtherAI">Unlike Other AI</a>
     </p>
