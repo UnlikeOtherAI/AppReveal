@@ -282,24 +282,28 @@ class InteractionEngine {
     return found;
   }
 
-  ScrollableState? _findScrollableState(Element element, String? containerId) {
-    if (element is StatefulElement && element.state is ScrollableState) {
-      if (containerId == null) return element.state as ScrollableState;
-      final key = element.widget.key;
-      if (key is ValueKey<String> && key.value == containerId) {
-        return element.state as ScrollableState;
-      }
-    }
+  ScrollableState? _findScrollableState(Element root, String? containerId) {
     ScrollableState? found;
-    element.visitChildren((child) {
-      if (found == null) found = _findScrollableState(child, containerId);
+    ElementInventory.visitAll(root, (element) {
+      if (found != null) return false;
+      if (element is StatefulElement && element.state is ScrollableState) {
+        if (containerId == null) {
+          found = element.state as ScrollableState;
+          return false;
+        }
+        final key = element.widget.key;
+        if (key is ValueKey<String> && key.value == containerId) {
+          found = element.state as ScrollableState;
+          return false;
+        }
+      }
+      return true;
     });
     return found;
   }
 
   void _visitElements(Element element, bool Function(Element) visitor) {
-    if (!visitor(element)) return;
-    element.visitChildren((child) => _visitElements(child, visitor));
+    ElementInventory.visitAll(element, visitor);
   }
 
   Future<void> _waitForFrame() async {

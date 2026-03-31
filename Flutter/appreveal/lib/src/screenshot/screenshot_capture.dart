@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../elements/element_inventory.dart';
+
 class ScreenshotCapture {
   static final shared = ScreenshotCapture._();
   ScreenshotCapture._();
@@ -94,7 +96,6 @@ class ScreenshotCapture {
   }
 
   void _visitElements(Element element, bool Function(Element) visitor) {
-    if (!visitor(element)) return;
-    element.visitChildren((child) => _visitElements(child, visitor));
+    ElementInventory.visitAll(element, visitor);
   }
 }

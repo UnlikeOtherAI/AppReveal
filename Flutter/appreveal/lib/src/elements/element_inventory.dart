@@ -8,6 +8,36 @@ class ElementInventory {
   static final shared = ElementInventory._();
   ElementInventory._();
 
+  /// Walk all elements starting from [root], including overlay entries
+  /// (drawers, dialogs, bottom sheets, tooltips) that sit above the route tree.
+  /// The [visitor] returns false to stop traversal.
+  static void visitAll(Element root, bool Function(Element) visitor) {
+    final visited = <Element>{};
+    final overlayEntries = <Element>[];
+    bool stopped = false;
+
+    void walk(Element element) {
+      if (stopped || !visited.add(element)) return;
+      if (element is StatefulElement && element.state is OverlayState) {
+        element.visitChildren((theatre) {
+          theatre.visitChildren((entry) => overlayEntries.add(entry));
+        });
+      }
+      if (!visitor(element)) {
+        stopped = true;
+        return;
+      }
+      element.visitChildren(walk);
+    }
+
+    walk(root);
+
+    for (final entry in overlayEntries) {
+      if (stopped) break;
+      walk(entry);
+    }
+  }
+
   /// List all interactive/identified elements on the current screen.
   List<Map<String, dynamic>> listElements() {
     final root = WidgetsBinding.instance.renderViewElement;
@@ -15,7 +45,15 @@ class ElementInventory {
 
     final results = <Map<String, dynamic>>[];
     final seen = <String>{};
-    _collectElements(root, results, seen);
+    final visited = <Element>{};
+    _collectElements(root, results, seen, visited);
+
+    // Overlay-hosted widgets (drawers, dialogs, bottom sheets, tooltips)
+    // may not be reached by the standard element tree walk.
+    for (final entry in _overlayEntryElements(root)) {
+      _collectElements(entry, results, seen, visited);
+    }
+
     return results;
   }
 
@@ -24,7 +62,13 @@ class ElementInventory {
     final root = WidgetsBinding.instance.renderViewElement;
     if (root == null) return [];
     final nodes = <Map<String, dynamic>>[];
-    _dumpElement(root, 0, maxDepth, nodes);
+    final visited = <Element>{};
+    _dumpElement(root, 0, maxDepth, nodes, visited);
+
+    for (final entry in _overlayEntryElements(root)) {
+      _dumpElement(entry, 0, maxDepth, nodes, visited);
+    }
+
     return nodes;
   }
 
@@ -32,16 +76,44 @@ class ElementInventory {
   Element? findElement(String id) {
     final root = WidgetsBinding.instance.renderViewElement;
     if (root == null) return null;
-    return _findById(root, id);
+    final visited = <Element>{};
+    final found = _findById(root, id, visited);
+    if (found != null) return found;
+
+    for (final entry in _overlayEntryElements(root)) {
+      final result = _findById(entry, id, visited);
+      if (result != null) return result;
+    }
+
+    return null;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+
+  /// Collect overlay-entry elements from [root]. Overlay entries host
+  /// drawers, dialogs, bottom sheets, and tooltips above the route tree.
+  List<Element> _overlayEntryElements(Element root) {
+    final entries = <Element>[];
+    void walk(Element el) {
+      if (el is StatefulElement && el.state is OverlayState) {
+        el.visitChildren((theatre) {
+          theatre.visitChildren((entry) => entries.add(entry));
+        });
+      }
+      el.visitChildren(walk);
+    }
+    walk(root);
+    return entries;
+  }
 
   void _collectElements(
     Element element,
     List<Map<String, dynamic>> results,
     Set<String> seen,
+    Set<Element> visited,
   ) {
+    if (!visited.add(element)) return;
+
     final widget = element.widget;
     final info = _describeInteractive(element);
 
@@ -75,7 +147,7 @@ class ElementInventory {
       }
     }
 
-    element.visitChildren((child) => _collectElements(child, results, seen));
+    element.visitChildren((child) => _collectElements(child, results, seen, visited));
   }
 
   Map<String, dynamic>? _describeInteractive(Element element) {
@@ -198,8 +270,9 @@ class ElementInventory {
     }
   }
 
-  void _dumpElement(Element element, int depth, int maxDepth, List<Map<String, dynamic>> nodes) {
+  void _dumpElement(Element element, int depth, int maxDepth, List<Map<String, dynamic>> nodes, Set<Element> visited) {
     if (depth > maxDepth) return;
+    if (!visited.add(element)) return;
 
     final widget = element.widget;
     final node = <String, dynamic>{
@@ -233,10 +306,11 @@ class ElementInventory {
     }
 
     nodes.add(node);
-    element.visitChildren((child) => _dumpElement(child, depth + 1, maxDepth, nodes));
+    element.visitChildren((child) => _dumpElement(child, depth + 1, maxDepth, nodes, visited));
   }
 
-  Element? _findById(Element element, String id) {
+  Element? _findById(Element element, String id, Set<Element> visited) {
+    if (!visited.add(element)) return null;
     final key = element.widget.key;
     if (key is ValueKey<String> && key.value == id) return element;
     if (element.widget is Semantics) {
@@ -245,7 +319,7 @@ class ElementInventory {
     }
     Element? found;
     element.visitChildren((child) {
-      if (found == null) found = _findById(child, id);
+      if (found == null) found = _findById(child, id, visited);
     });
     return found;
   }
