@@ -5,6 +5,7 @@ package com.appreveal.network
  */
 interface NetworkObservable {
     val recentRequests: List<CapturedRequest>
+
     fun addObserver(observer: NetworkTrafficObserver)
 }
 
@@ -19,7 +20,6 @@ interface NetworkTrafficObserver {
  * Internal service that collects network traffic in a ring buffer.
  */
 internal object NetworkObserverService : NetworkTrafficObserver {
-
     private const val MAX_BUFFER_SIZE = 200
     private val capturedRequests = mutableListOf<CapturedRequest>()
     private var observable: NetworkObservable? = null
@@ -46,9 +46,7 @@ internal object NetworkObserverService : NetworkTrafficObserver {
     }
 
     @Synchronized
-    fun callDetail(id: String): CapturedRequest? {
-        return capturedRequests.firstOrNull { it.id == id }
-    }
+    fun callDetail(id: String): CapturedRequest? = capturedRequests.firstOrNull { it.id == id }
 
     @Synchronized
     fun clear() {

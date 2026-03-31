@@ -5,8 +5,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.ScrollView
 import android.widget.HorizontalScrollView
+import android.widget.ScrollView
 import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
@@ -21,13 +21,13 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
  * All methods use MainThreadExecutor.runBlocking to run on the main thread.
  */
 internal object InteractionEngine {
-
     // MARK: - Tap
 
     fun tap(elementId: String) {
         MainThreadExecutor.runBlocking {
-            val view = ElementInventory.findElement(elementId)
-                ?: throw InteractionError.ElementNotFound(elementId)
+            val view =
+                ElementInventory.findElement(elementId)
+                    ?: throw InteractionError.ElementNotFound(elementId)
 
             if (view.isClickable || view.hasOnClickListeners()) {
                 view.performClick()
@@ -51,13 +51,19 @@ internal object InteractionEngine {
         }
     }
 
-    fun tap(x: Float, y: Float) {
+    fun tap(
+        x: Float,
+        y: Float,
+    ) {
         MainThreadExecutor.runBlocking {
             tapPoint(x, y)
         }
     }
 
-    private fun tapPoint(x: Float, y: Float) {
+    private fun tapPoint(
+        x: Float,
+        y: Float,
+    ) {
         val activity = ScreenResolver.currentActivity ?: return
         val decorView = activity.window?.decorView ?: return
 
@@ -74,8 +80,12 @@ internal object InteractionEngine {
 
     // MARK: - Tap by text
 
-    fun tapByText(text: String, matchMode: String = "exact", occurrence: Int = 0): Map<String, Any> {
-        return MainThreadExecutor.runBlocking {
+    fun tapByText(
+        text: String,
+        matchMode: String = "exact",
+        occurrence: Int = 0,
+    ): Map<String, Any> =
+        MainThreadExecutor.runBlocking {
             val (view, candidates) = ElementInventory.findElementByText(text, matchMode, occurrence)
             if (view == null) {
                 if (candidates.isEmpty()) {
@@ -84,7 +94,7 @@ internal object InteractionEngine {
                     mapOf(
                         "success" to false,
                         "error" to "Element not found at occurrence $occurrence",
-                        "candidates" to candidates
+                        "candidates" to candidates,
                     )
                 }
             } else {
@@ -102,70 +112,102 @@ internal object InteractionEngine {
                     "success" to true,
                     "tappedText" to text,
                     "matchMode" to matchMode,
-                    "candidates" to candidates
+                    "candidates" to candidates,
                 )
             }
         }
-    }
 
     // MARK: - Text
 
-    fun type(text: String, elementId: String?) {
+    fun type(
+        text: String,
+        elementId: String?,
+    ) {
         MainThreadExecutor.runBlocking {
-            val target: View? = if (elementId != null) {
-                ElementInventory.findElement(elementId)
-                    ?: throw InteractionError.ElementNotFound(elementId)
-            } else {
-                ScreenResolver.currentActivity?.currentFocus
-            }
+            val target: View? =
+                if (elementId != null) {
+                    ElementInventory.findElement(elementId)
+                        ?: throw InteractionError.ElementNotFound(elementId)
+                } else {
+                    ScreenResolver.currentActivity?.currentFocus
+                }
 
             when (target) {
                 is EditText -> {
                     target.requestFocus()
                     target.append(text)
                 }
-                else -> throw InteractionError.NotEditable(elementId ?: "current focus")
+
+                else -> {
+                    throw InteractionError.NotEditable(elementId ?: "current focus")
+                }
             }
         }
     }
 
     fun clear(elementId: String) {
         MainThreadExecutor.runBlocking {
-            val view = ElementInventory.findElement(elementId)
-                ?: throw InteractionError.ElementNotFound(elementId)
+            val view =
+                ElementInventory.findElement(elementId)
+                    ?: throw InteractionError.ElementNotFound(elementId)
 
             when (view) {
                 is EditText -> {
                     view.setText("")
                 }
-                else -> throw InteractionError.NotEditable(elementId)
+
+                else -> {
+                    throw InteractionError.NotEditable(elementId)
+                }
             }
         }
     }
 
     // MARK: - Scroll
 
-    fun scroll(direction: String, containerId: String?) {
+    fun scroll(
+        direction: String,
+        containerId: String?,
+    ) {
         MainThreadExecutor.runBlocking {
-            val scrollView: View = if (containerId != null) {
-                val view = ElementInventory.findElement(containerId)
-                if (view == null || !isScrollable(view)) {
-                    throw InteractionError.NotScrollable(containerId)
+            val scrollView: View =
+                if (containerId != null) {
+                    val view = ElementInventory.findElement(containerId)
+                    if (view == null || !isScrollable(view)) {
+                        throw InteractionError.NotScrollable(containerId)
+                    }
+                    view
+                } else {
+                    findFirstScrollView()
+                        ?: throw InteractionError.NoScrollView()
                 }
-                view
-            } else {
-                findFirstScrollView()
-                    ?: throw InteractionError.NoScrollView()
-            }
 
             val dx: Int
             val dy: Int
             when (direction) {
-                "up" -> { dx = 0; dy = -(scrollView.height * 0.8).toInt() }
-                "down" -> { dx = 0; dy = (scrollView.height * 0.8).toInt() }
-                "left" -> { dx = -(scrollView.width * 0.8).toInt(); dy = 0 }
-                "right" -> { dx = (scrollView.width * 0.8).toInt(); dy = 0 }
-                else -> throw InteractionError.NotScrollable("Invalid direction: $direction")
+                "up" -> {
+                    dx = 0
+                    dy = -(scrollView.height * 0.8).toInt()
+                }
+
+                "down" -> {
+                    dx = 0
+                    dy = (scrollView.height * 0.8).toInt()
+                }
+
+                "left" -> {
+                    dx = -(scrollView.width * 0.8).toInt()
+                    dy = 0
+                }
+
+                "right" -> {
+                    dx = (scrollView.width * 0.8).toInt()
+                    dy = 0
+                }
+
+                else -> {
+                    throw InteractionError.NotScrollable("Invalid direction: $direction")
+                }
             }
 
             when (scrollView) {
@@ -180,8 +222,9 @@ internal object InteractionEngine {
 
     fun scrollTo(elementId: String) {
         MainThreadExecutor.runBlocking {
-            val view = ElementInventory.findElement(elementId)
-                ?: throw InteractionError.ElementNotFound(elementId)
+            val view =
+                ElementInventory.findElement(elementId)
+                    ?: throw InteractionError.ElementNotFound(elementId)
 
             val parentScrollView = findParentScrollView(view)
             if (parentScrollView != null) {
@@ -194,13 +237,16 @@ internal object InteractionEngine {
 
     fun selectTab(index: Int) {
         MainThreadExecutor.runBlocking {
-            val activity = ScreenResolver.currentActivity
-                ?: throw InteractionError.NoNavigation()
-            val decorView = activity.window?.decorView
-                ?: throw InteractionError.NoNavigation()
+            val activity =
+                ScreenResolver.currentActivity
+                    ?: throw InteractionError.NoNavigation()
+            val decorView =
+                activity.window?.decorView
+                    ?: throw InteractionError.NoNavigation()
 
-            val bottomNav = findViewOfType(decorView, BottomNavigationView::class.java)
-                ?: throw InteractionError.NoNavigation()
+            val bottomNav =
+                findViewOfType(decorView, BottomNavigationView::class.java)
+                    ?: throw InteractionError.NoNavigation()
 
             val menu = bottomNav.menu
             if (index < 0 || index >= menu.size()) {
@@ -214,8 +260,9 @@ internal object InteractionEngine {
 
     fun navigateBack() {
         MainThreadExecutor.runBlocking {
-            val activity = ScreenResolver.currentActivity
-                ?: throw InteractionError.NoNavigation()
+            val activity =
+                ScreenResolver.currentActivity
+                    ?: throw InteractionError.NoNavigation()
             if (activity is ComponentActivity) {
                 activity.onBackPressedDispatcher.onBackPressed()
             } else {
@@ -227,8 +274,9 @@ internal object InteractionEngine {
 
     fun dismissModal() {
         MainThreadExecutor.runBlocking {
-            val activity = ScreenResolver.currentActivity
-                ?: throw InteractionError.NoModal()
+            val activity =
+                ScreenResolver.currentActivity
+                    ?: throw InteractionError.NoModal()
 
             // Check if this activity was started by another (has a parent or caller)
             if (activity.callingActivity != null || activity.isTaskRoot.not()) {
@@ -241,10 +289,9 @@ internal object InteractionEngine {
 
     // MARK: - Helpers
 
-    private fun isScrollable(view: View): Boolean {
-        return view is ScrollView || view is NestedScrollView ||
-                view is RecyclerView || view is HorizontalScrollView
-    }
+    private fun isScrollable(view: View): Boolean =
+        view is ScrollView || view is NestedScrollView ||
+            view is RecyclerView || view is HorizontalScrollView
 
     private fun findFirstScrollView(): View? {
         val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return null
@@ -271,7 +318,10 @@ internal object InteractionEngine {
         return null
     }
 
-    private fun <T : View> findViewOfType(root: View, clazz: Class<T>): T? {
+    private fun <T : View> findViewOfType(
+        root: View,
+        clazz: Class<T>,
+    ): T? {
         if (clazz.isInstance(root)) return clazz.cast(root)
         if (root is ViewGroup) {
             for (i in 0 until root.childCount) {
@@ -286,11 +336,24 @@ internal object InteractionEngine {
 /**
  * Interaction errors matching the iOS InteractionError cases.
  */
-sealed class InteractionError(message: String) : Exception(message) {
-    class ElementNotFound(id: String) : InteractionError("Element not found: $id")
-    class NotEditable(id: String) : InteractionError("Element not editable: $id")
-    class NotScrollable(id: String) : InteractionError("Element not scrollable: $id")
+sealed class InteractionError(
+    message: String,
+) : Exception(message) {
+    class ElementNotFound(
+        id: String,
+    ) : InteractionError("Element not found: $id")
+
+    class NotEditable(
+        id: String,
+    ) : InteractionError("Element not editable: $id")
+
+    class NotScrollable(
+        id: String,
+    ) : InteractionError("Element not scrollable: $id")
+
     class NoScrollView : InteractionError("No scroll view found")
+
     class NoNavigation : InteractionError("No navigation controller found")
+
     class NoModal : InteractionError("No modal to dismiss")
 }

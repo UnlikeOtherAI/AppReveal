@@ -15,33 +15,44 @@ import java.lang.ref.WeakReference
  * Tracks the current Activity via ActivityLifecycleCallbacks and resolves screen identity.
  */
 internal object ScreenResolver {
-
     private var currentActivityRef: WeakReference<Activity>? = null
 
     val currentActivity: Activity?
         get() = currentActivityRef?.get()
 
     fun init(application: Application) {
-        application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityResumed(activity: Activity) {
-                currentActivityRef = WeakReference(activity)
-            }
-            override fun onActivityPaused(activity: Activity) {}
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-            override fun onActivityStarted(activity: Activity) {}
-            override fun onActivityStopped(activity: Activity) {}
-            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-            override fun onActivityDestroyed(activity: Activity) {
-                if (currentActivityRef?.get() === activity) {
-                    currentActivityRef = null
+        application.registerActivityLifecycleCallbacks(
+            object : Application.ActivityLifecycleCallbacks {
+                override fun onActivityResumed(activity: Activity) {
+                    currentActivityRef = WeakReference(activity)
                 }
-            }
-        })
+
+                override fun onActivityPaused(activity: Activity) {}
+
+                override fun onActivityCreated(
+                    activity: Activity,
+                    savedInstanceState: Bundle?,
+                ) {}
+
+                override fun onActivityStarted(activity: Activity) {}
+
+                override fun onActivityStopped(activity: Activity) {}
+
+                override fun onActivitySaveInstanceState(
+                    activity: Activity,
+                    outState: Bundle,
+                ) {}
+
+                override fun onActivityDestroyed(activity: Activity) {
+                    if (currentActivityRef?.get() === activity) {
+                        currentActivityRef = null
+                    }
+                }
+            },
+        )
     }
 
-    fun resolve(): ScreenInfo {
-        return MainThreadExecutor.runBlocking { resolveOnMainThread() }
-    }
+    fun resolve(): ScreenInfo = MainThreadExecutor.runBlocking { resolveOnMainThread() }
 
     private fun resolveOnMainThread(): ScreenInfo {
         val activity = currentActivity
@@ -56,7 +67,7 @@ internal object ScreenResolver {
                 presentedModals = emptyList(),
                 confidence = 0.0,
                 source = "derived",
-                appBarTitle = null
+                appBarTitle = null,
             )
         }
 
@@ -75,7 +86,7 @@ internal object ScreenResolver {
                 presentedModals = emptyList(),
                 confidence = 1.0,
                 source = "explicit",
-                appBarTitle = extractToolbarTitle(activity)
+                appBarTitle = extractToolbarTitle(activity),
             )
         }
 
@@ -91,7 +102,7 @@ internal object ScreenResolver {
                 presentedModals = emptyList(),
                 confidence = 1.0,
                 source = "explicit",
-                appBarTitle = extractToolbarTitle(activity)
+                appBarTitle = extractToolbarTitle(activity),
             )
         }
 
@@ -110,7 +121,7 @@ internal object ScreenResolver {
             presentedModals = emptyList(),
             confidence = 0.8,
             source = "derived",
-            appBarTitle = extractToolbarTitle(activity)
+            appBarTitle = extractToolbarTitle(activity),
         )
     }
 
@@ -120,7 +131,10 @@ internal object ScreenResolver {
         return fragments.lastOrNull { it.isVisible }
     }
 
-    private fun buildActivityChain(activity: Activity, topFragment: Fragment?): List<String> {
+    private fun buildActivityChain(
+        activity: Activity,
+        topFragment: Fragment?,
+    ): List<String> {
         val chain = mutableListOf(activity.javaClass.simpleName)
         if (activity is AppCompatActivity) {
             val backStackCount = activity.supportFragmentManager.backStackEntryCount
@@ -176,7 +190,10 @@ internal object ScreenResolver {
         return activity.actionBar?.title?.toString()
     }
 
-    private fun <T : View> findViewOfType(root: View, clazz: Class<T>): T? {
+    private fun <T : View> findViewOfType(
+        root: View,
+        clazz: Class<T>,
+    ): T? {
         if (clazz.isInstance(root)) return clazz.cast(root)
         if (root is android.view.ViewGroup) {
             for (i in 0 until root.childCount) {

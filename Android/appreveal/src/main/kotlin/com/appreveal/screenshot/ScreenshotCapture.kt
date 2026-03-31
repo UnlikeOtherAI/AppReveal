@@ -19,13 +19,12 @@ import java.util.concurrent.TimeUnit
  * and drawToBitmap for individual elements.
  */
 internal object ScreenshotCapture {
-
     data class CaptureResult(
-        val imageData: String,    // base64-encoded
+        val imageData: String, // base64-encoded
         val width: Int,
         val height: Int,
         val scale: Float,
-        val format: String
+        val format: String,
     )
 
     fun captureScreen(format: String = "png"): CaptureResult? {
@@ -56,19 +55,23 @@ internal object ScreenshotCapture {
             width = width,
             height = height,
             scale = density,
-            format = format
+            format = format,
         )
     }
 
-    fun captureElement(elementId: String, format: String = "png"): CaptureResult? {
+    fun captureElement(
+        elementId: String,
+        format: String = "png",
+    ): CaptureResult? {
         return MainThreadExecutor.runBlocking {
             val view = ElementInventory.findElement(elementId) ?: return@runBlocking null
 
-            val bitmap = try {
-                view.drawToBitmap()
-            } catch (_: Exception) {
-                return@runBlocking null
-            }
+            val bitmap =
+                try {
+                    view.drawToBitmap()
+                } catch (_: Exception) {
+                    return@runBlocking null
+                }
 
             val base64 = encodeBitmap(bitmap, format)
             val density = view.resources.displayMetrics.density
@@ -78,18 +81,22 @@ internal object ScreenshotCapture {
                 width = bitmap.width,
                 height = bitmap.height,
                 scale = density,
-                format = format
+                format = format,
             )
         }
     }
 
-    private fun encodeBitmap(bitmap: Bitmap, format: String): String {
+    private fun encodeBitmap(
+        bitmap: Bitmap,
+        format: String,
+    ): String {
         val stream = ByteArrayOutputStream()
-        val compressFormat = if (format == "jpeg") {
-            Bitmap.CompressFormat.JPEG
-        } else {
-            Bitmap.CompressFormat.PNG
-        }
+        val compressFormat =
+            if (format == "jpeg") {
+                Bitmap.CompressFormat.JPEG
+            } else {
+                Bitmap.CompressFormat.PNG
+            }
         val quality = if (format == "jpeg") 85 else 100
         bitmap.compress(compressFormat, quality, stream)
         val bytes = stream.toByteArray()

@@ -22,7 +22,6 @@ import com.google.android.material.materialswitch.MaterialSwitch
  * Enumerates visible interactive elements from the Android view hierarchy.
  */
 internal object ElementInventory {
-
     fun listElements(): List<ElementInfo> {
         return MainThreadExecutor.runBlocking {
             val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking emptyList()
@@ -48,11 +47,12 @@ internal object ElementInventory {
     fun findElementByText(
         text: String,
         matchMode: String = "exact",
-        occurrence: Int = 0
+        occurrence: Int = 0,
     ): Pair<View?, List<String>> {
         return MainThreadExecutor.runBlocking {
-            val decorView = ScreenResolver.currentActivity?.window?.decorView
-                ?: return@runBlocking Pair(null, emptyList())
+            val decorView =
+                ScreenResolver.currentActivity?.window?.decorView
+                    ?: return@runBlocking Pair(null, emptyList())
 
             val matches = mutableListOf<Pair<View, String>>()
             collectTextMatches(decorView, text, matchMode, matches)
@@ -86,9 +86,18 @@ internal object ElementInventory {
 
     fun extractText(view: View): String? {
         return when (view) {
-            is Button -> (view as TextView).text?.toString()
-            is EditText -> view.hint?.toString() ?: view.text?.toString()
-            is TextView -> view.text?.toString()
+            is Button -> {
+                (view as TextView).text?.toString()
+            }
+
+            is EditText -> {
+                view.hint?.toString() ?: view.text?.toString()
+            }
+
+            is TextView -> {
+                view.text?.toString()
+            }
+
             else -> {
                 // Walk immediate children for TextViews
                 if (view is ViewGroup) {
@@ -105,9 +114,11 @@ internal object ElementInventory {
     fun normalizeToId(text: String): String {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return "unnamed"
-        val normalized = trimmed.lowercase()
-            .replace(Regex("\\s+"), "_")
-            .replace(Regex("[^a-z0-9_]"), "")
+        val normalized =
+            trimmed
+                .lowercase()
+                .replace(Regex("\\s+"), "_")
+                .replace(Regex("[^a-z0-9_]"), "")
         if (normalized.isEmpty()) return "unnamed"
         return normalized.take(40)
     }
@@ -118,7 +129,7 @@ internal object ElementInventory {
         view: View,
         elements: MutableList<ElementInfo>,
         containerId: String?,
-        seenIds: MutableMap<String, Int>
+        seenIds: MutableMap<String, Int>,
     ) {
         val info = makeElementInfo(view, containerId, seenIds)
         if (info != null) {
@@ -136,20 +147,19 @@ internal object ElementInventory {
         }
     }
 
-    private fun isInteractive(view: View): Boolean {
-        return view is Button ||
-                view is EditText ||
-                isSwitch(view) ||
-                view is SeekBar ||
-                view.isClickable ||
-                view.hasOnClickListeners() ||
-                view.isLongClickable
-    }
+    private fun isInteractive(view: View): Boolean =
+        view is Button ||
+            view is EditText ||
+            isSwitch(view) ||
+            view is SeekBar ||
+            view.isClickable ||
+            view.hasOnClickListeners() ||
+            view.isLongClickable
 
     private fun makeElementInfo(
         view: View,
         containerId: String?,
-        seenIds: MutableMap<String, Int>
+        seenIds: MutableMap<String, Int>,
     ): ElementInfo? {
         // Determine ID and source
         val tagId = view.getTag(R.id.appreveal_id) as? String
@@ -160,9 +170,12 @@ internal object ElementInventory {
             id = tagId
             idSource = "explicit"
         } else if (view.id != View.NO_ID) {
-            val name = try {
-                view.resources.getResourceEntryName(view.id)
-            } catch (_: Exception) { null }
+            val name =
+                try {
+                    view.resources.getResourceEntryName(view.id)
+                } catch (_: Exception) {
+                    null
+                }
             if (!name.isNullOrEmpty()) {
                 id = name
                 idSource = "explicit"
@@ -221,15 +234,16 @@ internal object ElementInventory {
             enabled = view.isEnabled && (view.isClickable || view.isFocusable || view is EditText),
             visible = view.visibility == View.VISIBLE && view.alpha > 0f,
             tappable = view.isClickable || view.hasOnClickListeners(),
-            frame = ElementInfo.ElementFrame(
-                x = location[0].toDouble(),
-                y = location[1].toDouble(),
-                width = view.width.toDouble(),
-                height = view.height.toDouble()
-            ),
+            frame =
+                ElementInfo.ElementFrame(
+                    x = location[0].toDouble(),
+                    y = location[1].toDouble(),
+                    width = view.width.toDouble(),
+                    height = view.height.toDouble(),
+                ),
             containerId = containerId,
             actions = availableActions(view),
-            idSource = idSource
+            idSource = idSource,
         )
     }
 
@@ -259,8 +273,8 @@ internal object ElementInventory {
         return null
     }
 
-    private fun classifyView(view: View): ElementType {
-        return when {
+    private fun classifyView(view: View): ElementType =
+        when {
             view is Button || view.javaClass.simpleName.contains("MaterialButton") -> ElementType.BUTTON
             view is EditText -> ElementType.TEXT_FIELD
             view is TextView -> ElementType.LABEL
@@ -274,29 +288,39 @@ internal object ElementInventory {
             view is BottomNavigationView -> ElementType.TAB_BAR
             else -> ElementType.OTHER
         }
-    }
 
-    private fun isSwitch(view: View): Boolean {
-        return view is android.widget.Switch ||
-                view.javaClass.simpleName == "SwitchCompat" ||
-                view is MaterialSwitch
-    }
+    private fun isSwitch(view: View): Boolean =
+        view is android.widget.Switch ||
+            view.javaClass.simpleName == "SwitchCompat" ||
+            view is MaterialSwitch
 
-    private fun extractValue(view: View): String? {
-        return when (view) {
-            is EditText -> view.text?.toString()
-            is TextView -> view.text?.toString()
-            is SeekBar -> view.progress.toString()
+    private fun extractValue(view: View): String? =
+        when (view) {
+            is EditText -> {
+                view.text?.toString()
+            }
+
+            is TextView -> {
+                view.text?.toString()
+            }
+
+            is SeekBar -> {
+                view.progress.toString()
+            }
+
             else -> {
                 if (isSwitch(view)) {
                     try {
                         val isChecked = view.javaClass.getMethod("isChecked").invoke(view) as? Boolean
                         isChecked?.toString()
-                    } catch (_: Exception) { null }
-                } else null
+                    } catch (_: Exception) {
+                        null
+                    }
+                } else {
+                    null
+                }
             }
         }
-    }
 
     private fun availableActions(view: View): List<String> {
         val actions = mutableListOf<String>()
@@ -319,14 +343,15 @@ internal object ElementInventory {
         view: View,
         text: String,
         matchMode: String,
-        matches: MutableList<Pair<View, String>>
+        matches: MutableList<Pair<View, String>>,
     ) {
         if (view is TextView) {
             val viewText = view.text?.toString() ?: ""
-            val matched = when (matchMode) {
-                "contains" -> viewText.contains(text, ignoreCase = true)
-                else -> viewText.equals(text, ignoreCase = true)
-            }
+            val matched =
+                when (matchMode) {
+                    "contains" -> viewText.contains(text, ignoreCase = true)
+                    else -> viewText.equals(text, ignoreCase = true)
+                }
             if (matched) {
                 matches.add(Pair(view, viewText))
             }
@@ -349,7 +374,10 @@ internal object ElementInventory {
         return null
     }
 
-    private fun findViewByNormalizedText(id: String, root: View): View? {
+    private fun findViewByNormalizedText(
+        id: String,
+        root: View,
+    ): View? {
         val text = extractText(root)
         if (text != null && normalizeToId(text) == id) return root
 
@@ -362,7 +390,10 @@ internal object ElementInventory {
         return null
     }
 
-    private fun findViewByContentDescription(id: String, root: View): View? {
+    private fun findViewByContentDescription(
+        id: String,
+        root: View,
+    ): View? {
         val desc = root.contentDescription?.toString()
         if (desc != null && normalizeToId(desc) == id) return root
 
@@ -377,20 +408,25 @@ internal object ElementInventory {
 
     // -- View tree dump --
 
-    private fun dumpNode(view: View, depth: Int, maxDepth: Int): List<Map<String, Any>> {
+    private fun dumpNode(
+        view: View,
+        depth: Int,
+        maxDepth: Int,
+    ): List<Map<String, Any>> {
         if (depth >= maxDepth) return emptyList()
 
         val location = IntArray(2)
         view.getLocationOnScreen(location)
 
-        val node = mutableMapOf<String, Any>(
-            "class" to view.javaClass.simpleName,
-            "frame" to "${location[0]},${location[1]},${view.width},${view.height}",
-            "hidden" to (view.visibility != View.VISIBLE),
-            "alpha" to view.alpha,
-            "userInteraction" to (view.isClickable || view.isFocusable),
-            "depth" to depth
-        )
+        val node =
+            mutableMapOf<String, Any>(
+                "class" to view.javaClass.simpleName,
+                "frame" to "${location[0]},${location[1]},${view.width},${view.height}",
+                "hidden" to (view.visibility != View.VISIBLE),
+                "alpha" to view.alpha,
+                "userInteraction" to (view.isClickable || view.isFocusable),
+                "depth" to depth,
+            )
 
         // Accessibility info
         val elementId = resolveElementId(view)
@@ -409,28 +445,34 @@ internal object ElementInventory {
                 node["hint"] = view.hint?.toString() ?: ""
                 node["isEditing"] = view.isFocused
             }
+
             is TextView -> {
                 node["text"] = view.text?.toString() ?: ""
                 node["font"] = "${view.typeface} ${view.textSize}"
             }
+
             is Button -> {
                 node["title"] = (view as TextView).text?.toString() ?: ""
                 node["enabled"] = view.isEnabled
             }
+
             is ImageView -> {
                 node["hasImage"] = view.drawable != null
             }
+
             is SeekBar -> {
                 node["value"] = view.progress
                 node["min"] = view.min
                 node["max"] = view.max
             }
+
             else -> {
                 if (isSwitch(view)) {
                     try {
                         val isChecked = view.javaClass.getMethod("isChecked").invoke(view) as? Boolean
                         if (isChecked != null) node["isOn"] = isChecked
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                    }
                 }
                 if (view.isClickable || view.isEnabled) {
                     node["enabled"] = view.isEnabled
@@ -447,7 +489,10 @@ internal object ElementInventory {
         return result
     }
 
-    private fun findView(id: String, view: View): View? {
+    private fun findView(
+        id: String,
+        view: View,
+    ): View? {
         val viewId = resolveElementId(view)
         if (viewId == id) return view
 

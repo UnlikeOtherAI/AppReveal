@@ -14,7 +14,7 @@ data class LogEntry(
     val subsystem: String,
     val category: String,
     val level: String,
-    val message: String
+    val message: String,
 )
 
 /**
@@ -24,14 +24,13 @@ data class AppError(
     val timestamp: String,
     val domain: String,
     val message: String,
-    val stackTrace: String?
+    val stackTrace: String?,
 )
 
 /**
  * Diagnostics bridge: provides recent logs (via logcat) and error capture.
  */
 internal object DiagnosticsBridge {
-
     private const val MAX_ERRORS = 100
     private val recentErrors = mutableListOf<AppError>()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US)
@@ -39,8 +38,11 @@ internal object DiagnosticsBridge {
     /**
      * Get recent logs by reading logcat for the current process.
      */
-    fun getRecentLogs(subsystem: String? = null, limit: Int = 50): List<LogEntry> {
-        return try {
+    fun getRecentLogs(
+        subsystem: String? = null,
+        limit: Int = 50,
+    ): List<LogEntry> =
+        try {
             val pid = android.os.Process.myPid()
             val args = arrayOf("logcat", "-d", "-t", limit.toString(), "--pid=$pid")
             val proc = ProcessBuilder(*args).redirectErrorStream(true).start()
@@ -60,7 +62,6 @@ internal object DiagnosticsBridge {
         } catch (_: Exception) {
             emptyList()
         }
-    }
 
     /**
      * Parse a logcat line into a LogEntry.
@@ -77,22 +78,23 @@ internal object DiagnosticsBridge {
         val tag = match.groupValues[3]
         val message = match.groupValues[4]
 
-        val level = when (levelChar) {
-            "V" -> "verbose"
-            "D" -> "debug"
-            "I" -> "info"
-            "W" -> "warning"
-            "E" -> "error"
-            "F" -> "fault"
-            else -> "unknown"
-        }
+        val level =
+            when (levelChar) {
+                "V" -> "verbose"
+                "D" -> "debug"
+                "I" -> "info"
+                "W" -> "warning"
+                "E" -> "error"
+                "F" -> "fault"
+                else -> "unknown"
+            }
 
         return LogEntry(
             timestamp = timestamp,
             subsystem = tag,
             category = "",
             level = level,
-            message = message
+            message = message,
         )
     }
 
@@ -110,13 +112,18 @@ internal object DiagnosticsBridge {
      * Capture an error to the in-memory ring buffer.
      */
     @Synchronized
-    fun captureError(domain: String, message: String, stackTrace: String? = null) {
-        val error = AppError(
-            timestamp = dateFormat.format(Date()),
-            domain = domain,
-            message = message,
-            stackTrace = stackTrace
-        )
+    fun captureError(
+        domain: String,
+        message: String,
+        stackTrace: String? = null,
+    ) {
+        val error =
+            AppError(
+                timestamp = dateFormat.format(Date()),
+                domain = domain,
+                message = message,
+                stackTrace = stackTrace,
+            )
         recentErrors.add(error)
         if (recentErrors.size > MAX_ERRORS) {
             recentErrors.removeAt(0)

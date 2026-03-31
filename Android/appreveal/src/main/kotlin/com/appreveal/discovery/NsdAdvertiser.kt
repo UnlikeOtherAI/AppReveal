@@ -11,7 +11,7 @@ import android.util.Log
  */
 internal class NsdAdvertiser(
     private val context: Context,
-    private val port: Int
+    private val port: Int,
 ) {
     companion object {
         private const val TAG = "AppReveal"
@@ -23,43 +23,55 @@ internal class NsdAdvertiser(
 
     fun register() {
         val packageName = context.packageName
-        val packageInfo = try {
-            context.packageManager.getPackageInfo(packageName, 0)
-        } catch (_: Exception) { null }
+        val packageInfo =
+            try {
+                context.packageManager.getPackageInfo(packageName, 0)
+            } catch (_: Exception) {
+                null
+            }
 
         val version = packageInfo?.versionName ?: "0.0.0"
 
-        val serviceInfo = NsdServiceInfo().apply {
-            serviceName = "AppReveal-$packageName"
-            serviceType = SERVICE_TYPE
-            setPort(this@NsdAdvertiser.port)
-            setAttribute("bundleId", packageName)
-            setAttribute("version", version)
-            setAttribute("transport", "streamable-http")
-        }
-
-        val listener = object : NsdManager.RegistrationListener {
-            override fun onServiceRegistered(info: NsdServiceInfo) {
-                Log.i(TAG, "NSD service registered: ${info.serviceName} on port $port")
+        val serviceInfo =
+            NsdServiceInfo().apply {
+                serviceName = "AppReveal-$packageName"
+                serviceType = SERVICE_TYPE
+                setPort(this@NsdAdvertiser.port)
+                setAttribute("bundleId", packageName)
+                setAttribute("version", version)
+                setAttribute("transport", "streamable-http")
             }
 
-            override fun onRegistrationFailed(info: NsdServiceInfo, errorCode: Int) {
-                Log.e(TAG, "NSD registration failed: errorCode=$errorCode")
-            }
+        val listener =
+            object : NsdManager.RegistrationListener {
+                override fun onServiceRegistered(info: NsdServiceInfo) {
+                    Log.i(TAG, "NSD service registered: ${info.serviceName} on port $port")
+                }
 
-            override fun onServiceUnregistered(info: NsdServiceInfo) {
-                Log.i(TAG, "NSD service unregistered: ${info.serviceName}")
-            }
+                override fun onRegistrationFailed(
+                    info: NsdServiceInfo,
+                    errorCode: Int,
+                ) {
+                    Log.e(TAG, "NSD registration failed: errorCode=$errorCode")
+                }
 
-            override fun onUnregistrationFailed(info: NsdServiceInfo, errorCode: Int) {
-                Log.e(TAG, "NSD unregistration failed: errorCode=$errorCode")
+                override fun onServiceUnregistered(info: NsdServiceInfo) {
+                    Log.i(TAG, "NSD service unregistered: ${info.serviceName}")
+                }
+
+                override fun onUnregistrationFailed(
+                    info: NsdServiceInfo,
+                    errorCode: Int,
+                ) {
+                    Log.e(TAG, "NSD unregistration failed: errorCode=$errorCode")
+                }
             }
-        }
 
         registrationListener = listener
-        nsdManager = (context.getSystemService(Context.NSD_SERVICE) as NsdManager).also { manager ->
-            manager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
-        }
+        nsdManager =
+            (context.getSystemService(Context.NSD_SERVICE) as NsdManager).also { manager ->
+                manager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
+            }
     }
 
     fun unregister() {

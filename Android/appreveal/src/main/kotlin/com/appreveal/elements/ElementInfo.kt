@@ -3,7 +3,9 @@ package com.appreveal.elements
 /**
  * Type of UI element. Values match iOS ElementType rawValue exactly.
  */
-enum class ElementType(val value: String) {
+enum class ElementType(
+    val value: String,
+) {
     BUTTON("button"),
     TEXT_FIELD("textField"),
     LABEL("label"),
@@ -18,7 +20,7 @@ enum class ElementType(val value: String) {
     CELL("cell"),
     NAVIGATION_BAR("navigationBar"),
     TAB_BAR("tabBar"),
-    OTHER("other")
+    OTHER("other"),
 }
 
 /**
@@ -36,12 +38,12 @@ data class ElementInfo(
     val frame: ElementFrame,
     val containerId: String?,
     val actions: List<String>,
-    val idSource: String       // "explicit", "text", "semantics", "derived"
+    val idSource: String, // "explicit", "text", "semantics", "derived"
 ) {
     data class ElementFrame(
         val x: Double,
         val y: Double,
         val width: Double,
-        val height: Double
+        val height: Double,
     )
 }

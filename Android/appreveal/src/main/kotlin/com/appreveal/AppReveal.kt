@@ -19,13 +19,15 @@ import com.appreveal.webview.registerWebViewTools
  * Call `AppReveal.start(application)` in your Application.onCreate() within a debug check.
  */
 object AppReveal {
-
     private var server: MCPServer? = null
     private var advertiser: NsdAdvertiser? = null
     internal var application: Application? = null
 
     @JvmStatic
-    fun start(application: Application, port: Int = 0) {
+    fun start(
+        application: Application,
+        port: Int = 0,
+    ) {
         this.application = application
         ScreenResolver.init(application)
         registerBuiltInTools()

@@ -1,16 +1,16 @@
 package com.appreveal.mcpserver
 
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
+import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
-import com.google.gson.JsonNull
-import com.google.gson.JsonArray
-import com.google.gson.Gson
-import com.google.gson.JsonDeserializer
-import com.google.gson.JsonSerializer
-import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonSerializationContext
-import com.google.gson.GsonBuilder
+import com.google.gson.JsonSerializer
 import java.lang.reflect.Type
 
 /**
@@ -20,7 +20,7 @@ internal data class MCPRequest(
     val jsonrpc: String,
     val id: Any?,
     val method: String,
-    val params: JsonObject?
+    val params: JsonObject?,
 )
 
 /**
@@ -30,14 +30,18 @@ internal data class MCPResponse(
     val jsonrpc: String = "2.0",
     val id: Any?,
     val result: JsonElement? = null,
-    val error: MCPError? = null
+    val error: MCPError? = null,
 ) {
     companion object {
-        fun success(id: Any?, result: JsonElement): MCPResponse =
-            MCPResponse(id = id, result = result)
+        fun success(
+            id: Any?,
+            result: JsonElement,
+        ): MCPResponse = MCPResponse(id = id, result = result)
 
-        fun error(id: Any?, error: MCPError): MCPResponse =
-            MCPResponse(id = id, error = error)
+        fun error(
+            id: Any?,
+            error: MCPError,
+        ): MCPResponse = MCPResponse(id = id, error = error)
     }
 }
 
@@ -47,17 +51,14 @@ internal data class MCPResponse(
 internal data class MCPError(
     val code: Int,
     val message: String,
-    val data: JsonElement? = null
+    val data: JsonElement? = null,
 ) {
     companion object {
-        fun methodNotFound(method: String): MCPError =
-            MCPError(code = -32601, message = "Method not found: $method")
+        fun methodNotFound(method: String): MCPError = MCPError(code = -32601, message = "Method not found: $method")
 
-        fun invalidParams(detail: String): MCPError =
-            MCPError(code = -32602, message = "Invalid params: $detail")
+        fun invalidParams(detail: String): MCPError = MCPError(code = -32602, message = "Invalid params: $detail")
 
-        fun internalError(detail: String): MCPError =
-            MCPError(code = -32603, message = detail)
+        fun internalError(detail: String): MCPError = MCPError(code = -32603, message = detail)
     }
 }
 
@@ -66,26 +67,28 @@ internal data class MCPError(
  * Handles Any? id field (can be int, string, or null).
  */
 internal object MCPGson {
-    val gson: Gson = GsonBuilder()
-        .registerTypeAdapter(MCPRequest::class.java, MCPRequestDeserializer())
-        .registerTypeAdapter(MCPResponse::class.java, MCPResponseSerializer())
-        .create()
+    val gson: Gson =
+        GsonBuilder()
+            .registerTypeAdapter(MCPRequest::class.java, MCPRequestDeserializer())
+            .registerTypeAdapter(MCPResponse::class.java, MCPResponseSerializer())
+            .create()
 
     private class MCPRequestDeserializer : JsonDeserializer<MCPRequest> {
         override fun deserialize(
             json: JsonElement,
             typeOfT: Type,
-            context: JsonDeserializationContext
+            context: JsonDeserializationContext,
         ): MCPRequest {
             val obj = json.asJsonObject
             val jsonrpc = obj.get("jsonrpc")?.asString ?: "2.0"
             val method = obj.get("method")?.asString ?: ""
             val idElement = obj.get("id")
-            val id: Any? = when {
-                idElement == null || idElement.isJsonNull -> null
-                idElement.asJsonPrimitive.isNumber -> idElement.asInt
-                else -> idElement.asString
-            }
+            val id: Any? =
+                when {
+                    idElement == null || idElement.isJsonNull -> null
+                    idElement.asJsonPrimitive.isNumber -> idElement.asInt
+                    else -> idElement.asString
+                }
             val params = obj.getAsJsonObject("params")
             return MCPRequest(jsonrpc, id, method, params)
         }
@@ -95,7 +98,7 @@ internal object MCPGson {
         override fun serialize(
             src: MCPResponse,
             typeOfSrc: Type,
-            context: JsonSerializationContext
+            context: JsonSerializationContext,
         ): JsonElement {
             val obj = JsonObject()
             obj.addProperty("jsonrpc", src.jsonrpc)

@@ -11,7 +11,6 @@ import java.util.concurrent.TimeUnit
  * If already on the main thread, runs directly.
  */
 internal object MainThreadExecutor {
-
     private val handler = Handler(Looper.getMainLooper())
 
     /**
