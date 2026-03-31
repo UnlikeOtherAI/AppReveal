@@ -3,22 +3,24 @@
 ## System overview
 
 ```
-App (debug build)
- +-- AppReveal framework
- |    +-- MCPServer          (Streamable HTTP over NWListener)
- |    +-- BonjourDiscovery   (mDNS service advertising)
- |    +-- ScreenResolver     (current screen identification)
- |    +-- ElementInventory   (visible element enumeration)
- |    +-- InteractionEngine  (tap, type, scroll, navigate)
- |    +-- ScreenshotCapture  (full-screen and element crops)
- |    +-- NetworkObserver    (URLSession traffic capture)
- |    +-- NetworkMocker      (URLProtocol-based response injection)
- |    +-- StateBridge        (app state, routes, feature flags)
- |    +-- DiagnosticsBridge  (OSLog, MetricKit, errors)
- |    +-- DebugOverlay       (in-app console and status)
+iOS App (debug build)                      macOS App (debug build)
+ +-- AppReveal framework                    +-- AppReveal framework
+ |    +-- MCPServer                         |    +-- MCPServer
+ |    +-- BonjourDiscovery                  |    +-- BonjourDiscovery
+ |    +-- IOSWindowProvider                 |    +-- MacOSWindowProvider
+ |    +-- ScreenResolver                    |    +-- MacOSScreenResolver
+ |    +-- ElementInventory                  |    +-- MacOSElementInventory
+ |    +-- InteractionEngine                 |    +-- MacOSInteractionEngine
+ |    +-- ScreenshotCapture                 |    +-- MacOSScreenshotCapture
+ |    +-- WebViewBridge                     |    +-- MacOSWebViewBridge
+ |    +-- NetworkObserver                   |    +-- NetworkObserver
+ |    +-- NetworkMocker                     |    +-- NetworkMocker
+ |    +-- StateBridge                       |    +-- StateBridge
+ |    +-- DiagnosticsBridge                 |    +-- DiagnosticsBridge
+ |    +-- DebugOverlay                      |    +-- DebugOverlay
  |
 External Agent
- +-- Bonjour discovery (NWBrowser)
+ +-- Bonjour discovery (NWBrowser / dns-sd)
  +-- MCP client (Streamable HTTP)
  +-- LLM orchestration
 ```
@@ -51,18 +53,26 @@ Wraps `NWListener.Service` to advertise the MCP endpoint. Publishes TXT metadata
 
 Requires `NSLocalNetworkUsageDescription` and `NSBonjourServices` in Info.plist.
 
-### ScreenResolver
+### IOSWindowProvider / MacOSWindowProvider
+
+Enumerates visible app windows and resolves the target window for tool execution.
+
+- `list_windows` exposes stable IDs, titles, frames, and key-window state
+- All UI and WKWebView tools accept optional `window_id`
+- If `window_id` is omitted, the current key window is used
+
+### ScreenResolver / MacOSScreenResolver
 
 Determines the currently active screen using multiple signals:
 
 1. Explicit `screenKey` from `ScreenIdentifiable` protocol conformance
-2. UIKit controller hierarchy (nav stack, tabs, modals)
+2. UIKit/AppKit controller hierarchy (nav stack, tabs, split views, modals)
 3. Route state from app-provided router
 4. Presentation stack depth
 
 Returns a `ScreenInfo` with key, title, framework type, controller chain, nav depth, and confidence score.
 
-### ElementInventory
+### ElementInventory / MacOSElementInventory
 
 Enumerates visible interactive elements. Each element exposes:
 
@@ -73,9 +83,9 @@ Enumerates visible interactive elements. Each element exposes:
 - `frame` (CGRect in screen coordinates)
 - `actions` (available interaction types)
 
-Walks the UIKit view hierarchy. SwiftUI elements are accessed through their UIKit hosting layer and accessibility identifiers.
+Walks the UIKit or AppKit view hierarchy for the selected window. SwiftUI elements are accessed through their hosting layer and accessibility identifiers.
 
-### InteractionEngine
+### InteractionEngine / MacOSInteractionEngine
 
 Executes UI actions on the main thread:
 
@@ -86,13 +96,21 @@ Executes UI actions on the main thread:
 - `scrollTo(elementId:)`
 - `navigateBack()` / `dismissModal()`
 
-Uses `UIApplication.sendAction` and direct view method calls. Scroll uses `UIScrollView.setContentOffset` for UIKit and `ScrollViewReader` proxies for SwiftUI.
+Uses platform-native event dispatch and direct view/control method calls. Scroll uses `UIScrollView.setContentOffset` on iOS and `NSScrollView` APIs on macOS.
 
-### ScreenshotCapture
+### ScreenshotCapture / MacOSScreenshotCapture
 
-Captures the current screen using `UIGraphicsImageRenderer`. Returns PNG data with metadata (dimensions, scale, safe area insets).
+Captures the current window using `UIGraphicsImageRenderer` on iOS and window snapshots on macOS. Returns PNG or JPEG data with metadata (dimensions, scale).
 
 Optional element-level cropping by accessibility identifier.
+
+### WebViewBridge / MacOSWebViewBridge
+
+Discovers `WKWebView` instances inside the selected window and powers the DOM tools.
+
+- Auto-discovers web views from the native view hierarchy
+- Evaluates JavaScript for DOM inspection and interaction
+- Shares the same tool surface on iOS and macOS, with `window_id` support on every tool
 
 ### NetworkObserver
 
@@ -179,6 +197,7 @@ protocol FeatureFlagProviding {
 ### UI / Navigation
 | Tool | Description |
 |------|-------------|
+| `list_windows` | List visible app windows and their IDs |
 | `get_screen` | Current screen identity and metadata |
 | `get_elements` | Visible interactive elements |
 | `tap_element` | Tap by accessibility identifier |
@@ -220,6 +239,15 @@ protocol FeatureFlagProviding {
 | `open_deeplink` | Navigate via deep link URL |
 | `reset_app_state` | Clear app state for clean testing |
 
+All UI and WKWebView tools accept an optional `window_id` parameter from `list_windows`. If omitted, AppReveal targets the current key window.
+
+### macOS only
+| Tool | Description |
+|------|-------------|
+| `get_menu_bar` | Read the app menu bar hierarchy |
+| `click_menu_item` | Invoke a menu item by title path |
+| `focus_window` | Bring a window to the front and make it key |
+
 ## Security model
 
 - All code wrapped in `#if DEBUG` -- zero production footprint
@@ -232,7 +260,7 @@ protocol FeatureFlagProviding {
 ## Swift Package structure
 
 ```
-iOS/
+iOS/                                   (single Swift package for iOS + macOS)
  +-- Package.swift
  +-- Sources/
  |    +-- AppReveal/
@@ -241,22 +269,37 @@ iOS/
  |    |    |    +-- MCPServer.swift
  |    |    |    +-- MCPRouter.swift
  |    |    |    +-- MCPMessage.swift
+ |    |    |    +-- MacOSMCPTools.swift
  |    |    +-- Discovery/
  |    |    |    +-- BonjourAdvertiser.swift
+ |    |    +-- Window/
+ |    |    |    +-- WindowProvider.swift
+ |    |    |    +-- WindowRef.swift
+ |    |    |    +-- IOSWindowProvider.swift
+ |    |    |    +-- MacOSWindowProvider.swift
  |    |    +-- Screen/
  |    |    |    +-- ScreenResolver.swift
+ |    |    |    +-- MacOSScreenResolver.swift
  |    |    |    +-- ScreenIdentifiable.swift
  |    |    +-- Elements/
  |    |    |    +-- ElementInventory.swift
+ |    |    |    +-- MacOSElementInventory.swift
  |    |    |    +-- ElementInfo.swift
  |    |    +-- Interaction/
  |    |    |    +-- InteractionEngine.swift
+ |    |    |    +-- MacOSInteractionEngine.swift
  |    |    +-- Screenshot/
  |    |    |    +-- ScreenshotCapture.swift
+ |    |    |    +-- MacOSScreenshotCapture.swift
  |    |    +-- Network/
  |    |    |    +-- NetworkObserver.swift
  |    |    |    +-- NetworkMocker.swift
  |    |    |    +-- CapturedRequest.swift
+ |    |    +-- WebView/
+ |    |    |    +-- WebViewBridge.swift
+ |    |    |    +-- MacOSWebViewBridge.swift
+ |    |    |    +-- WebViewTools.swift
+ |    |    |    +-- DOMSerializer.swift
  |    |    +-- State/
  |    |    |    +-- StateBridge.swift
  |    |    |    +-- NavigationProviding.swift

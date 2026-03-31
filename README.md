@@ -4,7 +4,7 @@
 
 **[unlikeotherai.github.io/AppReveal](https://unlikeotherai.github.io/AppReveal/)**
 
-Debug-only in-app MCP server for iOS, Android, Flutter, and React Native. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
+Debug-only in-app MCP server for iOS, macOS, Android, Flutter, and React Native. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
 
 ## How it works
 
@@ -22,7 +22,7 @@ Your App (debug build)                    External Agent
 3. mDNS advertises the service as `_appreveal._tcp` on the LAN
 4. Agent discovers the service, connects, and calls MCP tools
 
-All four platforms expose the **exact same 44 MCP tools** with identical names, parameters, and response shapes.
+AppReveal shares the same core MCP surface across platforms. macOS adds desktop-specific window and menu tools on top of the shared native and web view tools.
 
 ## Quick start
 
@@ -40,6 +40,21 @@ AppReveal.start()
 ```
 
 See [iOS guide](docs/ios.md) for full setup.
+
+### macOS
+
+```swift
+// Package.swift
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.4.0")
+```
+
+```swift
+#if DEBUG
+AppReveal.start()
+#endif
+```
+
+See [macOS guide](docs/macos.md) for full setup.
 
 ### Android
 
@@ -100,12 +115,13 @@ if (__DEV__) {
 
 See [React Native guide](ReactNative/README.md) for full setup.
 
-## MCP tools (44 total)
+## MCP tools
 
 ### UI and navigation
 
 | Tool | Description |
 |------|-------------|
+| `list_windows` | List visible app windows and their IDs |
 | `get_screen` | Current screen identity, controller/activity chain, confidence score |
 | `get_elements` | All visible interactive elements with id, type, frame, actions |
 | `get_view_tree` | Full view hierarchy with class, frame, properties, accessibility info |
@@ -120,6 +136,16 @@ See [React Native guide](ReactNative/README.md) for full setup.
 | `navigate_back` | Pop the navigation stack |
 | `dismiss_modal` | Dismiss the topmost modal |
 | `open_deeplink` | Open a URL in the app |
+
+All native UI tools and all web view tools accept an optional `window_id` parameter from `list_windows`. If omitted, AppReveal targets the current key window.
+
+### macOS desktop tools
+
+| Tool | Description |
+|------|-------------|
+| `get_menu_bar` | Read the app menu bar hierarchy |
+| `click_menu_item` | Invoke a menu item by title path |
+| `focus_window` | Bring a specific window to the front and make it key |
 
 ### State and diagnostics
 
@@ -136,7 +162,7 @@ See [React Native guide](ReactNative/README.md) for full setup.
 
 ### WebView -- DOM access
 
-iOS/Android: auto-discovers WebViews from the view hierarchy. Flutter: register via `AppReveal.registerWebView(id, controller)`.
+iOS/macOS/Android: auto-discovers WebViews from the view hierarchy. Flutter: register via `AppReveal.registerWebView(id, controller)`.
 
 | Tool | Description |
 |------|-------------|
@@ -187,6 +213,7 @@ Element IDs map to platform-specific mechanisms:
 | Platform | Mechanism |
 |----------|-----------|
 | iOS | `view.accessibilityIdentifier` |
+| macOS | `view.accessibilityIdentifier()` |
 | Android | `view.tag` or resource entry name |
 | Flutter | `ValueKey<String>` on the widget |
 
@@ -207,14 +234,16 @@ AppReveal gives agents structured data instead of pixels:
 
 | Platform | Status | Tools |
 |----------|--------|-------|
-| iOS | Working | 44 tools, native + web view |
-| Android | Working | 44 tools, native + web view |
-| Flutter | Working | 44 tools, native + web view |
-| React Native | In development | 44 tools, native + web view |
+| iOS | Working | Shared native + web view tool surface |
+| macOS | Working | Shared native + web view tools plus menu/window tools |
+| Android | Working | Shared native + web view tool surface |
+| Flutter | Working | Shared native + web view tool surface |
+| React Native | In development | Shared native + web view tool surface |
 
 ## Example apps
 
 - [iOS example](example/iOS/) -- 11 screens, 60+ elements, all framework features
+- [macOS example](example/macOS/AppRevealMacExample/) -- AppKit desktop example with sidebar navigation and curl verification
 - [Android example](example/Android/) -- 11 screens matching the iOS example
 - [Flutter example](Flutter/example/) -- 11 screens matching iOS and Android
 - [React Native example](ReactNative/example/) -- 8 screens, React Navigation v7
@@ -227,6 +256,7 @@ Install it with `npm install -g @unlikeotherai/appreveal`.
 ## Security
 
 - **iOS**: All code behind `#if DEBUG` -- zero production footprint
+- **macOS**: All code behind `#if DEBUG` -- zero production footprint
 - **Android**: Added as `debugImplementation` -- not included in release APK
 - **Flutter**: `kReleaseMode` check in `AppReveal.start()` -- zero code paths execute in release
 - **React Native**: `__DEV__` guard -- all methods are no-ops in production builds
@@ -237,11 +267,12 @@ Install it with `npm install -g @unlikeotherai/appreveal`.
 ## Documentation
 
 - [iOS guide](docs/ios.md) -- installation, setup, protocols
+- [macOS guide](docs/macos.md) -- installation, setup, protocols, multi-window notes
 - [Android guide](docs/android.md) -- installation, setup, interfaces
 - [Flutter guide](Flutter/README.md) -- installation, setup, integration patterns
 - [React Native guide](ReactNative/README.md) -- installation, setup, integration patterns
 - [Architecture](docs/architecture.md) -- module design, protocols, package structure
-- [Tools reference](docs/tools.md) -- all 44 tools with parameters and response shapes
+- [Tools reference](docs/tools.md) -- tool parameters and response shapes
 - [Build Brief](docs/brief.md) -- phased implementation plan
 - [WKWebView Support](docs/wkwebview-support.md) -- iOS DOM access design doc
 

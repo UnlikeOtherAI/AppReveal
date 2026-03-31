@@ -4,13 +4,14 @@
 
 ## Project
 
-Debug-only in-app MCP framework for iOS and Android. Gives LLM agents native app control via standard MCP protocol. Both platforms expose identical 43 MCP tools.
+Debug-only in-app MCP framework for iOS, macOS, and Android. Gives LLM agents native app control via standard MCP protocol.
 
 ## Key docs
 
 - `docs/architecture.md` -- system design, modules, protocols, package structure
 - `docs/brief.md` -- phased build plan with task checkboxes
 - `docs/ios.md` -- iOS installation and setup
+- `docs/macos.md` -- macOS installation and setup
 - `docs/android.md` -- Android installation and setup
 
 ## Stack
@@ -21,6 +22,12 @@ Debug-only in-app MCP framework for iOS and Android. Gives LLM agents native app
 - Bonjour/mDNS for discovery
 - No private APIs, no SwiftUI internals
 
+### macOS
+- Swift, macOS 13+, Swift Package Manager
+- Network framework (NWListener) for HTTP server
+- Bonjour/mDNS for discovery
+- AppKit view hierarchy and NSWindow-based multi-window support
+
 ### Android
 - Kotlin, Android API 26+, Gradle
 - NanoHTTPD for embedded HTTP server
@@ -29,17 +36,18 @@ Debug-only in-app MCP framework for iOS and Android. Gives LLM agents native app
 
 ### Shared
 - MCP Streamable HTTP transport
-- 43 identical tools across both platforms
+- Shared tool surface across platforms, with macOS-only window and menu tools
 
 ## Structure
 
 ```
-iOS/                    -- Swift package (iOS implementation)
+iOS/                    -- Swift package (iOS + macOS implementation)
 Android/                -- Gradle project (Android implementation)
   appreveal/            -- Library module (AAR)
   appreveal-noop/       -- No-op stub for release builds
 example/
   iOS/                  -- iOS example app
+  macOS/                -- macOS example app
   Android/              -- Android example app
 docs/                   -- architecture, guides, design docs
 ```
