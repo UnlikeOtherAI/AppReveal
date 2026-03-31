@@ -803,11 +803,9 @@ private func registerIOSBuiltInTools() {
 
 #elseif os(macOS)
 
-/// Placeholder -- macOS UI tools will be implemented in Task 12.
 @MainActor
 private func registerMacOSBuiltInTools() {
-    // Will be implemented when macOS ElementInventory, InteractionEngine,
-    // ScreenResolver, and ScreenshotCapture are added.
+    registerMacOSBuiltInToolsImpl()
 }
 
 #endif // os

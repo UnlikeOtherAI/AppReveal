@@ -568,10 +568,9 @@ func registerWebViewTools() {
 
 #elseif os(macOS)
 
-/// Placeholder -- macOS WebView tools will be implemented in Task 11.
 @MainActor
 func registerWebViewTools() {
-    // Will be implemented when MacOSWebViewBridge is added
+    registerMacOSWebViewTools()
 }
 
 #endif // os
