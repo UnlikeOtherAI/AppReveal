@@ -1,0 +1,66 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  swift:
+    name: SwiftLint (iOS/macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install swiftlint
+      - run: cd iOS && swiftlint lint --strict
+
+  android:
+    name: ktlint (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck
+
+  flutter:
+    name: dart analyze (Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: cd Flutter/appreveal && flutter pub get && dart analyze --fatal-warnings
+
+  reactnative:
+    name: ESLint (React Native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: ReactNative/appreveal/pnpm-lock.yaml
+      - run: cd ReactNative/appreveal && pnpm install --frozen-lockfile && pnpm lint
+
+  cli:
+    name: ESLint (CLI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: CLI/pnpm-lock.yaml
+      - run: cd CLI && pnpm install --frozen-lockfile && pnpm lint
