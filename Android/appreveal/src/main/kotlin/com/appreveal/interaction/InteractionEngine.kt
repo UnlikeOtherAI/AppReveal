@@ -72,6 +72,42 @@ internal object InteractionEngine {
         upEvent.recycle()
     }
 
+    // MARK: - Tap by text
+
+    fun tapByText(text: String, matchMode: String = "exact", occurrence: Int = 0): Map<String, Any> {
+        return MainThreadExecutor.runBlocking {
+            val (view, candidates) = ElementInventory.findElementByText(text, matchMode, occurrence)
+            if (view == null) {
+                if (candidates.isEmpty()) {
+                    mapOf("success" to false, "error" to "No element found with text: $text")
+                } else {
+                    mapOf(
+                        "success" to false,
+                        "error" to "Element not found at occurrence $occurrence",
+                        "candidates" to candidates
+                    )
+                }
+            } else {
+                if (view.isClickable || view.hasOnClickListeners()) {
+                    view.performClick()
+                } else {
+                    // Fall back to center-point tap
+                    val location = IntArray(2)
+                    view.getLocationOnScreen(location)
+                    val x = location[0] + view.width / 2f
+                    val y = location[1] + view.height / 2f
+                    tapPoint(x, y)
+                }
+                mapOf(
+                    "success" to true,
+                    "tappedText" to text,
+                    "matchMode" to matchMode,
+                    "candidates" to candidates
+                )
+            }
+        }
+    }
+
     // MARK: - Text
 
     fun type(text: String, elementId: String?) {

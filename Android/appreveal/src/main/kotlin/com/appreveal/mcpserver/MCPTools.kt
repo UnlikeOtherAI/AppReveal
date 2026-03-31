@@ -38,6 +38,8 @@ internal fun registerBuiltInTools() {
                 addProperty("navigationDepth", info.navigationDepth)
                 add("presentedModals", info.presentedModals.toJsonArray())
                 addProperty("confidence", info.confidence)
+                addProperty("source", info.source)
+                addProperty("appBarTitle", info.appBarTitle)
             }
         }
     ))
@@ -63,6 +65,7 @@ internal fun registerBuiltInTools() {
                     addProperty("tappable", if (el.tappable) "true" else "false")
                     addProperty("frame", "${el.frame.x.toInt()},${el.frame.y.toInt()},${el.frame.width.toInt()},${el.frame.height.toInt()}")
                     addProperty("actions", el.actions.joinToString(","))
+                    addProperty("idSource", el.idSource)
                 })
             }
             JsonObject().apply {
@@ -92,9 +95,9 @@ internal fun registerBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name = "tap_element",
-        description = "Tap an element by its accessibility identifier",
+        description = "Tap an element by its ID (accessibility identifier, resource name, or derived ID). Falls back to text-based matching if direct ID lookup fails.",
         inputSchema = jsonSchema(
-            "element_id" to jsonProp("string", "Accessibility identifier"),
+            "element_id" to jsonProp("string", "Element ID (accessibility identifier, resource name, or derived)"),
             required = listOf("element_id")
         ),
         handler = { params ->
@@ -107,7 +110,18 @@ internal fun registerBuiltInTools() {
                     addProperty("element_id", elementId)
                 }
             } catch (e: Exception) {
-                errorResult(e.message ?: "Tap failed")
+                // Try text-based resolution as fallback
+                val textResult = InteractionEngine.tapByText(elementId, "contains")
+                val success = textResult["success"] as? Boolean ?: false
+                if (success) {
+                    JsonObject().apply {
+                        addProperty("success", true)
+                        addProperty("element_id", elementId)
+                        addProperty("resolvedVia", "text")
+                    }
+                } else {
+                    errorResult(e.message ?: "Tap failed")
+                }
             }
         }
     ))
@@ -130,6 +144,47 @@ internal fun registerBuiltInTools() {
                 addProperty("success", true)
                 addProperty("x", x)
                 addProperty("y", y)
+            }
+        }
+    ))
+
+    // -- tap_text --
+
+    router.register(MCPToolDefinition(
+        name = "tap_text",
+        description = "Tap the nearest tappable element containing the given visible text. Use when you know what text is on screen but not the element ID.",
+        inputSchema = jsonSchema(
+            "text" to jsonProp("string", "Visible text to find and tap"),
+            "match_mode" to jsonProp("string", "Match mode: exact or contains (default: exact)"),
+            "occurrence" to jsonProp("integer", "0-based index when multiple matches exist"),
+            required = listOf("text")
+        ),
+        handler = { params ->
+            val text = params?.get("text")?.asString
+                ?: return@MCPToolDefinition errorResult("text required")
+            val matchMode = params.get("match_mode")?.asStringOrNull() ?: "exact"
+            val occurrence = params.get("occurrence")?.asIntOrNull() ?: 0
+
+            val result = InteractionEngine.tapByText(text, matchMode, occurrence)
+            val success = result["success"] as? Boolean ?: false
+
+            if (success) {
+                JsonObject().apply {
+                    addProperty("success", true)
+                    addProperty("tappedText", text)
+                    addProperty("matchMode", matchMode)
+                    @Suppress("UNCHECKED_CAST")
+                    val candidates = result["candidates"] as? List<String> ?: emptyList()
+                    add("candidates", candidates.toJsonArray())
+                }
+            } else {
+                val error = result["error"] as? String ?: "Tap failed"
+                @Suppress("UNCHECKED_CAST")
+                val candidates = result["candidates"] as? List<String> ?: emptyList()
+                JsonObject().apply {
+                    addProperty("error", error)
+                    add("candidates", candidates.toJsonArray())
+                }
             }
         }
     ))

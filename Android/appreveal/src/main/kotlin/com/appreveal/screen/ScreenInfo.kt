@@ -12,5 +12,7 @@ data class ScreenInfo(
     val activeTab: String?,
     val navigationDepth: Int,
     val presentedModals: List<String>,
-    val confidence: Double
+    val confidence: Double,
+    val source: String,                // "explicit", "derived"
+    val appBarTitle: String?           // extracted from Toolbar/ActionBar
 )
