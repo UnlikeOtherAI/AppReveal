@@ -6,8 +6,8 @@ export interface Spec extends TurboModule {
   stop(): void;
   setScreen(key: string, title: string, confidence: number): void;
   setNavigationStack(routes: string[], current: string, modals: string[]): void;
-  setFeatureFlags(flags: Object): void;
-  captureNetworkCall(call: Object): void;
+  setFeatureFlags(flags: object): void;
+  captureNetworkCall(call: object): void;
   captureError(domain: string, message: string, stackTrace: string): void;
 }
 

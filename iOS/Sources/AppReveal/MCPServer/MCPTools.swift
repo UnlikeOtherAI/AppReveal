@@ -197,7 +197,9 @@ func registerBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "device_info",
-        description: "Return comprehensive device and app information: full Info.plist, device hardware, OS, screen, locale, timezone, battery, memory, processor, and entitlements. Single call to get everything an agent needs to understand the runtime environment.",
+        description: "Return comprehensive device and app information: full Info.plist, device hardware, " +
+            "OS, screen, locale, timezone, battery, memory, processor, and entitlements. " +
+            "Single call to get everything an agent needs to understand the runtime environment.",
         inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
         handler: { _ in
             let processInfo = ProcessInfo.processInfo
@@ -363,7 +365,9 @@ func registerBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "batch",
-        description: "Execute multiple tool calls in a single request. Actions run sequentially. Each action can have an optional delay_ms (milliseconds to wait BEFORE executing that action) to account for animations, screen transitions, or loading. Returns results for every action.",
+        description: "Execute multiple tool calls in a single request. Actions run sequentially. " +
+            "Each action can have an optional delay_ms (milliseconds to wait BEFORE executing that action) " +
+            "to account for animations, screen transitions, or loading. Returns results for every action.",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
@@ -485,7 +489,9 @@ private func registerIOSBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "get_elements",
-        description: "List all visible interactive elements on the current screen. Elements include an idSource field showing how the ID was derived: explicit (accessibilityIdentifier), semantics (accessibilityLabel), text (visible text), or derived (fallback).",
+        description: "List all visible interactive elements on the current screen. Elements include an idSource " +
+            "field showing how the ID was derived: explicit (accessibilityIdentifier), " +
+            "semantics (accessibilityLabel), text (visible text), or derived (fallback).",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
@@ -555,7 +561,8 @@ private func registerIOSBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "tap_element",
-        description: "Tap an element by ID. Resolves by accessibilityIdentifier, accessibilityLabel, derived text ID, or visible text (in that order). If not found, try tap_text for direct text targeting.",
+        description: "Tap an element by ID. Resolves by accessibilityIdentifier, accessibilityLabel, " +
+            "derived text ID, or visible text (in that order). If not found, try tap_text for direct text targeting.",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([

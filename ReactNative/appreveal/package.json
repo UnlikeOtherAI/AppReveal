@@ -5,17 +5,26 @@
   "main": "src/index",
   "types": "src/index",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
   },
   "peerDependencies": {
     "react": "*",
     "react-native": "*"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
     "@types/react": "^18.0.0",
-    "@types/react-native": "^0.73.0"
+    "@types/react-native": "^0.73.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.0",
+    "@typescript-eslint/parser": "^8.58.0",
+    "eslint": "^10.1.0",
+    "typescript": "^5.0.0"
   },
-  "keywords": ["react-native", "mcp", "testing", "debug"],
+  "keywords": [
+    "react-native",
+    "mcp",
+    "testing",
+    "debug"
+  ],
   "license": "MIT"
 }

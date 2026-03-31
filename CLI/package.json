@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src/",
     "test": "tsx --test test/**/*.test.ts",
     "start": "tsx src/index.ts"
   },
@@ -46,6 +47,9 @@
   },
   "devDependencies": {
     "@types/node": "^24.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.0",
+    "@typescript-eslint/parser": "^8.58.0",
+    "eslint": "^10.1.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }

@@ -46,7 +46,7 @@ export class AppReveal {
 
   static captureNetworkCall(call: CapturedRequest): void {
     if (!__DEV__) return;
-    NativeAppReveal.captureNetworkCall(call as unknown as Object);
+    NativeAppReveal.captureNetworkCall(call as unknown as object);
   }
 
   static captureError(

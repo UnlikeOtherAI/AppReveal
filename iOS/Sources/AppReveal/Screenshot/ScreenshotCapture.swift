@@ -36,7 +36,7 @@ final class ScreenshotCapture {
         let window = ref.nativeWindow
 
         let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
-        let image = renderer.image { context in
+        let image = renderer.image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
         }
 
@@ -55,7 +55,7 @@ final class ScreenshotCapture {
         guard let view = ElementInventory.shared.findElement(byId: id, windowId: windowId) else { return nil }
 
         let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
-        let image = renderer.image { context in
+        let image = renderer.image { _ in
             view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
         }
 

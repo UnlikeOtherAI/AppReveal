@@ -39,6 +39,7 @@ Package.resolved
 .vscode/
 CLI/node_modules/
 CLI/dist/
+ReactNative/appreveal/node_modules/
 
 # Archives and distribution
 *.ipa

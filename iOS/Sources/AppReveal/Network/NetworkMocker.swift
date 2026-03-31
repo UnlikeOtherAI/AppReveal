@@ -78,12 +78,12 @@ final class NetworkMocker {
 /// Register on your URLSessionConfiguration.protocolClasses.
 public final class AppRevealMockProtocol: URLProtocol {
 
-    public override class func canInit(with request: URLRequest) -> Bool {
+    public override static func canInit(with request: URLRequest) -> Bool {
         let mocker = NetworkMocker.shared
         return mocker.isOffline || mocker.matchingRule(for: request) != nil
     }
 
-    public override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+    public override static func canonicalRequest(for request: URLRequest) -> URLRequest {
         request
     }
 

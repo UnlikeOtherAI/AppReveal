@@ -59,7 +59,7 @@ final class DiagnosticsBridge {
         do {
             let store = try OSLogStore(scope: .currentProcessIdentifier)
             let position = store.position(date: Date().addingTimeInterval(-300)) // last 5 min
-            var predicate: NSPredicate? = nil
+            var predicate: NSPredicate?
             if let subsystem = subsystem {
                 predicate = NSPredicate(format: "subsystem == %@", subsystem)
             }

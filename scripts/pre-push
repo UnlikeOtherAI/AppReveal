@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# AppReveal pre-push hook — runs all platform linters.
+# Any failure blocks the push.
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+echo "=== AppReveal pre-push lint ==="
+
+# 1. iOS/macOS — SwiftLint
+echo "[1/5] iOS/macOS (SwiftLint)..."
+if command -v swiftlint &>/dev/null; then
+    (cd "$REPO_ROOT/iOS" && swiftlint lint --strict --quiet)
+else
+    echo "  swiftlint not found — install via: brew install swiftlint"
+    exit 1
+fi
+
+# 2. Android — ktlint via Gradle (requires ANDROID_HOME)
+echo "[2/5] Android (ktlint)..."
+if [ -f "$REPO_ROOT/Android/gradlew" ] && [ -n "${ANDROID_HOME:-}" ]; then
+    (cd "$REPO_ROOT/Android" && ./gradlew ktlintCheck --quiet 2>/dev/null)
+else
+    echo "  ANDROID_HOME not set or gradlew missing, skipping"
+fi
+
+# 3. Flutter — dart analyze
+echo "[3/5] Flutter (dart analyze)..."
+if command -v dart &>/dev/null; then
+    (cd "$REPO_ROOT/Flutter/appreveal" && dart analyze --fatal-warnings)
+else
+    echo "  dart not found, skipping"
+fi
+
+# 4. ReactNative — ESLint
+echo "[4/5] ReactNative (eslint)..."
+if [ -d "$REPO_ROOT/ReactNative/appreveal/node_modules" ]; then
+    (cd "$REPO_ROOT/ReactNative/appreveal" && pnpm eslint src/)
+else
+    echo "  node_modules missing — run: cd ReactNative/appreveal && pnpm install"
+    exit 1
+fi
+
+# 5. CLI — ESLint
+echo "[5/5] CLI (eslint)..."
+if [ -d "$REPO_ROOT/CLI/node_modules" ]; then
+    (cd "$REPO_ROOT/CLI" && pnpm eslint src/)
+else
+    echo "  node_modules missing — run: cd CLI && pnpm install"
+    exit 1
+fi
+
+echo "=== All linters passed ==="

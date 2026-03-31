@@ -1,0 +1,23 @@
+included:
+  - Sources
+
+excluded:
+  - .build
+
+disabled_rules:
+  - identifier_name
+  - function_body_length
+  - file_length
+  - type_body_length
+  - cyclomatic_complexity
+  - large_tuple
+  - todo
+  - colon
+
+line_length:
+  warning: 200
+  error: 300
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing

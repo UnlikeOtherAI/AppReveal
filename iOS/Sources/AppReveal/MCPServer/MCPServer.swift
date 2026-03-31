@@ -80,7 +80,7 @@ final class MCPServer {
     }
 
     private func receiveHTTPRequest(on connection: NWConnection) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, _ in
             Task { @MainActor in
                 guard let data = data, !data.isEmpty else {
                     connection.cancel()
