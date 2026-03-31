@@ -35,7 +35,9 @@ data class ElementInfo(
     val tappable: Boolean,
     val frame: ElementFrame,
     val containerId: String?,
-    val actions: List<String>
+    val actions: List<String>,
+    /** How the id was derived: "explicit", "text", "semantics", "derived" */
+    val idSource: String
 ) {
     data class ElementFrame(
         val x: Double,

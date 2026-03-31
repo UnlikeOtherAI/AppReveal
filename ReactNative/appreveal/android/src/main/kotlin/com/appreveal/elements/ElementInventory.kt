@@ -28,7 +28,8 @@ internal object ElementInventory {
         return MainThreadExecutor.runBlocking {
             val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking emptyList()
             val elements = mutableListOf<ElementInfo>()
-            walkView(decorView, elements, null)
+            val seenIds = mutableMapOf<String, Int>()
+            walkView(decorView, elements, null, seenIds)
             elements
         }
     }
@@ -36,7 +37,42 @@ internal object ElementInventory {
     fun findElement(id: String): View? {
         return MainThreadExecutor.runBlocking {
             val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking null
+            // Try direct ID match first
             findView(id, decorView)
+                // Try text-based lookup
+                ?: findViewByNormalizedText(id, decorView)
+                // Try semantics-based lookup
+                ?: findViewByContentDescription(id, decorView)
+        }
+    }
+
+    fun findElementByText(
+        text: String,
+        matchMode: String = "exact",
+        occurrence: Int = 0
+    ): Pair<View?, List<String>> {
+        return MainThreadExecutor.runBlocking {
+            val decorView = ScreenResolver.currentActivity?.window?.decorView
+                ?: return@runBlocking Pair(null, emptyList())
+
+            val matches = mutableListOf<Pair<View, String>>()
+            collectTextMatches(decorView, text, matchMode, matches)
+
+            val candidates = matches.map { it.second }
+
+            if (matches.isEmpty()) {
+                return@runBlocking Pair(null, candidates)
+            }
+
+            if (occurrence >= matches.size) {
+                return@runBlocking Pair(null, candidates)
+            }
+
+            val (matchedView, _) = matches[occurrence]
+
+            // Walk up to find a tappable ancestor
+            val tappable = findTappableAncestor(matchedView) ?: matchedView
+            Pair(tappable, candidates)
         }
     }
 
@@ -47,24 +83,55 @@ internal object ElementInventory {
         }
     }
 
-    // -- Walking --
+    // -- Text helpers --
 
-    private fun walkView(view: View, elements: MutableList<ElementInfo>, containerId: String?) {
-        val id = resolveElementId(view)
-
-        if (id != null || isInteractive(view)) {
-            val info = makeElementInfo(view, id, containerId)
-            if (info != null) {
-                elements.add(info)
+    fun extractText(view: View): String? {
+        return when (view) {
+            is Button -> (view as TextView).text?.toString()
+            is EditText -> view.hint?.toString() ?: view.text?.toString()
+            is TextView -> view.text?.toString()
+            else -> {
+                // Walk immediate children for TextViews
+                if (view is ViewGroup) {
+                    for (i in 0 until view.childCount) {
+                        val child = view.getChildAt(i)
+                        if (child is TextView) return child.text?.toString()
+                    }
+                }
+                null
             }
         }
+    }
 
-        val currentContainerId = id ?: containerId
+    fun normalizeToId(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return "unnamed"
+        val normalized = trimmed.lowercase()
+            .replace(Regex("\\s+"), "_")
+            .replace(Regex("[^a-z0-9_]"), "")
+        if (normalized.isEmpty()) return "unnamed"
+        return normalized.take(40)
+    }
+
+    // -- Walking --
+
+    private fun walkView(
+        view: View,
+        elements: MutableList<ElementInfo>,
+        containerId: String?,
+        seenIds: MutableMap<String, Int>
+    ) {
+        val info = makeElementInfo(view, containerId, seenIds)
+        if (info != null) {
+            elements.add(info)
+        }
+
+        val currentContainerId = info?.id ?: containerId
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 val child = view.getChildAt(i)
                 if (child.visibility != View.GONE) {
-                    walkView(child, elements, currentContainerId)
+                    walkView(child, elements, currentContainerId, seenIds)
                 }
             }
         }
@@ -74,13 +141,70 @@ internal object ElementInventory {
         return view is Button ||
                 view is EditText ||
                 isSwitch(view) ||
-                view is SeekBar
+                view is SeekBar ||
+                view.isClickable ||
+                view.hasOnClickListeners() ||
+                view.isLongClickable
     }
 
-    private fun makeElementInfo(view: View, id: String?, containerId: String?): ElementInfo? {
-        if (id == null || id.isEmpty()) {
-            if (!isInteractive(view)) return null
-            return null
+    private fun makeElementInfo(
+        view: View,
+        containerId: String?,
+        seenIds: MutableMap<String, Int>
+    ): ElementInfo? {
+        // Determine ID and source
+        var id: String?
+        var idSource: String
+
+        if (view.id != View.NO_ID) {
+            val name = try {
+                view.resources.getResourceEntryName(view.id)
+            } catch (_: Exception) { null }
+            if (!name.isNullOrEmpty()) {
+                id = name
+                idSource = "explicit"
+            } else {
+                id = null
+                idSource = "derived"
+            }
+        } else {
+            id = null
+            idSource = "derived"
+        }
+
+        // Try contentDescription if no explicit ID
+        if (id == null) {
+            val desc = view.contentDescription?.toString()
+            if (!desc.isNullOrEmpty()) {
+                id = normalizeToId(desc)
+                idSource = "semantics"
+            }
+        }
+
+        // Try visible text if still no ID
+        if (id == null) {
+            val text = extractText(view)
+            if (!text.isNullOrEmpty()) {
+                id = normalizeToId(text)
+                idSource = "text"
+            }
+        }
+
+        // For non-interactive views without any ID, skip
+        if (id == null && !isInteractive(view)) return null
+
+        // Generate a fallback derived ID for interactive views
+        if (id == null) {
+            val className = view.javaClass.simpleName.lowercase()
+            id = className
+            idSource = "derived"
+        }
+
+        // Deduplicate IDs
+        val count = seenIds.getOrDefault(id, 0)
+        seenIds[id] = count + 1
+        if (count > 0) {
+            id = "${id}_$count"
         }
 
         val location = IntArray(2)
@@ -101,7 +225,8 @@ internal object ElementInventory {
                 height = view.height.toDouble()
             ),
             containerId = containerId,
-            actions = availableActions(view)
+            actions = availableActions(view),
+            idSource = idSource
         )
     }
 
@@ -118,7 +243,11 @@ internal object ElementInventory {
 
         // 2. Fall back to content description
         val desc = view.contentDescription?.toString()
-        if (!desc.isNullOrEmpty()) return desc
+        if (!desc.isNullOrEmpty()) return normalizeToId(desc)
+
+        // 3. Fall back to visible text
+        val text = extractText(view)
+        if (!text.isNullOrEmpty()) return normalizeToId(text)
 
         return null
     }
@@ -175,6 +304,68 @@ internal object ElementInventory {
             actions.add("scroll")
         }
         return actions
+    }
+
+    // -- Text-based and semantics-based lookup --
+
+    private fun collectTextMatches(
+        view: View,
+        text: String,
+        matchMode: String,
+        matches: MutableList<Pair<View, String>>
+    ) {
+        if (view is TextView) {
+            val viewText = view.text?.toString() ?: ""
+            val matched = when (matchMode) {
+                "contains" -> viewText.contains(text, ignoreCase = true)
+                else -> viewText.equals(text, ignoreCase = true)
+            }
+            if (matched) {
+                matches.add(Pair(view, viewText))
+            }
+        }
+
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                collectTextMatches(view.getChildAt(i), text, matchMode, matches)
+            }
+        }
+    }
+
+    private fun findTappableAncestor(view: View): View? {
+        if (view.isClickable || view.hasOnClickListeners()) return view
+        var parent: View? = view.parent as? View
+        while (parent != null) {
+            if (parent.isClickable || parent.hasOnClickListeners()) return parent
+            parent = parent.parent as? View
+        }
+        return null
+    }
+
+    private fun findViewByNormalizedText(id: String, root: View): View? {
+        val text = extractText(root)
+        if (text != null && normalizeToId(text) == id) return root
+
+        if (root is ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val found = findViewByNormalizedText(id, root.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
+    private fun findViewByContentDescription(id: String, root: View): View? {
+        val desc = root.contentDescription?.toString()
+        if (desc != null && normalizeToId(desc) == id) return root
+
+        if (root is ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val found = findViewByContentDescription(id, root.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
     }
 
     // -- View tree dump --

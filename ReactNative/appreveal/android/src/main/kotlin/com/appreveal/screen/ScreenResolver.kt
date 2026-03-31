@@ -5,6 +5,7 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.appreveal.shared.MainThreadExecutor
 import com.facebook.react.bridge.ReactApplicationContext
@@ -62,7 +63,9 @@ internal object ScreenResolver {
                 activeTab = detectActiveTab(),
                 navigationDepth = 0,
                 presentedModals = emptyList(),
-                confidence = 1.0
+                confidence = 1.0,
+                source = "explicit",
+                appBarTitle = extractToolbarTitle(currentActivity)
             )
         }
 
@@ -77,7 +80,9 @@ internal object ScreenResolver {
                 activeTab = null,
                 navigationDepth = 0,
                 presentedModals = emptyList(),
-                confidence = 0.0
+                confidence = 0.0,
+                source = "derived",
+                appBarTitle = null
             )
         }
 
@@ -93,7 +98,9 @@ internal object ScreenResolver {
             activeTab = detectActiveTab(),
             navigationDepth = 0,
             presentedModals = emptyList(),
-            confidence = 0.8
+            confidence = 0.8,
+            source = "derived",
+            appBarTitle = extractToolbarTitle(activity)
         )
     }
 
@@ -126,6 +133,18 @@ internal object ScreenResolver {
             }
         }
         return null
+    }
+
+    private fun extractToolbarTitle(activity: Activity?): String? {
+        if (activity == null) return null
+        val decorView = activity.window?.decorView ?: return null
+        val toolbar = findViewOfType(decorView, Toolbar::class.java)
+        if (toolbar?.title != null) return toolbar.title.toString()
+        if (activity is AppCompatActivity) {
+            val actionBarTitle = activity.supportActionBar?.title?.toString()
+            if (!actionBarTitle.isNullOrEmpty()) return actionBarTitle
+        }
+        return activity.actionBar?.title?.toString()
     }
 
     /**
