@@ -5,7 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.view.PixelCopy
-import android.view.View
 import com.appreveal.elements.ElementInventory
 import com.appreveal.screen.ScreenResolver
 import com.appreveal.shared.MainThreadExecutor
@@ -19,7 +18,8 @@ import java.util.concurrent.TimeUnit
  */
 internal object ScreenshotCapture {
     data class CaptureResult(
-        val imageData: String, // base64-encoded
+        /** base64-encoded image data */
+        val imageData: String,
         val width: Int,
         val height: Int,
         val scale: Float,
