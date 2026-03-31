@@ -151,7 +151,7 @@ class AppReveal {
     // Install diagnostics interceptors
     DiagnosticsBridge.shared.install();
 
-    // Register all 43 MCP tools
+    // Register all 44 MCP tools (23 native + 21 WebView)
     registerBuiltInTools();
     registerWebViewTools();
 

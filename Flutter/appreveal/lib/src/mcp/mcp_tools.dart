@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../diagnostics/diagnostics_bridge.dart';
 import '../elements/element_inventory.dart';
+import '../elements/element_resolver.dart';
 import '../interaction/interaction_engine.dart';
 import '../network/network_observer.dart';
 import '../screenshot/screenshot_capture.dart';
@@ -88,11 +89,15 @@ void registerBuiltInTools() {
 
   router.register(MCPToolDefinition(
     name: 'tap_element',
-    description: 'Tap an element by its ValueKey identifier',
+    description:
+        'Tap an element by its ID. Resolves by ValueKey first, then semantics label, then derived text ID. For text-based targeting use tap_text instead.',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'element_id': {'type': 'string', 'description': 'Element ValueKey identifier'},
+        'element_id': {
+          'type': 'string',
+          'description': 'Element ID from get_elements'
+        },
       },
       'required': ['element_id'],
     },
@@ -102,6 +107,69 @@ void registerBuiltInTools() {
       try {
         await InteractionEngine.shared.tap(elementId: id);
         return {'success': true, 'element_id': id};
+      } catch (e) {
+        final msg = e.toString();
+        final response = <String, dynamic>{'error': msg};
+        if (msg.contains('not found')) {
+          response['hint'] =
+              'Use tap_text to target by visible text, or get_elements to list available IDs.';
+        }
+        return response;
+      }
+    },
+  ));
+
+  // MARK: - tap_text
+
+  router.register(MCPToolDefinition(
+    name: 'tap_text',
+    description:
+        'Tap a visible text element on screen. Finds the text and taps its nearest tappable ancestor widget. '
+        'Works for buttons, list tiles, and any tappable container with visible text — no ValueKey required.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'text': {
+          'type': 'string',
+          'description': 'Visible text to find and tap'
+        },
+        'match_mode': {
+          'type': 'string',
+          'enum': ['exact', 'contains'],
+          'description': 'Match mode: exact (default) or contains',
+        },
+        'occurrence': {
+          'type': 'integer',
+          'description':
+              '0-based index when multiple elements match the same text. Omit for single-match auto-tap.',
+        },
+      },
+      'required': ['text'],
+    },
+    handler: (params) async {
+      final text = params?['text'] as String?;
+      if (text == null) return {'error': 'text required'};
+      final matchMode = params?['match_mode'] as String? ?? 'exact';
+      final occurrence = params?['occurrence'] as int?;
+
+      try {
+        final result = ElementResolver.shared.resolveByText(
+          text,
+          matchMode: matchMode,
+          occurrence: occurrence,
+        );
+
+        if (!result.isSuccess) {
+          final response = <String, dynamic>{'error': result.error};
+          if (result.candidates != null) {
+            response['candidates'] = result.candidates;
+            response['match_count'] = result.candidates!.length;
+          }
+          return response;
+        }
+
+        await InteractionEngine.shared.tapElement(result.element!);
+        return {'success': true, 'text': text};
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -185,7 +253,7 @@ void registerBuiltInTools() {
 
   router.register(MCPToolDefinition(
     name: 'scroll',
-    description: 'Scroll a container in a direction',
+    description: 'Scroll a container in a direction. container_id accepts explicit keys or derived IDs from get_elements.',
     inputSchema: {
       'type': 'object',
       'properties': {
@@ -213,7 +281,7 @@ void registerBuiltInTools() {
 
   router.register(MCPToolDefinition(
     name: 'scroll_to_element',
-    description: 'Scroll until an element is visible',
+    description: 'Scroll until an element is visible. Accepts explicit or derived element IDs from get_elements.',
     inputSchema: {
       'type': 'object',
       'properties': {

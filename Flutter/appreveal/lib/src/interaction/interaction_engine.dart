@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../elements/element_inventory.dart';
+import '../elements/element_resolver.dart';
 import '../screen/navigator_observer.dart';
 
 class InteractionEngine {
@@ -26,11 +27,52 @@ class InteractionEngine {
 
   // ─── Tap ─────────────────────────────────────────────────────────────────
 
+  /// Tap an element resolved by ID with enhanced fallback matching.
   Future<void> tap({required String elementId}) async {
-    final element = ElementInventory.shared.findElement(elementId);
-    if (element == null) throw Exception('Element not found: $elementId');
-    final center = _centerOf(element);
-    if (center == null) throw Exception('Cannot determine position of: $elementId');
+    final element = ElementResolver.shared.resolve(elementId);
+    if (element == null) {
+      throw Exception(
+        'Element "$elementId" not found. '
+        'Use get_elements to list available IDs, or tap_text to target by visible text.',
+      );
+    }
+    await tapElement(element);
+  }
+
+  /// Tap a pre-resolved Element directly.
+  Future<void> tapElement(Element element) async {
+    final renderObject = element.renderObject;
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      throw Exception('Element has no visible render object');
+    }
+
+    final size = renderObject.size;
+    final offset = renderObject.localToGlobal(Offset.zero);
+    final center =
+        Offset(offset.dx + size.width / 2, offset.dy + size.height / 2);
+
+    // Validate target is on-screen
+    try {
+      final view = WidgetsBinding.instance.platformDispatcher.views.first;
+      final dpr = view.devicePixelRatio;
+      final screenW = view.physicalSize.width / dpr;
+      final screenH = view.physicalSize.height / dpr;
+
+      if (center.dx < 0 ||
+          center.dx > screenW ||
+          center.dy < 0 ||
+          center.dy > screenH) {
+        throw Exception(
+          'Target is off-screen at (${center.dx.round()}, ${center.dy.round()}), '
+          'screen is ${screenW.round()}x${screenH.round()}. '
+          'Use scroll_to_element to bring it into view first.',
+        );
+      }
+    } catch (e) {
+      if (e.toString().contains('off-screen')) rethrow;
+      // Non-fatal: proceed if we can't determine screen bounds
+    }
+
     await _injectTap(center);
   }
 
@@ -152,8 +194,13 @@ class InteractionEngine {
   }
 
   Future<void> scrollToElement({required String elementId}) async {
-    final element = ElementInventory.shared.findElement(elementId);
-    if (element == null) throw Exception('Element not found: $elementId');
+    final element = ElementResolver.shared.resolve(elementId);
+    if (element == null) {
+      throw Exception(
+        'Element "$elementId" not found. '
+        'Use get_elements to list available IDs.',
+      );
+    }
     await Scrollable.ensureVisible(
       element,
       duration: const Duration(milliseconds: 300),
@@ -283,14 +330,25 @@ class InteractionEngine {
   }
 
   ScrollableState? _findScrollableState(Element root, String? containerId) {
+    if (containerId == null) {
+      // Find first ScrollableState
+      ScrollableState? found;
+      ElementInventory.visitAll(root, (element) {
+        if (found != null) return false;
+        if (element is StatefulElement && element.state is ScrollableState) {
+          found = element.state as ScrollableState;
+          return false;
+        }
+        return true;
+      });
+      return found;
+    }
+
+    // Try exact key match on ScrollableState first (backward compat)
     ScrollableState? found;
     ElementInventory.visitAll(root, (element) {
       if (found != null) return false;
       if (element is StatefulElement && element.state is ScrollableState) {
-        if (containerId == null) {
-          found = element.state as ScrollableState;
-          return false;
-        }
         final key = element.widget.key;
         if (key is ValueKey<String> && key.value == containerId) {
           found = element.state as ScrollableState;
@@ -299,6 +357,21 @@ class InteractionEngine {
       }
       return true;
     });
+    if (found != null) return found;
+
+    // Enhanced: resolve container by ID, then find ScrollableState inside
+    final container = ElementResolver.shared.resolve(containerId);
+    if (container != null) {
+      ElementInventory.visitAll(container, (element) {
+        if (found != null) return false;
+        if (element is StatefulElement && element.state is ScrollableState) {
+          found = element.state as ScrollableState;
+          return false;
+        }
+        return true;
+      });
+    }
+
     return found;
   }
 
