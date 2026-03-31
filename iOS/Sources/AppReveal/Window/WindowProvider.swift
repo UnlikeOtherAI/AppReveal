@@ -35,7 +35,7 @@ public var platformWindowProvider: WindowProvider {
     #if os(iOS)
     IOSWindowProvider.shared
     #elseif os(macOS)
-    fatalError("MacOSWindowProvider not yet implemented")
+    MacOSWindowProvider.shared
     #endif
 }
 
