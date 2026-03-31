@@ -2,7 +2,7 @@
 
 AppReveal CLI is a local-network shell interface for AppReveal MCP servers. It exists so humans and LLMs can discover running debug builds, identify devices, inspect the exposed MCP surface, and send either normal tool calls or raw JSON-RPC requests without manually assembling mDNS lookups and `curl` payloads.
 
-It is built around target sets, not just a single device. The same command can fan out across several devices in parallel, and you can narrow the fleet with platform filters such as iOS, Android, Flutter, or React Native.
+It is built around target sets, not just a single device. The same command can fan out across several devices in parallel, and you can narrow the fleet with platform filters such as iOS, macOS, Android, Flutter, or React Native.
 
 ## LLM-first workflow
 
@@ -38,7 +38,7 @@ Any target-aware command can work in one of three ways:
 - Repeated `--target <selector>` for an explicit fleet
 - `--all` to select everything discovered on the LAN
 
-You can add `--platform ios`, `--platform android`, `--platform flutter`, or `--platform reactnative` to narrow the set further.
+You can add `--platform ios`, `--platform macos`, `--platform android`, `--platform flutter`, or `--platform reactnative` to narrow the set further.
 
 Selectors can be:
 
@@ -91,7 +91,7 @@ Browse the local network for AppReveal servers. By default it probes `launch_con
 ```bash
 appreveal discover
 appreveal discover --json
-appreveal discover --platform ios
+appreveal discover --platform ios,macos
 appreveal discover --timeout 5000
 ```
 

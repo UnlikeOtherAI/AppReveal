@@ -57,3 +57,4 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.hprof
+.ninja/

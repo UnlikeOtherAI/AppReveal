@@ -5,12 +5,12 @@ This CLI gives an LLM a stable shell interface for AppReveal MCP servers on the 
 Use it when the model needs to discover debug builds, identify devices, inspect available MCP tools,
 and send either normal tool calls or raw MCP JSON-RPC requests without hand-building curl commands.
 It is designed for fleets, not just one device. The same command can fan out across several iOS,
-Android, Flutter, or React Native targets in parallel.
+macOS, Android, Flutter, or React Native targets in parallel.
 
 How an LLM should use it:
 1. Run \`appreveal discover\` to find available AppReveal targets on the LAN.
 2. If more than one target is visible, pick one by service name, bundle ID, hostname, IP address, or full URL.
-3. Use \`--all\`, repeated \`--target\`, or \`--platform ios,android,flutter,reactnative\` to control multiple devices at once.
+3. Use \`--all\`, repeated \`--target\`, or \`--platform ios,macos,android,flutter,reactnative\` to control multiple devices at once.
 4. Run \`appreveal snapshot\`, \`find\`, \`tap\`, and \`type\` for common UI-control flows.
 5. Run \`appreveal inspect\`, \`call\`, or \`request\` when you need lower-level control.
 
@@ -32,7 +32,7 @@ Notes:
 
 export const HELP_EXAMPLES = `Examples:
   appreveal discover
-  appreveal discover --platform ios
+  appreveal discover --platform ios,macos
   appreveal discover --json
   appreveal inspect com.example.shop
   appreveal inspect --all --platform ios --device-info

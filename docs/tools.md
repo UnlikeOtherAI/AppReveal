@@ -1,6 +1,27 @@
 # MCP Tools Reference
 
-All 44 tools are available on every platform (iOS, Android, Flutter, React Native) with identical names, parameters, and response shapes.
+48 tools are available across all platforms (iOS, macOS, Android, Flutter, React Native). The shared tool surface (native UI, state, network, diagnostics, WebView DOM) is identical on every platform. macOS adds 3 desktop-specific tools and all native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting.
+
+### `list_windows`
+List visible app windows with stable IDs. Use the returned `window_id` to target a specific window in any UI or WebView tool. If `window_id` is omitted, the key window is used.
+
+**Parameters:** none
+
+**Response:**
+```json
+{
+  "windows": [
+    {
+      "id": "main_window",
+      "title": "AppReveal Mac Example",
+      "frame": "0,0,1280,800",
+      "isKey": true
+    }
+  ]
+}
+```
+
+---
 
 ## UI and Navigation
 
@@ -623,11 +644,58 @@ Execute multiple tool calls in a single request. Actions run sequentially.
 
 ---
 
+## macOS Desktop Tools
+
+These tools are only available on macOS targets.
+
+### `get_menu_bar`
+Read the app's main menu bar hierarchy recursively.
+
+**Parameters:** none
+
+**Response:**
+```json
+{
+  "menus": [
+    {
+      "title": "File",
+      "items": [
+        { "title": "New", "keyEquivalent": "n", "enabled": true },
+        { "title": "Open...", "keyEquivalent": "o", "enabled": true }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### `click_menu_item`
+Invoke a menu item by its title path.
+
+**Parameters:**
+- `title_path` (string, required) -- menu item path, e.g. `"File > Save"`
+
+**Response:** `{ "success": true }`
+
+---
+
+### `focus_window`
+Bring a specific window to the front and make it the key window.
+
+**Parameters:**
+- `window_id` (string, required) -- window ID from `list_windows`
+
+**Response:** `{ "success": true }`
+
+---
+
 ## Element ID Conventions
 
 | Platform | Mechanism |
 |----------|-----------|
 | iOS | `view.accessibilityIdentifier` |
+| macOS | `view.accessibilityIdentifier()` |
 | Android | `view.tag` (via `R.id.appreveal_id`) or resource entry name or `contentDescription` |
 | Flutter | `ValueKey<String>` on the widget |
 | React Native | `testID` prop (maps to `accessibilityIdentifier` on iOS, resource name on Android) |
