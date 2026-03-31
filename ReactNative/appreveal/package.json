@@ -1,6 +1,6 @@
 {
   "name": "react-native-appreveal",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Debug-only in-app MCP framework for React Native",
   "main": "src/index",
   "types": "src/index",
