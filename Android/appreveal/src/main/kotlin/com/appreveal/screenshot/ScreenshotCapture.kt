@@ -6,7 +6,6 @@ import android.os.Looper
 import android.util.Base64
 import android.view.PixelCopy
 import android.view.View
-import androidx.core.view.drawToBitmap
 import com.appreveal.elements.ElementInventory
 import com.appreveal.screen.ScreenResolver
 import com.appreveal.shared.MainThreadExecutor

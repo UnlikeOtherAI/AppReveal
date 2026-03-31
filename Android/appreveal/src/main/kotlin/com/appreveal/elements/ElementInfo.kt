@@ -38,7 +38,8 @@ data class ElementInfo(
     val frame: ElementFrame,
     val containerId: String?,
     val actions: List<String>,
-    val idSource: String, // "explicit", "text", "semantics", "derived"
+    /** How the id was derived: "explicit", "text", "semantics", "derived" */
+    val idSource: String,
 ) {
     data class ElementFrame(
         val x: Double,

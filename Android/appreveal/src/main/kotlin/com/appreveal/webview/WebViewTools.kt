@@ -1,7 +1,5 @@
 package com.appreveal.webview
 
-import android.net.Uri
-import android.webkit.WebView
 import com.appreveal.mcpserver.MCPRouter
 import com.appreveal.mcpserver.MCPToolDefinition
 import com.appreveal.mcpserver.asIntOrNull

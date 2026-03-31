@@ -13,7 +13,6 @@ import com.appreveal.state.StateBridge
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.google.gson.JsonPrimitive
 
 /**
  * Registers all built-in MCP tools with the router.

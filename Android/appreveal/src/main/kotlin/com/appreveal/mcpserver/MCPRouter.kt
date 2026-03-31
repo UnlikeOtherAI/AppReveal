@@ -3,7 +3,6 @@ package com.appreveal.mcpserver
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.google.gson.JsonPrimitive
 
 /**
  * Tool definition for the MCP router.

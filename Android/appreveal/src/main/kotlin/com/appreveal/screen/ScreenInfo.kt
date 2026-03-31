@@ -7,12 +7,16 @@ package com.appreveal.screen
 data class ScreenInfo(
     val screenKey: String,
     val screenTitle: String,
-    val frameworkType: String, // "android", "compose", "unknown"
-    val activityChain: List<String>, // equivalent of iOS controllerChain
+    /** "android", "compose", "unknown" */
+    val frameworkType: String,
+    /** Equivalent of iOS controllerChain */
+    val activityChain: List<String>,
     val activeTab: String?,
     val navigationDepth: Int,
     val presentedModals: List<String>,
     val confidence: Double,
-    val source: String, // "explicit", "derived"
-    val appBarTitle: String?, // extracted from Toolbar/ActionBar
+    /** "explicit" or "derived" */
+    val source: String,
+    /** Extracted from Toolbar/ActionBar */
+    val appBarTitle: String?,
 )
