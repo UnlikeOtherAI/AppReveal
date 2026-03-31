@@ -23,6 +23,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - uses: android-actions/setup-android@v3
       - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck
 
   flutter:
