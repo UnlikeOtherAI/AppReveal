@@ -25,14 +25,16 @@ func registerMacOSBuiltInToolsImpl() {
                 "activeTab": info.activeTab as Any,
                 "navigationDepth": info.navigationDepth,
                 "presentedModals": info.presentedModals,
-                "confidence": info.confidence
+                "confidence": info.confidence,
+                "source": info.source,
+                "appBarTitle": info.appBarTitle as Any
             ] as [String: Any])
         }
     ))
 
     router.register(MCPToolDefinition(
         name: "get_elements",
-        description: "List all visible interactive elements on the current screen",
+        description: "List all visible interactive elements on the current screen. Elements include an idSource field showing how the ID was derived.",
         inputSchema: macOSInputSchema(),
         handler: { params in
             let windowId = params?["window_id"]?.stringValue
@@ -48,7 +50,8 @@ func registerMacOSBuiltInToolsImpl() {
                     "visible": el.visible ? "true" : "false",
                     "tappable": el.tappable ? "true" : "false",
                     "frame": "\(Int(el.frame.x)),\(Int(el.frame.y)),\(Int(el.frame.width)),\(Int(el.frame.height))",
-                    "actions": el.actions.joined(separator: ",")
+                    "actions": el.actions.joined(separator: ","),
+                    "idSource": el.idSource
                 ] as [String: String]
             }
             return AnyCodable([
@@ -92,9 +95,9 @@ func registerMacOSBuiltInToolsImpl() {
 
     router.register(MCPToolDefinition(
         name: "tap_element",
-        description: "Tap an element by its accessibility identifier",
+        description: "Tap an element by ID. Resolves by accessibilityIdentifier, accessibilityLabel, derived text ID, or visible text (in that order). If not found, try tap_text.",
         inputSchema: macOSInputSchema([
-            "element_id": ["type": "string", "description": "Accessibility identifier"]
+            "element_id": ["type": "string", "description": "Element ID (accessibilityIdentifier, derived text ID, or visible text)"]
         ], required: ["element_id"]),
         handler: { params in
             guard let elementId = params?["element_id"]?.stringValue else {
@@ -105,8 +108,43 @@ func registerMacOSBuiltInToolsImpl() {
                 try MacOSInteractionEngine.shared.tap(elementId: elementId, windowId: windowId)
                 return AnyCodable(["success": true, "element_id": elementId] as [String: Any])
             } catch {
-                return AnyCodable(["error": error.localizedDescription])
+                return AnyCodable(["error": "\(error.localizedDescription). Try tap_text for visible text targeting, or get_elements to list available IDs."])
             }
+        }
+    ))
+
+    router.register(MCPToolDefinition(
+        name: "tap_text",
+        description: "Tap the nearest tappable element containing the given visible text. Use when you know what text is on screen but not the element ID.",
+        inputSchema: macOSInputSchema([
+            "text": ["type": "string", "description": "Visible text to find and tap"],
+            "match_mode": ["type": "string", "enum": ["exact", "contains"], "description": "Match mode (default: exact)"],
+            "occurrence": ["type": "integer", "description": "0-based index when multiple matches exist"]
+        ], required: ["text"]),
+        handler: { params in
+            guard let text = params?["text"]?.stringValue else {
+                return AnyCodable(["error": "text required"])
+            }
+            let matchMode = params?["match_mode"]?.stringValue ?? "exact"
+            let occurrence = params?["occurrence"]?.intValue ?? -1
+            let windowId = params?["window_id"]?.stringValue
+
+            let result = ElementInventory.shared.findElementByText(
+                text, matchMode: matchMode, occurrence: occurrence, windowId: windowId
+            )
+
+            guard result.isSuccess, let view = result.view else {
+                var response: [String: Any] = ["error": result.error ?? "Unknown error"]
+                if let candidates = result.candidates {
+                    response["candidates"] = candidates
+                    response["hint"] = "Use occurrence parameter (0-based) to select a specific match"
+                }
+                return AnyCodable(response)
+            }
+
+            let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            MacOSInteractionEngine.shared.tap(point: view.convert(point, to: nil), windowId: windowId)
+            return AnyCodable(["success": true, "text": text] as [String: Any])
         }
     ))
 

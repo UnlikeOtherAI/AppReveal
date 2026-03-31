@@ -31,6 +31,8 @@ final class MacOSScreenResolver {
         let modals = findPresentedModals(windowId: windowId)
         let navDepth = findNavigationDepth(from: topVC)
 
+        let windowTitle = platformWindowProvider.resolve(windowId: windowId)?.nativeWindow.title
+
         if let identifiable = registeredScreen(for: topVC) ?? (topVC as? ScreenIdentifiable) {
             return ScreenInfo(
                 screenKey: identifiable.screenKey,
@@ -40,13 +42,15 @@ final class MacOSScreenResolver {
                 activeTab: tab,
                 navigationDepth: navDepth,
                 presentedModals: modals,
-                confidence: 1.0
+                confidence: 1.0,
+                source: "explicit",
+                appBarTitle: windowTitle
             )
         }
 
         let className = topVC.map { String(describing: type(of: $0)) } ?? "unknown"
         let screenKey = ScreenKeyDerivation.deriveScreenKey(from: className)
-        let title = topVC?.title ?? ScreenKeyDerivation.deriveTitle(from: className)
+        let title = topVC?.title ?? windowTitle ?? ScreenKeyDerivation.deriveTitle(from: className)
         return ScreenInfo(
             screenKey: screenKey,
             screenTitle: title,
@@ -55,7 +59,9 @@ final class MacOSScreenResolver {
             activeTab: tab,
             navigationDepth: navDepth,
             presentedModals: modals,
-            confidence: 0.8
+            confidence: 0.8,
+            source: "derived",
+            appBarTitle: windowTitle
         )
     }
 

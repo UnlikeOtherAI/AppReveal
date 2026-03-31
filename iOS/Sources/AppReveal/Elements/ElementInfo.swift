@@ -35,6 +35,8 @@ public struct ElementInfo: Codable {
     public let frame: ElementFrame
     public let containerId: String?
     public let actions: [String]
+    /// How the id was derived: "explicit", "text", "semantics", "tooltip", "derived"
+    public let idSource: String
 
     public struct ElementFrame: Codable {
         public let x: Double

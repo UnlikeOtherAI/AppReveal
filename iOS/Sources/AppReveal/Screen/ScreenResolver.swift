@@ -86,6 +86,8 @@ final class ScreenResolver {
         let modals = findPresentedModals(windowId: windowId)
         let navDepth = findNavigationDepth(from: topVC)
 
+        let navBarTitle = extractNavBarTitle(windowId: windowId)
+
         // Check if top VC conforms to ScreenIdentifiable
         if let identifiable = topVC as? ScreenIdentifiable {
             return ScreenInfo(
@@ -96,14 +98,16 @@ final class ScreenResolver {
                 activeTab: tab,
                 navigationDepth: navDepth,
                 presentedModals: modals,
-                confidence: 1.0
+                confidence: 1.0,
+                source: "explicit",
+                appBarTitle: navBarTitle
             )
         }
 
         // Auto-derive from class name -- no protocol needed
         let className = topVC.map { String(describing: type(of: $0)) } ?? "unknown"
         let screenKey = Self.deriveScreenKey(from: className)
-        let title = topVC?.title ?? topVC?.navigationItem.title ?? Self.deriveTitle(from: className)
+        let title = topVC?.title ?? topVC?.navigationItem.title ?? navBarTitle ?? Self.deriveTitle(from: className)
         return ScreenInfo(
             screenKey: screenKey,
             screenTitle: title,
@@ -112,7 +116,9 @@ final class ScreenResolver {
             activeTab: tab,
             navigationDepth: navDepth,
             presentedModals: modals,
-            confidence: 0.8
+            confidence: navBarTitle != nil ? 0.6 : 0.8,
+            source: "derived",
+            appBarTitle: navBarTitle
         )
     }
 
@@ -182,6 +188,24 @@ final class ScreenResolver {
 
     private func findNavigationDepth(from vc: UIViewController?) -> Int {
         vc?.navigationController?.viewControllers.count ?? 0
+    }
+
+    private func extractNavBarTitle(windowId: String? = nil) -> String? {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId) else { return nil }
+        // Walk views for UINavigationBar
+        return findNavBarTitle(in: ref.nativeWindow)
+    }
+
+    private func findNavBarTitle(in view: UIView) -> String? {
+        if let navBar = view as? UINavigationBar {
+            return navBar.topItem?.title
+        }
+        for subview in view.subviews {
+            if let title = findNavBarTitle(in: subview) {
+                return title
+            }
+        }
+        return nil
     }
 
     private func detectFrameworkType(_ vc: UIViewController?) -> String {

@@ -21,7 +21,8 @@ final class ElementInventory {
         }
 
         var elements: [ElementInfo] = []
-        walkView(contentView, elements: &elements, containerId: nil)
+        var seenIds: [String: Int] = [:]
+        walkView(contentView, elements: &elements, seenIds: &seenIds, containerId: nil)
         return elements
     }
 
@@ -30,24 +31,129 @@ final class ElementInventory {
               let contentView = ref.contentView else {
             return nil
         }
-        return findView(withAccessibilityId: id, in: contentView)
+        // 1. Exact accessibilityIdentifier
+        if let view = findView(withAccessibilityId: id, in: contentView) {
+            return view
+        }
+        // 2. accessibilityLabel match
+        if let view = findView(matching: { Self.normalizeToId($0.accessibilityLabel() ?? "") == id }, in: contentView) {
+            return view
+        }
+        // 3. Derived text ID on interactive views
+        if let view = findView(matching: { view in
+            guard self.isInteractive(view) else { return false }
+            guard let text = Self.extractText(from: view) else { return false }
+            return Self.normalizeToId(text) == id
+        }, in: contentView) {
+            return view
+        }
+        return nil
+    }
+
+    /// Find element by visible text with ambiguity handling.
+    func findElementByText(
+        _ text: String,
+        matchMode: String = "exact",
+        occurrence: Int = 0,
+        windowId: String? = nil
+    ) -> MacOSTextResolveResult {
+        guard let ref = platformWindowProvider.resolve(windowId: windowId),
+              let contentView = ref.contentView else {
+            return MacOSTextResolveResult(error: "No window available")
+        }
+
+        var matches: [(view: NSView, text: String)] = []
+        collectTextMatches(text, matchMode: matchMode, in: contentView, matches: &matches)
+
+        if matches.isEmpty {
+            return MacOSTextResolveResult(error: "No element with text \"\(text)\" found on the current screen.")
+        }
+
+        var tappableCandidates: [(view: NSView, label: String)] = []
+        for match in matches {
+            if let tappable = Self.findTappableAncestor(of: match.view) {
+                tappableCandidates.append((tappable, match.text))
+            }
+        }
+
+        if tappableCandidates.isEmpty {
+            return MacOSTextResolveResult(error: "Text \"\(text)\" found but no tappable ancestor. The text is a static label.")
+        }
+
+        if tappableCandidates.count > 1 && occurrence < 0 {
+            return MacOSTextResolveResult(
+                error: "Ambiguous: \(tappableCandidates.count) matches found. Use occurrence (0-based) to disambiguate.",
+                candidates: tappableCandidates.map { $0.label }
+            )
+        }
+
+        if occurrence >= tappableCandidates.count {
+            return MacOSTextResolveResult(
+                error: "occurrence \(occurrence) out of range (found \(tappableCandidates.count) matches)",
+                candidates: tappableCandidates.map { $0.label }
+            )
+        }
+
+        let index = tappableCandidates.count == 1 ? 0 : occurrence
+        return MacOSTextResolveResult(view: tappableCandidates[index].view)
+    }
+
+    // MARK: - Text utilities
+
+    static func extractText(from view: NSView) -> String? {
+        if let button = view as? NSButton { return button.title.isEmpty ? nil : button.title }
+        if let textField = view as? NSTextField { return textField.stringValue.isEmpty ? textField.placeholderString : textField.stringValue }
+        if let textView = view as? NSTextView { return textView.string.isEmpty ? nil : textView.string }
+        // Walk immediate children
+        for sub in view.subviews {
+            if let textField = sub as? NSTextField, !textField.isEditable, !textField.stringValue.isEmpty {
+                return textField.stringValue
+            }
+        }
+        if let label = view.accessibilityLabel(), !label.isEmpty {
+            return label
+        }
+        return nil
+    }
+
+    static func normalizeToId(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return "unnamed" }
+        var normalized = trimmed.lowercased()
+        normalized = normalized.replacingOccurrences(of: "\\s+", with: "_", options: .regularExpression)
+        normalized = normalized.replacingOccurrences(of: "[^a-z0-9_]", with: "", options: .regularExpression)
+        if normalized.isEmpty { return "unnamed" }
+        return String(normalized.prefix(40))
+    }
+
+    static func findTappableAncestor(of view: NSView) -> NSView? {
+        var current: NSView? = view
+        var depth = 0
+        while let v = current, depth < 50 {
+            if v is NSButton || v is NSSegmentedControl { return v }
+            if v is NSControl { return v }
+            if v is NSTableRowView || v is NSTableCellView { return v }
+            current = v.superview
+            depth += 1
+        }
+        return nil
     }
 
     // MARK: - Hierarchy walking
 
-    private func walkView(_ view: NSView, elements: inout [ElementInfo], containerId: String?) {
-        let id = view.accessibilityIdentifier()
-        let hasId = !id.isEmpty
+    private func walkView(_ view: NSView, elements: inout [ElementInfo], seenIds: inout [String: Int], containerId: String?) {
+        let accessId = view.accessibilityIdentifier()
+        let hasId = !accessId.isEmpty
 
         if hasId || isInteractive(view) {
-            if let info = makeElementInfo(view, containerId: containerId) {
+            if let info = makeElementInfo(view, containerId: containerId, seenIds: &seenIds) {
                 elements.append(info)
             }
         }
 
-        let currentContainerId = hasId ? id : containerId
+        let currentContainerId = hasId ? accessId : containerId
         for subview in view.subviews where !subview.isHiddenOrHasHiddenAncestor {
-            walkView(subview, elements: &elements, containerId: currentContainerId)
+            walkView(subview, elements: &elements, seenIds: &seenIds, containerId: currentContainerId)
         }
     }
 
@@ -60,22 +166,24 @@ final class ElementInventory {
         view is NSStepper ||
         view is NSPopUpButton ||
         view is NSComboBox ||
-        view is NSSegmentedControl
+        view is NSSegmentedControl ||
+        view is NSTableRowView
     }
 
-    private func makeElementInfo(_ view: NSView, containerId: String?) -> ElementInfo? {
-        let id = view.accessibilityIdentifier()
-        guard !id.isEmpty else {
-            guard isInteractive(view) else { return nil }
-            return nil
-        }
+    private func makeElementInfo(_ view: NSView, containerId: String?, seenIds: inout [String: Int]) -> ElementInfo? {
+        let (id, idSource) = resolveId(for: view)
+        guard let resolvedId = id else { return nil }
+
+        let count = seenIds[resolvedId, default: 0]
+        seenIds[resolvedId] = count + 1
+        let finalId = count == 0 ? resolvedId : "\(resolvedId)_\(count)"
 
         let windowFrame = view.convert(view.bounds, to: nil)
 
         return ElementInfo(
-            id: id,
+            id: finalId,
             type: classifyView(view),
-            label: view.accessibilityLabel(),
+            label: view.accessibilityLabel() ?? Self.extractText(from: view),
             value: view.accessibilityValue() as? String,
             enabled: (view as? NSControl)?.isEnabled ?? true,
             visible: !view.isHiddenOrHasHiddenAncestor,
@@ -87,12 +195,32 @@ final class ElementInventory {
                 height: windowFrame.size.height
             ),
             containerId: containerId,
-            actions: availableActions(for: view)
+            actions: availableActions(for: view),
+            idSource: idSource
         )
     }
 
+    private func resolveId(for view: NSView) -> (String?, String) {
+        let accessId = view.accessibilityIdentifier()
+        if !accessId.isEmpty {
+            return (accessId, "explicit")
+        }
+        if let label = view.accessibilityLabel(), !label.isEmpty {
+            return (Self.normalizeToId(label), "semantics")
+        }
+        if let text = Self.extractText(from: view), !text.isEmpty {
+            return (Self.normalizeToId(text), "text")
+        }
+        if isInteractive(view) {
+            let typeName = String(describing: type(of: view))
+                .lowercased()
+                .replacingOccurrences(of: "ns", with: "")
+            return (typeName, "derived")
+        }
+        return (nil, "derived")
+    }
+
     private func classifyView(_ view: NSView) -> ElementType {
-        // NSPopUpButton / NSComboBox subclass NSButton, so check them first
         switch view {
         case is NSPopUpButton: return .picker
         case is NSComboBox: return .picker
@@ -125,6 +253,36 @@ final class ElementInventory {
             actions.append("scroll")
         }
         return actions
+    }
+
+    // MARK: - Text matching
+
+    private func collectTextMatches(_ query: String, matchMode: String, in view: NSView, matches: inout [(view: NSView, text: String)]) {
+        if let text = Self.extractText(from: view), !text.isEmpty {
+            let isMatch: Bool
+            switch matchMode {
+            case "contains":
+                isMatch = text.localizedCaseInsensitiveContains(query)
+            default:
+                isMatch = text == query
+            }
+            if isMatch {
+                matches.append((view, text))
+            }
+        }
+        for subview in view.subviews where !subview.isHiddenOrHasHiddenAncestor {
+            collectTextMatches(query, matchMode: matchMode, in: subview, matches: &matches)
+        }
+    }
+
+    private func findView(matching predicate: (NSView) -> Bool, in view: NSView) -> NSView? {
+        if predicate(view) { return view }
+        for subview in view.subviews {
+            if let found = findView(matching: predicate, in: subview) {
+                return found
+            }
+        }
+        return nil
     }
 
     // MARK: - Full view tree
@@ -160,7 +318,6 @@ final class ElementInventory {
             node["accessibilityValue"] = value
         }
 
-        // Type-specific properties (NSPopUpButton before NSButton -- subclass)
         if let popup = view as? NSPopUpButton {
             node["selectedIndex"] = popup.indexOfSelectedItem
             node["selectedTitle"] = popup.titleOfSelectedItem ?? ""
@@ -210,6 +367,27 @@ final class ElementInventory {
             }
         }
         return nil
+    }
+}
+
+/// Result of text-based element resolution (macOS).
+struct MacOSTextResolveResult {
+    let view: NSView?
+    let error: String?
+    let candidates: [String]?
+
+    var isSuccess: Bool { view != nil }
+
+    init(view: NSView) {
+        self.view = view
+        self.error = nil
+        self.candidates = nil
+    }
+
+    init(error: String, candidates: [String]? = nil) {
+        self.view = nil
+        self.error = error
+        self.candidates = candidates
     }
 }
 
