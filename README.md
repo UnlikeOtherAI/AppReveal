@@ -238,7 +238,7 @@ AppReveal gives agents structured data instead of pixels:
 | macOS | Working | Shared native + web view tools plus menu/window tools |
 | Android | Working | Shared native + web view tool surface |
 | Flutter | Working | Shared native + web view tool surface |
-| React Native | In development | Shared native + web view tool surface |
+| React Native | Working | Shared native + web view tool surface |
 
 ## Example apps
 
