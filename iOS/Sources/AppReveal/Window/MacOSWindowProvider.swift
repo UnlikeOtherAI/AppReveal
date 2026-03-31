@@ -16,10 +16,10 @@ final class MacOSWindowProvider: WindowProvider {
 
     func allWindows() -> [WindowRef] {
         NSApplication.shared.windows
-            .filter { !$0.isHidden && $0.isVisible }
+            .filter { $0.isVisible }
             .map { window in
                 WindowRef(
-                    id: window.accessibilityIdentifier()
+                    id: (window.identifier?.rawValue)
                         ?? "window_\(window.windowNumber)",
                     title: window.title,
                     frame: window.frame,
