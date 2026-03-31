@@ -160,7 +160,7 @@ class AppReveal {
 
     // Advertise via mDNS (use real bundle ID from PackageInfo)
     String bundleId = 'com.appreveal.app';
-    String version = '0.4.0';
+    String version = '0.6.0';
     try {
       final info = await PackageInfo.fromPlatform();
       bundleId = info.packageName;

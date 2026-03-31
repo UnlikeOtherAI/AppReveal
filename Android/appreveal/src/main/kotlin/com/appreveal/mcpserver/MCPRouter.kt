@@ -42,7 +42,7 @@ internal object MCPRouter {
                     })
                     add("serverInfo", JsonObject().apply {
                         addProperty("name", "AppReveal")
-                        addProperty("version", "0.4.0")
+                        addProperty("version", "0.6.0")
                     })
                 }
                 MCPResponse.success(request.id, result)

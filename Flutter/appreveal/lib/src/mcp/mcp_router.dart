@@ -39,7 +39,7 @@ class MCPRouter {
         return _response(id, {
           'protocolVersion': '2025-06-18',
           'capabilities': {'tools': {}},
-          'serverInfo': {'name': 'AppReveal', 'version': '0.4.0'},
+          'serverInfo': {'name': 'AppReveal', 'version': '0.6.0'},
         });
 
       case 'tools/list':
