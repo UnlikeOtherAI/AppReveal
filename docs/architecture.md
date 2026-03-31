@@ -70,18 +70,23 @@ Determines the currently active screen using multiple signals:
 3. Route state from app-provided router
 4. Presentation stack depth
 
-Returns a `ScreenInfo` with key, title, framework type, controller chain, nav depth, and confidence score.
+Returns a `ScreenInfo` with key, title, framework type, controller chain, nav depth, confidence score, `source` (`"explicit"` or `"derived"`), and `appBarTitle` (extracted from navigation bar / toolbar / window title).
 
 ### ElementInventory / MacOSElementInventory
 
 Enumerates visible interactive elements. Each element exposes:
 
-- `id` (accessibility identifier)
+- `id` (accessibility identifier, text-derived, or auto-generated)
 - `type` (button, textField, toggle, etc.)
 - `label`, `value`
 - `enabled`, `visible`, `tappable`
 - `frame` (CGRect in screen coordinates)
 - `actions` (available interaction types)
+- `idSource` — how the ID was derived: `"explicit"`, `"text"`, `"semantics"`, `"tooltip"`, `"derived"`
+
+ID resolution cascade: explicit accessibility identifier → semantics (accessibility label / content description) → visible text (normalized to snake_case) → auto-generated derived ID. Duplicate IDs are disambiguated with `_1`, `_2`, etc.
+
+Text-based element lookup via `tap_text` walks the view hierarchy for matching visible text, then resolves the nearest tappable ancestor (UIControl, NSControl, gesture-recognizer-bearing view, table/collection cell).
 
 Walks the UIKit or AppKit view hierarchy for the selected window. SwiftUI elements are accessed through their hosting layer and accessibility identifiers.
 
@@ -201,6 +206,7 @@ protocol FeatureFlagProviding {
 | `get_screen` | Current screen identity and metadata |
 | `get_elements` | Visible interactive elements |
 | `tap_element` | Tap by accessibility identifier |
+| `tap_text` | Tap by visible text content |
 | `tap_point` | Tap by screen coordinates |
 | `type_text` | Type into focused or specified field |
 | `clear_text` | Clear a text field |

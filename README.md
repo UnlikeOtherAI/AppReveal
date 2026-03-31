@@ -30,7 +30,7 @@ AppReveal shares the same core MCP surface across platforms. macOS adds desktop-
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.4.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.8.0")
 ```
 
 ```swift
@@ -45,7 +45,7 @@ See [iOS guide](docs/ios.md) for full setup.
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.4.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.8.0")
 ```
 
 ```swift
@@ -126,6 +126,7 @@ See [React Native guide](ReactNative/README.md) for full setup.
 | `get_elements` | All visible interactive elements with id, type, frame, actions |
 | `get_view_tree` | Full view hierarchy with class, frame, properties, accessibility info |
 | `tap_element` | Tap by element identifier (buttons, cells, controls) |
+| `tap_text` | Tap by visible text content (finds text, walks to tappable ancestor) |
 | `tap_point` | Tap at screen coordinates |
 | `type_text` | Type text into a field (by element ID or current responder) |
 | `clear_text` | Clear a text field |

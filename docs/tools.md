@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-48 tools are available across all platforms (iOS, macOS, Android, Flutter, React Native). The shared tool surface (native UI, state, network, diagnostics, WebView DOM) is identical on every platform. macOS adds 3 desktop-specific tools and all native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting.
+49 tools are available across all platforms (iOS, macOS, Android, Flutter, React Native). The shared tool surface (native UI, state, network, diagnostics, WebView DOM) is identical on every platform. macOS adds 3 desktop-specific tools and all native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting.
 
 ### `list_windows`
 List visible app windows with stable IDs. Use the returned `window_id` to target a specific window in any UI or WebView tool. If `window_id` is omitted, the key window is used.
@@ -40,9 +40,14 @@ Get the currently active screen identity and metadata.
   "activeTab": "UINavigationController",
   "navigationDepth": 0,
   "presentedModals": [],
-  "confidence": 1.0
+  "confidence": 1.0,
+  "source": "explicit",
+  "appBarTitle": "Login"
 }
 ```
+
+- `source` — `"explicit"` (from `ScreenIdentifiable` conformance) or `"derived"` (auto-detected from controller/activity class name)
+- `appBarTitle` — title extracted from the navigation bar (iOS), window title (macOS), or toolbar/action bar (Android). `null` if none found.
 
 ---
 
@@ -65,11 +70,14 @@ List all visible interactive elements on the current screen.
       "visible": "true",
       "tappable": "true",
       "frame": "32,364,338,34",
-      "actions": "tap,type,clear"
+      "actions": "tap,type,clear",
+      "idSource": "explicit"
     }
   ]
 }
 ```
+
+- `idSource` — how the element's `id` was derived: `"explicit"` (accessibility identifier / tag / resource ID), `"text"` (from visible text), `"semantics"` (accessibility label / content description), `"tooltip"`, or `"derived"` (auto-generated fallback)
 
 Element types: `button`, `textField`, `label`, `image`, `toggle`, `slider`, `scrollView`, `tableView`, `collectionView`, `cell`, `navigationBar`, `tabBar`, `other`
 
@@ -118,6 +126,26 @@ Tap an element by its identifier.
 - `element_id` (string, required)
 
 **Response:** `{ "success": true, "element_id": "login.submit" }`
+
+---
+
+### `tap_text`
+Tap an element by its visible text content. Finds text in the view hierarchy and walks up to the nearest tappable ancestor. Useful when elements lack accessibility identifiers.
+
+**Parameters:**
+- `text` (string, required) — text to find
+- `match_mode` (string, optional) — `"exact"` (default) or `"contains"`
+- `occurrence` (integer, optional) — 0-based index when multiple matches exist (default 0)
+
+**Response:** `{ "success": true, "tapped_text": "Submit Order" }`
+
+If multiple matches are found and `occurrence` is not specified, returns an error with candidates:
+```json
+{
+  "error": "Multiple elements match 'Submit'. Use occurrence parameter to disambiguate.",
+  "candidates": ["Submit Order", "Submit Review"]
+}
+```
 
 ---
 

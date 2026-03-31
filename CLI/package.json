@@ -1,6 +1,6 @@
 {
   "name": "@unlikeotherai/appreveal",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "CLI for discovering and querying AppReveal MCP servers on the local network",
   "type": "module",
   "bin": {
