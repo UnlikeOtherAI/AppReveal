@@ -4,6 +4,8 @@ import Foundation
 
 #if DEBUG
 
+#if os(iOS)
+
 @MainActor
 func registerWebViewTools() {
     let router = MCPRouter.shared
@@ -404,7 +406,7 @@ func registerWebViewTools() {
 
     router.register(MCPToolDefinition(
         name: "get_dom_links",
-        description: "Get all links on the page — just text and href. Minimal tokens.",
+        description: "Get all links on the page -- just text and href. Minimal tokens.",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
@@ -564,4 +566,14 @@ func registerWebViewTools() {
     ))
 }
 
-#endif
+#elseif os(macOS)
+
+/// Placeholder -- macOS WebView tools will be implemented in Task 11.
+@MainActor
+func registerWebViewTools() {
+    // Will be implemented when MacOSWebViewBridge is added
+}
+
+#endif // os
+
+#endif // DEBUG

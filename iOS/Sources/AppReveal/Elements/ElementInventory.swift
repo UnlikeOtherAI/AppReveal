@@ -1,6 +1,9 @@
 // Enumerates visible interactive elements from the view hierarchy
 
 import Foundation
+
+#if os(iOS)
+
 import UIKit
 
 #if DEBUG
@@ -204,5 +207,7 @@ final class ElementInventory {
         return nil
     }
 }
+
+#endif
 
 #endif

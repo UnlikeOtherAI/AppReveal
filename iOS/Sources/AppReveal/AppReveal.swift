@@ -1,4 +1,4 @@
-// AppReveal -- Debug-only in-app MCP framework for iOS
+// AppReveal -- Debug-only in-app MCP framework for iOS and macOS
 // Use only in DEBUG builds: #if DEBUG / AppReveal.start() / #endif
 
 import Foundation
@@ -34,7 +34,10 @@ public final class AppReveal {
 
     /// Register a screen identity provider for the current screen.
     public static func registerScreen(_ screen: ScreenIdentifiable) {
+        #if os(iOS)
         ScreenResolver.shared.register(screen)
+        #endif
+        // macOS ScreenResolver will be added in Task 10
     }
 
     /// Register an app state provider.

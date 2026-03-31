@@ -1,9 +1,40 @@
 // Executes UI interactions (tap, type, scroll, navigate)
 
 import Foundation
-import UIKit
 
 #if DEBUG
+
+// MARK: - Types (cross-platform)
+
+enum ScrollDirection: String, Codable {
+    case up, down, left, right
+
+    var isVertical: Bool { self == .up || self == .down }
+}
+
+enum InteractionError: LocalizedError {
+    case elementNotFound(String)
+    case notEditable(String)
+    case notScrollable(String)
+    case noScrollView
+    case noNavigation
+    case noModal
+
+    var errorDescription: String? {
+        switch self {
+        case .elementNotFound(let id): return "Element not found: \(id)"
+        case .notEditable(let id): return "Element not editable: \(id)"
+        case .notScrollable(let id): return "Element not scrollable: \(id)"
+        case .noScrollView: return "No scroll view found"
+        case .noNavigation: return "No navigation controller found"
+        case .noModal: return "No modal to dismiss"
+        }
+    }
+}
+
+#if os(iOS)
+
+import UIKit
 
 @MainActor
 final class InteractionEngine {
@@ -289,34 +320,6 @@ final class InteractionEngine {
     }
 }
 
-// MARK: - Types
-
-enum ScrollDirection: String, Codable {
-    case up, down, left, right
-
-    var isVertical: Bool { self == .up || self == .down }
-}
-
-enum InteractionError: LocalizedError {
-    case elementNotFound(String)
-    case notEditable(String)
-    case notScrollable(String)
-    case noScrollView
-    case noNavigation
-    case noModal
-
-    var errorDescription: String? {
-        switch self {
-        case .elementNotFound(let id): return "Element not found: \(id)"
-        case .notEditable(let id): return "Element not editable: \(id)"
-        case .notScrollable(let id): return "Element not scrollable: \(id)"
-        case .noScrollView: return "No scroll view found"
-        case .noNavigation: return "No navigation controller found"
-        case .noModal: return "No modal to dismiss"
-        }
-    }
-}
-
 // Helper to find current first responder
 extension UIResponder {
     private weak static var _currentFirstResponder: UIResponder?
@@ -332,4 +335,6 @@ extension UIResponder {
     }
 }
 
-#endif
+#endif // os(iOS)
+
+#endif // DEBUG

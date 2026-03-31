@@ -1,10 +1,27 @@
 // Discovers WKWebView instances and evaluates JavaScript in them
 
 import Foundation
-import UIKit
-import WebKit
 
 #if DEBUG
+
+// MARK: - Errors (cross-platform)
+
+enum WebViewError: LocalizedError {
+    case notFound(String)
+    case evaluationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notFound(let id): return "WebView not found: \(id)"
+        case .evaluationFailed(let msg): return "JS evaluation failed: \(msg)"
+        }
+    }
+}
+
+#if os(iOS)
+
+import UIKit
+import WebKit
 
 @MainActor
 final class WebViewBridge {
@@ -79,18 +96,6 @@ final class WebViewBridge {
     }
 }
 
-// MARK: - Errors
+#endif // os(iOS)
 
-enum WebViewError: LocalizedError {
-    case notFound(String)
-    case evaluationFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notFound(let id): return "WebView not found: \(id)"
-        case .evaluationFailed(let msg): return "JS evaluation failed: \(msg)"
-        }
-    }
-}
-
-#endif
+#endif // DEBUG

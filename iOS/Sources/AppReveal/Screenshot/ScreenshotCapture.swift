@@ -1,9 +1,18 @@
-// Screen capture using UIGraphicsImageRenderer
+// Screen capture using UIGraphicsImageRenderer (iOS) / NSWindow snapshot (macOS)
 
 import Foundation
-import UIKit
 
 #if DEBUG
+
+/// Image format for screenshots -- shared across platforms.
+enum ImageFormat: String, Codable {
+    case png
+    case jpeg
+}
+
+#if os(iOS)
+
+import UIKit
 
 @MainActor
 final class ScreenshotCapture {
@@ -69,9 +78,6 @@ final class ScreenshotCapture {
     }
 }
 
-enum ImageFormat: String, Codable {
-    case png
-    case jpeg
-}
+#endif // os(iOS)
 
-#endif
+#endif // DEBUG
