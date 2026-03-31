@@ -3,7 +3,6 @@ package com.appreveal
 import android.app.Application
 
 object AppReveal {
-
     @JvmStatic
     fun start(
         application: Application,
