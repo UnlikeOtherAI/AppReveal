@@ -36,6 +36,8 @@ data class ElementInfo(
     val visible: Boolean,
     val tappable: Boolean,
     val frame: ElementFrame,
+    val safeAreaInsets: ElementInsets,
+    val safeAreaLayoutGuideFrame: ElementFrame,
     val containerId: String?,
     val actions: List<String>,
     /** How the id was derived: "explicit", "text", "semantics", "derived" */
@@ -46,5 +48,12 @@ data class ElementInfo(
         val y: Double,
         val width: Double,
         val height: Double,
+    )
+
+    data class ElementInsets(
+        val top: Double,
+        val leading: Double,
+        val bottom: Double,
+        val trailing: Double,
     )
 }

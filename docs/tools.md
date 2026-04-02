@@ -70,6 +70,8 @@ List all visible interactive elements on the current screen.
       "visible": "true",
       "tappable": "true",
       "frame": "32,364,338,34",
+      "safeAreaInsets": { "top": 0, "leading": 0, "bottom": 0, "trailing": 0 },
+      "safeAreaLayoutGuideFrame": { "x": 32, "y": 364, "width": 338, "height": 34 },
       "actions": "tap,type,clear",
       "idSource": "explicit"
     }
@@ -78,6 +80,9 @@ List all visible interactive elements on the current screen.
 ```
 
 - `idSource` — how the element's `id` was derived: `"explicit"` (accessibility identifier / tag / resource ID), `"text"` (from visible text), `"semantics"` (accessibility label / content description), `"tooltip"`, or `"derived"` (auto-generated fallback)
+- `safeAreaInsets` — per-view safe area insets using `leading` / `trailing` instead of physical `left` / `right`
+- `safeAreaLayoutGuideFrame` — the view's safe area layout guide frame in screen coordinates
+- Platform mapping: iOS/macOS use native safe areas, Android uses system bar/display-cutout insets, Flutter uses the nearest `MediaQuery.padding`
 
 Element types: `button`, `textField`, `label`, `image`, `toggle`, `slider`, `scrollView`, `tableView`, `collectionView`, `cell`, `navigationBar`, `tabBar`, `other`
 
@@ -96,6 +101,8 @@ Dump the full view hierarchy with class, frame, properties, and accessibility in
   "count": 142
 }
 ```
+
+Each node includes `safeAreaInsets` and `safeAreaLayoutGuideFrame` alongside the existing `frame` string so layout issues can be traced through the view hierarchy on every platform.
 
 ---
 

@@ -173,8 +173,8 @@ All methods are no-ops when `__DEV__` is false — no production impact.
 | Tool | Description |
 |------|-------------|
 | `get_screen` | Current screen identity, controller chain, confidence score |
-| `get_elements` | All visible interactive elements with id, type, frame, actions |
-| `get_view_tree` | Full view hierarchy with class, frame, properties, accessibility info |
+| `get_elements` | All visible interactive elements with id, type, frame, safe-area data, actions |
+| `get_view_tree` | Full view hierarchy with class, frame, safe-area data, properties, accessibility info |
 | `tap_element` | Tap by element identifier (buttons, cells, controls) |
 | `tap_point` | Tap at screen coordinates |
 | `type_text` | Type text into a field (by element ID or current responder) |
