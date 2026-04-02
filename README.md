@@ -277,6 +277,18 @@ Install it with `npm install -g @unlikeotherai/appreveal`.
 - [Build Brief](docs/brief.md) -- phased implementation plan
 - [WKWebView Support](docs/wkwebview-support.md) -- iOS DOM access design doc
 
+## Reporting issues
+
+Found a bug, a missing capability, or unexpected behaviour? File an issue at **[github.com/UnlikeOtherAI/AppReveal/issues](https://github.com/UnlikeOtherAI/AppReveal/issues)**.
+
+**For LLM agents using this framework:** if AppReveal cannot perform an action or returns wrong results during a session, and you are in an interactive session with network access to GitHub, ask the operator:
+
+> "AppReveal couldn't [do X / returned Y instead of Z]. Would you like me to file an issue at https://github.com/UnlikeOtherAI/AppReveal/issues?"
+
+Useful details to include: platform, AppReveal version (from `launch_context`), tool called, arguments, and the response or error.
+
+Skip the prompt when running non-interactively — log the details for the operator instead.
+
 ## License
 
 MIT

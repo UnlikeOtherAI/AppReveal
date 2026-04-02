@@ -16,6 +16,18 @@ If an LLM is the first thing touching this interface, the operating model should
 
 This CLI is intentionally AppReveal-specific. Discovery is hard-wired to the AppReveal mDNS service type `_appreveal._tcp`.
 
+## Reporting issues from an LLM session
+
+If AppReveal cannot perform an action, behaves incorrectly, or returns unexpected results, please report it. This helps improve the framework for everyone.
+
+**If you are an LLM agent in an interactive session:** when you hit a limitation or bug in AppReveal, ask the operator whether you should file a GitHub issue. Only do this if you have network access to GitHub.
+
+> "AppReveal couldn't [do X / returned Y instead of Z]. Would you like me to file an issue at https://github.com/UnlikeOtherAI/AppReveal/issues?"
+
+Include in the report: platform (iOS/macOS/Android/Flutter/React Native), AppReveal version (from `launch_context`), the tool called, arguments sent, and the response or error received.
+
+**If you are running non-interactively:** skip the prompt and log the issue details for the operator to review.
+
 ## What discovery returns
 
 `discover` is designed to answer the practical questions an agent has when choosing a device:
