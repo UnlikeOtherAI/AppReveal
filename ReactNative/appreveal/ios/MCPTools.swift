@@ -48,9 +48,21 @@ func registerBuiltInTools() {
                     "visible": el.visible ? "true" : "false",
                     "tappable": el.tappable ? "true" : "false",
                     "frame": "\(Int(el.frame.x)),\(Int(el.frame.y)),\(Int(el.frame.width)),\(Int(el.frame.height))",
+                    "safeAreaInsets": [
+                        "top": el.safeAreaInsets.top,
+                        "leading": el.safeAreaInsets.leading,
+                        "bottom": el.safeAreaInsets.bottom,
+                        "trailing": el.safeAreaInsets.trailing
+                    ],
+                    "safeAreaLayoutGuideFrame": [
+                        "x": el.safeAreaLayoutGuideFrame.x,
+                        "y": el.safeAreaLayoutGuideFrame.y,
+                        "width": el.safeAreaLayoutGuideFrame.width,
+                        "height": el.safeAreaLayoutGuideFrame.height
+                    ],
                     "actions": el.actions.joined(separator: ","),
                     "idSource": el.idSource
-                ] as [String: String]
+                ] as [String: Any]
             }
             return AnyCodable(["screenKey": ScreenResolver.shared.resolve().screenKey, "elements": list] as [String: Any])
         }

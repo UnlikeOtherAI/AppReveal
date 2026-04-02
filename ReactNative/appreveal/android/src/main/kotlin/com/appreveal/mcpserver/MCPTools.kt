@@ -63,6 +63,18 @@ internal fun registerBuiltInTools() {
                     addProperty("visible", if (el.visible) "true" else "false")
                     addProperty("tappable", if (el.tappable) "true" else "false")
                     addProperty("frame", "${el.frame.x.toInt()},${el.frame.y.toInt()},${el.frame.width.toInt()},${el.frame.height.toInt()}")
+                    add("safeAreaInsets", JsonObject().apply {
+                        addProperty("top", el.safeAreaInsets.top)
+                        addProperty("leading", el.safeAreaInsets.leading)
+                        addProperty("bottom", el.safeAreaInsets.bottom)
+                        addProperty("trailing", el.safeAreaInsets.trailing)
+                    })
+                    add("safeAreaLayoutGuideFrame", JsonObject().apply {
+                        addProperty("x", el.safeAreaLayoutGuideFrame.x)
+                        addProperty("y", el.safeAreaLayoutGuideFrame.y)
+                        addProperty("width", el.safeAreaLayoutGuideFrame.width)
+                        addProperty("height", el.safeAreaLayoutGuideFrame.height)
+                    })
                     addProperty("actions", el.actions.joinToString(","))
                     addProperty("idSource", el.idSource)
                 })

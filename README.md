@@ -123,8 +123,8 @@ See [React Native guide](ReactNative/README.md) for full setup.
 |------|-------------|
 | `list_windows` | List visible app windows and their IDs |
 | `get_screen` | Current screen identity, controller/activity chain, confidence score |
-| `get_elements` | All visible interactive elements with id, type, frame, actions |
-| `get_view_tree` | Full view hierarchy with class, frame, properties, accessibility info |
+| `get_elements` | All visible interactive elements with id, type, frame, safe-area data, actions |
+| `get_view_tree` | Full view hierarchy with class, frame, safe-area data, properties, accessibility info |
 | `tap_element` | Tap by element identifier (buttons, cells, controls) |
 | `tap_text` | Tap by visible text content (finds text, walks to tappable ancestor) |
 | `tap_point` | Tap at screen coordinates |

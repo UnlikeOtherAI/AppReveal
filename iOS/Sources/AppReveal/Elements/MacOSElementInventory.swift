@@ -179,6 +179,11 @@ final class ElementInventory {
         let finalId = count == 0 ? resolvedId : "\(resolvedId)_\(count)"
 
         let windowFrame = view.convert(view.bounds, to: nil)
+        let layoutGuideFrame = view.convert(view.safeAreaRect, to: nil)
+        let safeAreaInsets = Self.makeSafeAreaInsets(
+            view.safeAreaInsets,
+            layoutDirection: view.userInterfaceLayoutDirection
+        )
 
         return ElementInfo(
             id: finalId,
@@ -188,12 +193,9 @@ final class ElementInventory {
             enabled: (view as? NSControl)?.isEnabled ?? true,
             visible: !view.isHiddenOrHasHiddenAncestor,
             tappable: view is NSControl || view is NSTableView,
-            frame: ElementInfo.ElementFrame(
-                x: windowFrame.origin.x,
-                y: windowFrame.origin.y,
-                width: windowFrame.size.width,
-                height: windowFrame.size.height
-            ),
+            frame: Self.makeFrame(windowFrame),
+            safeAreaInsets: safeAreaInsets,
+            safeAreaLayoutGuideFrame: Self.makeFrame(layoutGuideFrame),
             containerId: containerId,
             actions: availableActions(for: view),
             idSource: idSource
@@ -299,9 +301,17 @@ final class ElementInventory {
         guard depth < maxDepth else { return [] }
 
         let windowFrame = view.convert(view.bounds, to: nil)
+        let layoutGuideFrame = view.convert(view.safeAreaRect, to: nil)
         var node: [String: Any] = [
             "class": String(describing: type(of: view)),
             "frame": "\(Int(windowFrame.origin.x)),\(Int(windowFrame.origin.y)),\(Int(windowFrame.size.width)),\(Int(windowFrame.size.height))",
+            "safeAreaInsets": Self.dictionary(
+                for: Self.makeSafeAreaInsets(
+                    view.safeAreaInsets,
+                    layoutDirection: view.userInterfaceLayoutDirection
+                )
+            ),
+            "safeAreaLayoutGuideFrame": Self.dictionary(for: Self.makeFrame(layoutGuideFrame)),
             "hidden": view.isHidden,
             "alphaValue": view.alphaValue,
             "depth": depth
@@ -367,6 +377,46 @@ final class ElementInventory {
             }
         }
         return nil
+    }
+
+    private static func makeFrame(_ rect: CGRect) -> ElementInfo.ElementFrame {
+        ElementInfo.ElementFrame(
+            x: rect.origin.x,
+            y: rect.origin.y,
+            width: rect.size.width,
+            height: rect.size.height
+        )
+    }
+
+    private static func makeSafeAreaInsets(
+        _ insets: NSEdgeInsets,
+        layoutDirection: NSUserInterfaceLayoutDirection
+    ) -> ElementInfo.ElementInsets {
+        let isRightToLeft = layoutDirection == .rightToLeft
+        return ElementInfo.ElementInsets(
+            top: insets.top,
+            leading: isRightToLeft ? insets.right : insets.left,
+            bottom: insets.bottom,
+            trailing: isRightToLeft ? insets.left : insets.right
+        )
+    }
+
+    private static func dictionary(for frame: ElementInfo.ElementFrame) -> [String: Double] {
+        [
+            "x": frame.x,
+            "y": frame.y,
+            "width": frame.width,
+            "height": frame.height
+        ]
+    }
+
+    private static func dictionary(for insets: ElementInfo.ElementInsets) -> [String: Double] {
+        [
+            "top": insets.top,
+            "leading": insets.leading,
+            "bottom": insets.bottom,
+            "trailing": insets.trailing
+        ]
     }
 }
 

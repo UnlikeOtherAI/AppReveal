@@ -1,5 +1,7 @@
 // Flutter widget tree inspection — element listing and full tree dump.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -107,6 +109,12 @@ class ElementInventory {
 
   /// Get frame string "x,y,width,height" for an element's render box.
   static String? getFrame(Element element) {
+    final rect = getFrameRect(element);
+    if (rect == null) return null;
+    return '${rect.left.round()},${rect.top.round()},${rect.width.round()},${rect.height.round()}';
+  }
+
+  static Rect? getFrameRect(Element element) {
     try {
       final renderObject = element.renderObject;
       if (renderObject is! RenderBox) return null;
@@ -114,10 +122,68 @@ class ElementInventory {
       final offset = renderObject.localToGlobal(Offset.zero);
       final size = renderObject.size;
       if (size.isEmpty) return null;
-      return '${offset.dx.round()},${offset.dy.round()},${size.width.round()},${size.height.round()}';
+      return offset & size;
     } catch (_) {
       return null;
     }
+  }
+
+  static Map<String, double> getSafeAreaInsets(Element element) {
+    final mediaQuery = MediaQuery.maybeOf(element);
+    if (mediaQuery == null) {
+      return {
+        'top': 0,
+        'leading': 0,
+        'bottom': 0,
+        'trailing': 0,
+      };
+    }
+
+    final textDirection = Directionality.maybeOf(element) ?? TextDirection.ltr;
+    final padding = mediaQuery.padding;
+    final isRtl = textDirection == TextDirection.rtl;
+
+    return {
+      'top': padding.top,
+      'leading': isRtl ? padding.right : padding.left,
+      'bottom': padding.bottom,
+      'trailing': isRtl ? padding.left : padding.right,
+    };
+  }
+
+  static Map<String, double>? getSafeAreaLayoutGuideFrame(Element element) {
+    final frameRect = getFrameRect(element);
+    if (frameRect == null) return null;
+
+    final mediaQuery = MediaQuery.maybeOf(element);
+    if (mediaQuery == null) {
+      return {
+        'x': frameRect.left,
+        'y': frameRect.top,
+        'width': frameRect.width,
+        'height': frameRect.height,
+      };
+    }
+
+    final padding = mediaQuery.padding;
+    final safeRect = Rect.fromLTRB(
+      padding.left,
+      padding.top,
+      mediaQuery.size.width - padding.right,
+      mediaQuery.size.height - padding.bottom,
+    );
+    final intersection = safeRect.intersect(frameRect);
+    final x = math.max(frameRect.left, safeRect.left);
+    final y = math.max(frameRect.top, safeRect.top);
+    final width = math.max(0.0, intersection.width);
+    final height = math.max(0.0, intersection.height);
+
+    return {
+      'x': x,
+      'y': y,
+      'width': width,
+      'height': height,
+    };
   }
 
   /// Extract the primary visible text from an element.
@@ -235,6 +301,7 @@ class ElementInventory {
       if (label != null && label.isNotEmpty && !seen.contains(label)) {
         final frame = getFrame(element);
         if (frame != null) {
+          final safeAreaLayoutGuideFrame = getSafeAreaLayoutGuideFrame(element);
           seen.add(label);
           results.add({
             'id': label,
@@ -245,6 +312,8 @@ class ElementInventory {
             'visible': true,
             'tappable': widget.properties.onTap != null,
             'frame': frame,
+            'safeAreaInsets': getSafeAreaInsets(element),
+            'safeAreaLayoutGuideFrame': safeAreaLayoutGuideFrame,
             'actions': widget.properties.onTap != null ? ['tap'] : [],
             'idSource': 'semantics',
           });
@@ -294,6 +363,8 @@ class ElementInventory {
     String? value;
     List<String> actions = [];
     String idSource = 'derived';
+    final safeAreaInsets = getSafeAreaInsets(element);
+    final safeAreaLayoutGuideFrame = getSafeAreaLayoutGuideFrame(element);
 
     // 1. Explicit ValueKey<String>
     final key = widget.key;
@@ -463,6 +534,8 @@ class ElementInventory {
       'visible': true,
       'tappable': tappable,
       'frame': frame,
+      'safeAreaInsets': safeAreaInsets,
+      'safeAreaLayoutGuideFrame': safeAreaLayoutGuideFrame,
       'actions': actions,
       'idSource': idSource,
     };
@@ -485,6 +558,11 @@ class ElementInventory {
 
     final frame = getFrame(element);
     if (frame != null) node['frame'] = frame;
+    node['safeAreaInsets'] = getSafeAreaInsets(element);
+    final safeAreaLayoutGuideFrame = getSafeAreaLayoutGuideFrame(element);
+    if (safeAreaLayoutGuideFrame != null) {
+      node['safeAreaLayoutGuideFrame'] = safeAreaLayoutGuideFrame;
+    }
 
     // Widget-specific properties
     if (widget is Text) {

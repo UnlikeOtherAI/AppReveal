@@ -189,6 +189,11 @@ final class ElementInventory {
         finalId = count == 0 ? resolvedId : "\(resolvedId)_\(count)"
 
         let screenFrame = view.convert(view.bounds, to: nil)
+        let layoutGuideFrame = view.convert(view.safeAreaLayoutGuide.layoutFrame, to: nil)
+        let safeAreaInsets = Self.makeSafeAreaInsets(
+            view.safeAreaInsets,
+            layoutDirection: view.effectiveUserInterfaceLayoutDirection
+        )
 
         return ElementInfo(
             id: finalId,
@@ -198,12 +203,9 @@ final class ElementInventory {
             enabled: view.isUserInteractionEnabled && (view as? UIControl)?.isEnabled ?? true,
             visible: !view.isHidden && view.alpha > 0,
             tappable: view is UIControl || view.gestureRecognizers?.isEmpty == false || view is UITableViewCell || view is UICollectionViewCell,
-            frame: ElementInfo.ElementFrame(
-                x: screenFrame.origin.x,
-                y: screenFrame.origin.y,
-                width: screenFrame.size.width,
-                height: screenFrame.size.height
-            ),
+            frame: Self.makeFrame(screenFrame),
+            safeAreaInsets: safeAreaInsets,
+            safeAreaLayoutGuideFrame: Self.makeFrame(layoutGuideFrame),
             containerId: containerId,
             actions: availableActions(for: view),
             idSource: idSource
@@ -323,9 +325,17 @@ final class ElementInventory {
         guard depth < maxDepth else { return [] }
 
         let screenFrame = view.convert(view.bounds, to: nil)
+        let layoutGuideFrame = view.convert(view.safeAreaLayoutGuide.layoutFrame, to: nil)
         var node: [String: Any] = [
             "class": String(describing: type(of: view)),
             "frame": "\(Int(screenFrame.origin.x)),\(Int(screenFrame.origin.y)),\(Int(screenFrame.size.width)),\(Int(screenFrame.size.height))",
+            "safeAreaInsets": Self.dictionary(
+                for: Self.makeSafeAreaInsets(
+                    view.safeAreaInsets,
+                    layoutDirection: view.effectiveUserInterfaceLayoutDirection
+                )
+            ),
+            "safeAreaLayoutGuideFrame": Self.dictionary(for: Self.makeFrame(layoutGuideFrame)),
             "hidden": view.isHidden,
             "alpha": view.alpha,
             "userInteraction": view.isUserInteractionEnabled,
@@ -395,6 +405,46 @@ final class ElementInventory {
             }
         }
         return nil
+    }
+
+    static func makeFrame(_ rect: CGRect) -> ElementInfo.ElementFrame {
+        ElementInfo.ElementFrame(
+            x: rect.origin.x,
+            y: rect.origin.y,
+            width: rect.size.width,
+            height: rect.size.height
+        )
+    }
+
+    static func makeSafeAreaInsets(
+        _ insets: UIEdgeInsets,
+        layoutDirection: UIUserInterfaceLayoutDirection
+    ) -> ElementInfo.ElementInsets {
+        let isRightToLeft = layoutDirection == .rightToLeft
+        return ElementInfo.ElementInsets(
+            top: insets.top,
+            leading: isRightToLeft ? insets.right : insets.left,
+            bottom: insets.bottom,
+            trailing: isRightToLeft ? insets.left : insets.right
+        )
+    }
+
+    private static func dictionary(for frame: ElementInfo.ElementFrame) -> [String: Double] {
+        [
+            "x": frame.x,
+            "y": frame.y,
+            "width": frame.width,
+            "height": frame.height
+        ]
+    }
+
+    private static func dictionary(for insets: ElementInfo.ElementInsets) -> [String: Double] {
+        [
+            "top": insets.top,
+            "leading": insets.leading,
+            "bottom": insets.bottom,
+            "trailing": insets.trailing
+        ]
     }
 }
 

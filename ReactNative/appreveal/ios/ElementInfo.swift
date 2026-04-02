@@ -31,6 +31,8 @@ public struct ElementInfo: Codable {
     public let visible: Bool
     public let tappable: Bool
     public let frame: ElementFrame
+    public let safeAreaInsets: ElementInsets
+    public let safeAreaLayoutGuideFrame: ElementFrame
     public let containerId: String?
     public let actions: [String]
     /// How the id was derived: "explicit", "text", "semantics", "derived"
@@ -41,5 +43,12 @@ public struct ElementInfo: Codable {
         public let y: Double
         public let width: Double
         public let height: Double
+    }
+
+    public struct ElementInsets: Codable {
+        public let top: Double
+        public let leading: Double
+        public let bottom: Double
+        public let trailing: Double
     }
 }
