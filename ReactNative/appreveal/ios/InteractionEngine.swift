@@ -57,35 +57,39 @@ final class InteractionEngine {
     }
 
     func tap(point: CGPoint) {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else { return }
+        for window in candidateWindows() {
+            let hitView = window.hitTest(point, with: nil)
 
-        let hitView = window.hitTest(point, with: nil)
-
-        // Check if tapping inside a tab bar
-        if let tabBar = findParent(of: hitView, type: UITabBar.self),
-           let tabBarController = findTabBarController() {
-            let localPoint = tabBar.convert(point, from: window)
-            if let items = tabBar.items {
-                let itemWidth = tabBar.bounds.width / CGFloat(items.count)
-                let index = Int(localPoint.x / itemWidth)
-                if index >= 0 && index < items.count {
-                    tabBarController.selectedIndex = index
-                    return
+            // Check if tapping inside a tab bar
+            if let tabBar = findParent(of: hitView, type: UITabBar.self),
+               let tabBarController = findTabBarController() {
+                let localPoint = tabBar.convert(point, from: window)
+                if let items = tabBar.items {
+                    let itemWidth = tabBar.bounds.width / CGFloat(items.count)
+                    let index = Int(localPoint.x / itemWidth)
+                    if index >= 0 && index < items.count {
+                        tabBarController.selectedIndex = index
+                        return
+                    }
                 }
             }
-        }
 
-        if let control = hitView as? UIControl {
-            control.sendActions(for: .touchUpInside)
-        } else {
-            // Try to fire tap gesture recognizers on the view and its ancestors
-            fireTapGestureRecognizers(on: hitView, at: point)
+            if let control = findParent(of: hitView, type: UIControl.self) {
+                control.sendActions(for: .touchUpInside)
+                return
+            }
+
+            if activateAccessibility(on: hitView) {
+                return
+            }
+
+            if fireTapGestureRecognizers(on: hitView, at: point) {
+                return
+            }
         }
     }
 
-    private func fireTapGestureRecognizers(on view: UIView?, at point: CGPoint) {
+    private func fireTapGestureRecognizers(on view: UIView?, at point: CGPoint) -> Bool {
         var current = view
         while let v = current {
             if let recognizers = v.gestureRecognizers {
@@ -100,17 +104,29 @@ final class InteractionEngine {
                             }
                         }
                     }
-                    return
+                    return true
                 }
             }
             current = v.superview
         }
+        return false
+    }
+
+    private func activateAccessibility(on view: UIView?) -> Bool {
+        var current = view
+        while let candidate = current {
+            if candidate.isAccessibilityElement,
+               candidate.accessibilityTraits.contains(.button),
+               candidate.accessibilityActivate() {
+                return true
+            }
+            current = candidate.superview
+        }
+        return false
     }
 
     private func findTabBarController() -> UITabBarController? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let root = scene.keyWindow?.rootViewController else { return nil }
+        guard let root = candidateWindows().compactMap(\.rootViewController).first else { return nil }
         return root as? UITabBarController
     }
 
@@ -121,6 +137,24 @@ final class InteractionEngine {
             current = v.superview
         }
         return nil
+    }
+
+    private func candidateWindows() -> [UIWindow] {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty }
+            .enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.windowLevel != rhs.element.windowLevel {
+                    return lhs.element.windowLevel > rhs.element.windowLevel
+                }
+                if lhs.element.isKeyWindow != rhs.element.isKeyWindow {
+                    return lhs.element.isKeyWindow && !rhs.element.isKeyWindow
+                }
+                return lhs.offset > rhs.offset
+            }
+            .map(\.element)
     }
 
     // MARK: - Text

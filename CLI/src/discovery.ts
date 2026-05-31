@@ -10,6 +10,7 @@ export interface DiscoveryRecord {
   host: string;
   port: number;
   url: string;
+  candidateUrls: string[];
   addresses: string[];
   txt: Record<string, string>;
   bundleId?: string;
@@ -104,6 +105,7 @@ export function matchDiscoveryRecord(record: DiscoveryRecord, selector: string):
     record.url,
     record.bundleId ?? '',
     ...record.addresses,
+    ...record.candidateUrls,
   ]);
 
   for (const candidate of candidates) {
@@ -124,14 +126,15 @@ function toDiscoveryRecord(service: BonjourServiceLike): DiscoveryRecord {
   const host = (service.host ?? service.name ?? 'unknown').replace(/\.$/, '');
   const port = service.port ?? 80;
   const addresses = [...new Set((service.addresses ?? []).filter(Boolean))];
-  const bestHost = selectBestHost(addresses, host);
+  const candidateUrls = buildCandidateUrls(addresses, host, port);
 
   return {
     name: service.name ?? 'unknown',
     fqdn: service.fqdn ?? service.name ?? 'unknown',
     host,
     port,
-    url: `http://${formatHostForUrl(bestHost)}:${port}/`,
+    url: candidateUrls[0] ?? `http://${formatHostForUrl(host)}:${port}/`,
+    candidateUrls,
     addresses,
     txt,
     bundleId: txt.bundleId,
@@ -168,18 +171,29 @@ function compareDiscoveryRecords(left: DiscoveryRecord, right: DiscoveryRecord):
   return left.name.localeCompare(right.name) || left.url.localeCompare(right.url);
 }
 
-function selectBestHost(addresses: string[], fallbackHost: string): string {
-  const ipv4 = addresses.find((address) => isIpv4(address));
-  if (ipv4) {
-    return ipv4;
+export function buildCandidateUrls(addresses: string[], fallbackHost: string, port: number): string[] {
+  const hosts = [
+    ...addresses.filter((address) => isIpv4(address)),
+    ...addresses.filter((address) => isIpv6(address) && !isLinkLocalIpv6(address)),
+    fallbackHost,
+  ];
+
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const host of hosts) {
+    const normalizedHost = host.trim().replace(/\.$/, '');
+    if (normalizedHost === '') {
+      continue;
+    }
+
+    const url = `http://${formatHostForUrl(normalizedHost)}:${port}/`;
+    if (!seen.has(url)) {
+      seen.add(url);
+      urls.push(url);
+    }
   }
 
-  const globalIpv6 = addresses.find((address) => isIpv6(address) && !address.startsWith('fe80:'));
-  if (globalIpv6) {
-    return globalIpv6;
-  }
-
-  return addresses[0] ?? fallbackHost;
+  return urls;
 }
 
 function formatHostForUrl(host: string): string {
@@ -192,4 +206,8 @@ function isIpv4(value: string): boolean {
 
 function isIpv6(value: string): boolean {
   return value.includes(':');
+}
+
+function isLinkLocalIpv6(value: string): boolean {
+  return value.toLowerCase().startsWith('fe80:');
 }

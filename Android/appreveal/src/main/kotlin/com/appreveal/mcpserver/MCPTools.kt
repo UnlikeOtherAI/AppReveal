@@ -168,8 +168,11 @@ internal fun registerBuiltInTools() {
                     required = listOf("x", "y"),
                 ),
             handler = { params ->
-                val x = params?.get("x")?.asFloat ?: 0f
-                val y = params?.get("y")?.asFloat ?: 0f
+                val x = params?.get("x")?.asFloatOrNull()
+                val y = params?.get("y")?.asFloatOrNull()
+                if (x == null || y == null) {
+                    return@MCPToolDefinition errorResult("x and y are required numeric coordinates")
+                }
                 InteractionEngine.tap(x, y)
                 JsonObject().apply {
                     addProperty("success", true)
@@ -1047,6 +1050,8 @@ private fun jsonSchema(): JsonObject =
     }
 
 internal fun JsonElement.asStringOrNull(): String? = if (isJsonPrimitive && asJsonPrimitive.isString) asString else null
+
+internal fun JsonElement.asFloatOrNull(): Float? = if (isJsonPrimitive && asJsonPrimitive.isNumber) asFloat else null
 
 internal fun JsonElement.asIntOrNull(): Int? =
     try {

@@ -655,8 +655,10 @@ private func registerIOSBuiltInTools() {
             "required": AnyCodable(["x", "y"])
         ],
         handler: { params in
-            let x = params?["x"]?.doubleValue ?? 0
-            let y = params?["y"]?.doubleValue ?? 0
+            guard let x = params?["x"]?.doubleValue,
+                  let y = params?["y"]?.doubleValue else {
+                return AnyCodable(["error": "x and y are required numeric coordinates"])
+            }
             let windowId = params?["window_id"]?.stringValue
             InteractionEngine.shared.tap(point: CGPoint(x: x, y: y), windowId: windowId)
             return AnyCodable(["success": true, "x": x, "y": y] as [String: Any])

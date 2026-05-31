@@ -10,7 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  nsd: ^2.0.0
   package_info_plus: ^8.0.0
   url_launcher: ^6.3.0
   webview_flutter: ^4.10.0

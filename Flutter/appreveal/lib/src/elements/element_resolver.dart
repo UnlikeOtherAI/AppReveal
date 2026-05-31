@@ -1,7 +1,6 @@
 // Text-based element resolution and enhanced element lookup.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 
 import 'element_inventory.dart';
 
@@ -16,8 +15,10 @@ class TextResolveResult {
   factory TextResolveResult.success(Element element) =>
       TextResolveResult._(element, null, null);
 
-  factory TextResolveResult.error(String message,
-          {List<Map<String, dynamic>>? candidates}) =>
+  factory TextResolveResult.error(
+    String message, {
+    List<Map<String, dynamic>>? candidates,
+  }) =>
       TextResolveResult._(null, message, candidates);
 
   factory TextResolveResult.ambiguous(List<Map<String, dynamic>> candidates) =>
@@ -42,8 +43,11 @@ class ElementResolver {
   /// 4. Exact visible text on a Text widget → nearest tappable ancestor
   /// 5. Normalized visible text on a Text widget → nearest tappable ancestor
   Element? resolve(String id) {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return null;
+
+    final listedMatch = ElementInventory.shared.findElement(id);
+    if (listedMatch != null) return listedMatch;
 
     final normalizedId = ElementInventory.normalizeToId(id);
     Element? keyMatch;
@@ -109,8 +113,7 @@ class ElementResolver {
 
     walk(root);
     if (keyMatch == null) {
-      for (final entry
-          in ElementInventory.shared.overlayEntryElements(root)) {
+      for (final entry in ElementInventory.shared.overlayEntryElements(root)) {
         walk(entry);
         if (keyMatch != null) break;
       }
@@ -129,7 +132,7 @@ class ElementResolver {
     String matchMode = 'exact',
     int? occurrence,
   }) {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) {
       return TextResolveResult.error('No root element');
     }
@@ -148,12 +151,16 @@ class ElementResolver {
       if (textContent != null && _textMatches(textContent, text, matchMode)) {
         final tappable = findTappableAncestor(element);
         if (tappable != null && tappablesSeen.add(tappable)) {
-          matches.add(_TextMatch(
-            tappableElement: tappable,
-            matchedText: textContent,
-            frame: ElementInventory.getFrame(tappable),
-            type: _widgetTypeName(tappable.widget),
-          ));
+          final elementToTap =
+              _shouldTapTextFrame(tappable.widget) ? element : tappable;
+          matches.add(
+            _TextMatch(
+              tappableElement: elementToTap,
+              matchedText: textContent,
+              frame: ElementInventory.getFrame(elementToTap),
+              type: _widgetTypeName(tappable.widget),
+            ),
+          );
         }
       }
       element.visitChildren(walk);
@@ -235,6 +242,7 @@ class ElementResolver {
 
   /// Whether a widget can actually receive a tap right now.
   static bool _canReceiveTap(Widget w) {
+    if (w is Semantics) return w.properties.onTap != null;
     if (w is ButtonStyleButton) return w.onPressed != null;
     if (w is IconButton) return w.onPressed != null;
     if (w is FloatingActionButton) return w.onPressed != null;
@@ -247,8 +255,10 @@ class ElementResolver {
     if (w is PopupMenuButton) return w.enabled;
     if (w is Checkbox) return w.onChanged != null;
     if (w is Switch) return w.onChanged != null;
+    // ignore: deprecated_member_use
     if (w is Radio) return w.onChanged != null;
     if (w is DropdownButton) return w.onChanged != null;
+    if (_isSegmentedControl(w)) return true;
     return false;
   }
 
@@ -270,6 +280,8 @@ class ElementResolver {
     if (w is IconButton) return w.onPressed != null;
     if (w is FloatingActionButton) return w.onPressed != null;
     if (w is PopupMenuButton) return w.enabled;
+    if (_isSegmentedControl(w)) return true;
+    if (w is Semantics) return w.properties.onTap != null;
     return false;
   }
 
@@ -288,8 +300,22 @@ class ElementResolver {
     if (w is ButtonStyleButton) return 'button';
     if (w is IconButton) return 'iconButton';
     if (w is FloatingActionButton) return 'floatingActionButton';
+    if (_isSegmentedControl(w)) return 'segmentedControl';
+    if (w is Semantics) return 'semantic';
     if (w is GestureDetector || w is InkWell) return 'tappable';
     return 'view';
+  }
+
+  static bool _shouldTapTextFrame(Widget widget) {
+    return _isSegmentedControl(widget);
+  }
+
+  static bool _isSegmentedControl(Widget widget) {
+    final typeName = widget.runtimeType.toString();
+    return widget is SegmentedButton ||
+        widget is ToggleButtons ||
+        typeName.contains('SegmentedControl') ||
+        typeName.contains('SegmentedButton');
   }
 
   bool _hasTextAnywhere(Element root, String text, String matchMode) {
@@ -307,6 +333,7 @@ class ElementResolver {
       }
       el.visitChildren(walk);
     }
+
     walk(root);
     return found;
   }

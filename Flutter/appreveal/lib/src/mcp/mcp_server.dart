@@ -9,7 +9,7 @@ class MCPServer {
   HttpServer? _server;
 
   Future<void> start({int port = 0}) async {
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
     // ignore: avoid_print
     print('[AppReveal] MCP server started on port ${_server!.port}');
     _serve();
@@ -46,11 +46,13 @@ class MCPServer {
       request.response.write(jsonEncode(response));
     } catch (e) {
       request.response.statusCode = 400;
-      request.response.write(jsonEncode({
-        'jsonrpc': '2.0',
-        'id': null,
-        'error': {'code': -32700, 'message': 'Parse error: $e'},
-      }));
+      request.response.write(
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'id': null,
+          'error': {'code': -32700, 'message': 'Parse error: $e'},
+        }),
+      );
     }
 
     await request.response.close();

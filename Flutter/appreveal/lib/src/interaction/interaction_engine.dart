@@ -1,13 +1,10 @@
 // All native Flutter interaction dispatch — taps, text, scroll, navigation.
 
 import 'dart:async';
-import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../elements/element_inventory.dart';
@@ -127,7 +124,8 @@ class InteractionEngine {
     final current = controller.text;
     final sel = controller.selection;
     final insertAt = sel.isValid ? sel.end : current.length;
-    final newText = current.substring(0, insertAt) + text + current.substring(insertAt);
+    final newText =
+        current.substring(0, insertAt) + text + current.substring(insertAt);
     controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: insertAt + text.length),
@@ -169,7 +167,7 @@ class InteractionEngine {
   // ─── Scroll ──────────────────────────────────────────────────────────────
 
   Future<void> scroll({required String direction, String? containerId}) async {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) throw Exception('No root element');
 
     final scrollState = _findScrollableState(root, containerId);
@@ -225,7 +223,7 @@ class InteractionEngine {
   }
 
   Future<void> selectTab({required int index}) async {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) throw Exception('No root element');
 
     // Find BottomNavigationBar
@@ -246,11 +244,15 @@ class InteractionEngine {
         // Get the number of items
         int itemCount = 2;
         if (tabBarElement!.widget is BottomNavigationBar) {
-          itemCount = (tabBarElement!.widget as BottomNavigationBar).items.length;
+          itemCount =
+              (tabBarElement!.widget as BottomNavigationBar).items.length;
         } else if (tabBarElement!.widget is NavigationBar) {
-          itemCount = (tabBarElement!.widget as NavigationBar).destinations.length;
+          itemCount =
+              (tabBarElement!.widget as NavigationBar).destinations.length;
         }
-        if (index >= itemCount) throw Exception('Tab index $index out of range (0-${itemCount - 1})');
+        if (index >= itemCount) {
+          throw Exception('Tab index $index out of range (0-${itemCount - 1})');
+        }
         final offset = renderBox.localToGlobal(Offset.zero);
         final itemWidth = size.width / itemCount;
         final tapX = offset.dx + itemWidth * index + itemWidth / 2;
@@ -276,7 +278,10 @@ class InteractionEngine {
       if (renderBox != null && renderBox.attached) {
         final size = renderBox.size;
         final tabs = (flutterTabBar!.widget as TabBar).tabs;
-        if (index >= tabs.length) throw Exception('Tab index $index out of range (0-${tabs.length - 1})');
+        if (index >= tabs.length) {
+          throw Exception(
+              'Tab index $index out of range (0-${tabs.length - 1})');
+        }
         final offset = renderBox.localToGlobal(Offset.zero);
         final itemWidth = size.width / tabs.length;
         final tapX = offset.dx + itemWidth * index + itemWidth / 2;
@@ -305,14 +310,15 @@ class InteractionEngine {
       if (renderObject is! RenderBox) return null;
       if (!renderObject.attached) return null;
       final size = renderObject.size;
-      return renderObject.localToGlobal(Offset(size.width / 2, size.height / 2));
+      return renderObject
+          .localToGlobal(Offset(size.width / 2, size.height / 2));
     } catch (_) {
       return null;
     }
   }
 
   EditableTextState? _findFocusedEditableText() {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return null;
     EditableTextState? found;
     _visitElements(root, (el) {

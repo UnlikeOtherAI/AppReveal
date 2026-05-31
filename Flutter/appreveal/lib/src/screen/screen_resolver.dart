@@ -134,7 +134,7 @@ class ScreenResolver {
 
   ScreenIdentifiable? _findScreenIdentifiable() {
     ScreenIdentifiable? found;
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return null;
     _visitElements(root, (element) {
       if (found != null) return false;
@@ -149,7 +149,7 @@ class ScreenResolver {
 
   /// Extract the title text from the topmost visible AppBar.
   String? _extractAppBarTitle() {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return null;
 
     String? title;
@@ -189,12 +189,10 @@ class ScreenResolver {
   static (String, String) _deriveFromRoute(String routeName) {
     if (routeName == '/' || routeName.isEmpty) return ('home', 'Home');
     // '/auth/login' → 'auth.login', 'Login'
-    final segments =
-        routeName.split('/').where((s) => s.isNotEmpty).toList();
+    final segments = routeName.split('/').where((s) => s.isNotEmpty).toList();
     if (segments.isEmpty) return ('home', 'Home');
     final key = segments.join('.');
-    final title =
-        _capitalize(segments.last.replaceAll(RegExp(r'[-_]'), ' '));
+    final title = _capitalize(segments.last.replaceAll(RegExp(r'[-_]'), ' '));
     return (key, title);
   }
 

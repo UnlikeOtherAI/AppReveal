@@ -2,9 +2,8 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/widgets.dart';
 
 class ElementInventory {
   static final shared = ElementInventory._();
@@ -42,7 +41,7 @@ class ElementInventory {
 
   /// List all interactive/identified elements on the current screen.
   List<Map<String, dynamic>> listElements() {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return [];
 
     final results = <Map<String, dynamic>>[];
@@ -59,7 +58,7 @@ class ElementInventory {
 
   /// Full widget tree dump for get_view_tree.
   List<Map<String, dynamic>> dumpWidgetTree({int maxDepth = 50}) {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return [];
     final nodes = <Map<String, dynamic>>[];
     final visited = <Element>{};
@@ -75,14 +74,15 @@ class ElementInventory {
   /// Find an element by ValueKey<String> or semantic label.
   /// For enhanced resolution (text matching, derived IDs), use ElementResolver.
   Element? findElement(String id) {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return null;
     final visited = <Element>{};
-    final found = _findById(root, id, visited);
+    final seen = <String>{};
+    final found = _findByListedId(root, id, visited, seen);
     if (found != null) return found;
 
     for (final entry in overlayEntryElements(root)) {
-      final result = _findById(entry, id, visited);
+      final result = _findByListedId(entry, id, visited, seen);
       if (result != null) return result;
     }
 
@@ -103,6 +103,7 @@ class ElementInventory {
       }
       el.visitChildren(walk);
     }
+
     walk(root);
     return entries;
   }
@@ -131,12 +132,7 @@ class ElementInventory {
   static Map<String, double> getSafeAreaInsets(Element element) {
     final mediaQuery = MediaQuery.maybeOf(element);
     if (mediaQuery == null) {
-      return {
-        'top': 0,
-        'leading': 0,
-        'bottom': 0,
-        'trailing': 0,
-      };
+      return {'top': 0, 'leading': 0, 'bottom': 0, 'trailing': 0};
     }
 
     final textDirection = Directionality.maybeOf(element) ?? TextDirection.ltr;
@@ -178,12 +174,7 @@ class ElementInventory {
     final width = math.max(0.0, intersection.width);
     final height = math.max(0.0, intersection.height);
 
-    return {
-      'x': x,
-      'y': y,
-      'width': width,
-      'height': height,
-    };
+    return {'x': x, 'y': y, 'width': width, 'height': height};
   }
 
   /// Extract the primary visible text from an element.
@@ -218,6 +209,7 @@ class ElementInventory {
       }
       el.visitChildren(walk);
     }
+
     element.visitChildren(walk);
     return result;
   }
@@ -272,7 +264,8 @@ class ElementInventory {
           info['idSource'] != 'explicit' &&
           _hasLogicalTappableAncestor(element)) {
         element.visitChildren(
-            (child) => _collectElements(child, results, seen, visited));
+          (child) => _collectElements(child, results, seen, visited),
+        );
         return;
       }
 
@@ -322,7 +315,8 @@ class ElementInventory {
     }
 
     element.visitChildren(
-        (child) => _collectElements(child, results, seen, visited));
+      (child) => _collectElements(child, results, seen, visited),
+    );
   }
 
   /// Check if an InkWell/GestureDetector is inside a logical tappable parent.
@@ -433,6 +427,7 @@ class ElementInventory {
     } else if (widget is Radio) {
       type = 'radio';
       tappable = true;
+      // ignore: deprecated_member_use
       enabled = widget.onChanged != null;
       actions = ['tap'];
     } else if (widget is DropdownButton) {
@@ -481,6 +476,11 @@ class ElementInventory {
       enabled = widget.enabled;
       actions = ['tap'];
       label = widget.tooltip;
+    } else if (_isSegmentedControl(widget)) {
+      type = 'segmentedControl';
+      tappable = true;
+      actions = ['tap'];
+      label = extractFirstText(element);
     } else if (widget is BottomNavigationBar) {
       type = 'tabBar';
       actions = ['selectTab'];
@@ -541,8 +541,13 @@ class ElementInventory {
     };
   }
 
-  void _dumpElement(Element element, int depth, int maxDepth,
-      List<Map<String, dynamic>> nodes, Set<Element> visited) {
+  void _dumpElement(
+    Element element,
+    int depth,
+    int maxDepth,
+    List<Map<String, dynamic>> nodes,
+    Set<Element> visited,
+  ) {
     if (depth > maxDepth) return;
     if (!visited.add(element)) return;
 
@@ -585,21 +590,59 @@ class ElementInventory {
 
     nodes.add(node);
     element.visitChildren(
-        (child) => _dumpElement(child, depth + 1, maxDepth, nodes, visited));
+      (child) => _dumpElement(child, depth + 1, maxDepth, nodes, visited),
+    );
   }
 
-  Element? _findById(Element element, String id, Set<Element> visited) {
+  static bool _isSegmentedControl(Widget widget) {
+    final typeName = widget.runtimeType.toString();
+    return widget is CupertinoSegmentedControl ||
+        widget is CupertinoSlidingSegmentedControl ||
+        widget is SegmentedButton ||
+        widget is ToggleButtons ||
+        typeName.contains('SegmentedControl') ||
+        typeName.contains('SegmentedButton');
+  }
+
+  Element? _findByListedId(
+    Element element,
+    String id,
+    Set<Element> visited,
+    Set<String> seen,
+  ) {
     if (!visited.add(element)) return null;
+
+    final info = _describeInteractive(element);
+    if (info != null) {
+      final resolvedId = _dedupeListedId(info['id'] as String, seen);
+      if (resolvedId == id) return element;
+    }
+
     final key = element.widget.key;
     if (key is ValueKey<String> && key.value == id) return element;
+
     if (element.widget is Semantics) {
       final label = (element.widget as Semantics).properties.label;
       if (label == id) return element;
     }
+
     Element? found;
     element.visitChildren((child) {
-      if (found == null) found = _findById(child, id, visited);
+      found ??= _findByListedId(child, id, visited, seen);
     });
     return found;
+  }
+
+  String _dedupeListedId(String id, Set<String> seen) {
+    if (seen.add(id)) return id;
+
+    for (var i = 1; i < 100; i++) {
+      final candidate = '${id}_$i';
+      if (seen.add(candidate)) {
+        return candidate;
+      }
+    }
+
+    return id;
   }
 }

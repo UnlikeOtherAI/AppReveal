@@ -18,9 +18,14 @@ class ScreenshotCapture {
     // Try the explicit key first
     RenderRepaintBoundary? boundary = _boundaryFromKey();
     // Fall back to finding the first repaint boundary in the tree
-    boundary ??= _findRepaintBoundary(WidgetsBinding.instance.renderView);
+    boundary ??= _findRepaintBoundary(
+      RendererBinding.instance.rootPipelineOwner.rootNode,
+    );
     if (boundary == null) {
-      return {'error': 'No repaint boundary found. Wrap your app with AppReveal.wrap(MyApp())'};
+      return {
+        'error':
+            'No repaint boundary found. Wrap your app with AppReveal.wrap(MyApp())'
+      };
     }
     return _capture(boundary, format: format);
   }
@@ -29,7 +34,7 @@ class ScreenshotCapture {
     required String elementId,
     String format = 'png',
   }) async {
-    final root = WidgetsBinding.instance.renderViewElement;
+    final root = WidgetsBinding.instance.rootElement;
     if (root == null) return {'error': 'No root element'};
 
     Element? target;
@@ -46,7 +51,9 @@ class ScreenshotCapture {
     if (target == null) return {'error': 'Element not found: $elementId'};
 
     final renderObject = target!.renderObject;
-    if (renderObject is! RenderBox) return {'error': 'Element has no render box'};
+    if (renderObject is! RenderBox) {
+      return {'error': 'Element has no render box'};
+    }
 
     final boundary = _findRepaintBoundary(renderObject);
     if (boundary == null) return {'error': 'No repaint boundary for element'};
@@ -67,7 +74,7 @@ class ScreenshotCapture {
     if (obj is RenderRepaintBoundary) return obj;
     RenderRepaintBoundary? found;
     obj.visitChildren((child) {
-      if (found == null) found = _findRepaintBoundary(child);
+      found ??= _findRepaintBoundary(child);
     });
     return found;
   }
@@ -79,7 +86,9 @@ class ScreenshotCapture {
     try {
       final image = await boundary.toImage(pixelRatio: 2.0);
       final byteData = await image.toByteData(
-        format: format == 'jpeg' ? ui.ImageByteFormat.rawRgba : ui.ImageByteFormat.png,
+        format: format == 'jpeg'
+            ? ui.ImageByteFormat.rawRgba
+            : ui.ImageByteFormat.png,
       );
       if (byteData == null) return {'error': 'Failed to encode image'};
       final base64Image = base64Encode(byteData.buffer.asUint8List());

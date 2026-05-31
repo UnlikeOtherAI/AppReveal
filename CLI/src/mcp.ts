@@ -4,6 +4,7 @@ export interface RequestOptions {
   method: string;
   params?: Record<string, unknown>;
   id?: string | number;
+  timeoutMs?: number;
 }
 
 export interface ToolCallResult {
@@ -57,6 +58,8 @@ export interface ResolveTargetsOptions {
 }
 
 let nextRequestId = 1;
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+const DISCOVERY_PROBE_TIMEOUT_MS = 2_500;
 
 export async function resolveTarget(selector: string, options: ResolveTargetOptions): Promise<ResolvedTarget> {
   const resolved = await resolveTargets({
@@ -167,11 +170,12 @@ export async function inspectTarget(
 export async function probeDiscoveryRecords(records: DiscoveryRecord[]): Promise<DiscoveryRecord[]> {
   return await Promise.all(records.map(async (record) => {
     try {
-      const launchContext = await callTool(record.url, 'launch_context');
+      const { url, launchContext } = await probeDiscoveryRecord(record);
       const decoded = plainObjectFromUnknown(launchContext.decoded);
 
       return {
         ...record,
+        url,
         launchContext: decoded,
         deviceName: stringFromKnownKey(decoded, ['deviceName']),
         appName: stringFromKnownKey(decoded, ['appName']),
@@ -224,12 +228,13 @@ export async function callTool(
   targetUrl: string,
   toolName: string,
   argumentsObject: Record<string, unknown> = {},
+  options: { timeoutMs?: number } = {},
 ): Promise<ToolCallResult> {
   const request = buildRequest('tools/call', {
     name: toolName,
     arguments: argumentsObject,
   });
-  const response = await postRequest(targetUrl, request);
+  const response = await postRequest(targetUrl, request, options);
 
   return {
     request,
@@ -239,7 +244,9 @@ export async function callTool(
 }
 
 export async function sendRequest(targetUrl: string, options: RequestOptions): Promise<JsonRpcResponse> {
-  return await postRequest(targetUrl, buildRequest(options.method, options.params, options.id));
+  return await postRequest(targetUrl, buildRequest(options.method, options.params, options.id), {
+    timeoutMs: options.timeoutMs,
+  });
 }
 
 export function buildArguments(
@@ -321,27 +328,77 @@ function buildRequest(
   };
 }
 
-async function postRequest(targetUrl: string, payload: JsonRpcRequest): Promise<JsonRpcResponse> {
-  const response = await fetch(normalizeUrl(targetUrl), {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(15_000),
-  });
+async function probeDiscoveryRecord(
+  record: DiscoveryRecord,
+): Promise<{ url: string; launchContext: ToolCallResult }> {
+  const urls = record.candidateUrls.length > 0 ? record.candidateUrls : [record.url];
+  const attempts = urls.map(async (url) => ({
+    url,
+    launchContext: await callTool(url, 'launch_context', {}, { timeoutMs: DISCOVERY_PROBE_TIMEOUT_MS }),
+  }));
+
+  return await Promise.any(attempts);
+}
+
+async function postRequest(
+  targetUrl: string,
+  payload: JsonRpcRequest,
+  options: { timeoutMs?: number } = {},
+): Promise<JsonRpcResponse> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  let response: Response;
+  try {
+    response = await fetch(normalizeUrl(targetUrl), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw new Error(describeFetchFailure(error, targetUrl, payload.method, timeoutMs));
+  }
 
   const responseText = await response.text();
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} from ${targetUrl}: ${responseText}`);
   }
 
-  const json = JSON.parse(responseText) as JsonRpcResponse;
+  let json: JsonRpcResponse;
+  try {
+    json = JSON.parse(responseText) as JsonRpcResponse;
+  } catch {
+    const preview = responseText.length > 160 ? `${responseText.slice(0, 160)}...` : responseText;
+    throw new Error(`Invalid JSON from ${targetUrl} for ${payload.method}: ${preview}`);
+  }
   if (json.error) {
     throw new Error(`MCP error ${json.error.code}: ${json.error.message}`);
   }
 
   return json;
+}
+
+function describeFetchFailure(
+  error: unknown,
+  targetUrl: string,
+  method: string,
+  timeoutMs: number,
+): string {
+  if (error instanceof Error && error.name === 'TimeoutError') {
+    return `Timed out after ${timeoutMs}ms calling ${method} on ${targetUrl}`;
+  }
+
+  if (error instanceof Error && error.name === 'AbortError') {
+    return `Aborted after ${timeoutMs}ms calling ${method} on ${targetUrl}`;
+  }
+
+  if (error instanceof Error) {
+    const cause = error.cause instanceof Error ? `: ${error.cause.message}` : '';
+    return `Fetch failed calling ${method} on ${targetUrl}: ${error.message}${cause}`;
+  }
+
+  return `Fetch failed calling ${method} on ${targetUrl}: ${String(error)}`;
 }
 
 function decodeToolResult(result: unknown): unknown {

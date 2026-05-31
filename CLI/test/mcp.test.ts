@@ -1,11 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractCodes, normalizeUrl } from '../src/discovery.js';
+import { buildCandidateUrls, extractCodes, normalizeUrl } from '../src/discovery.js';
 import { buildArguments, parseJsonObject, parseLooseValue } from '../src/mcp.js';
 
 test('normalizeUrl keeps explicit urls and appends trailing slash', () => {
   assert.equal(normalizeUrl('http://192.168.1.24:49152'), 'http://192.168.1.24:49152/');
   assert.equal(normalizeUrl('https://example.local/path'), 'https://example.local/path');
+});
+
+test('buildCandidateUrls keeps alternate discovery addresses in reachability order', () => {
+  assert.deepEqual(
+    buildCandidateUrls(['fe80::1', '192.168.1.24', '2a00::abcd'], 'dictator.local', 49152),
+    [
+      'http://192.168.1.24:49152/',
+      'http://[2a00::abcd]:49152/',
+      'http://dictator.local:49152/',
+    ],
+  );
 });
 
 test('extractCodes keeps code-like txt fields and probe version codes', () => {
