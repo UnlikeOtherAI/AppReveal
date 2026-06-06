@@ -30,7 +30,7 @@ private final class AppRevealCaptureProtocol: URLProtocol, URLSessionDataDelegat
     private var responseBodySize = 0
     private var redirectCount = 0
 
-    override class func canInit(with request: URLRequest) -> Bool {
+    override static func canInit(with request: URLRequest) -> Bool {
         guard URLProtocol.property(forKey: handledKey, in: request) == nil else {
             return false
         }
@@ -42,7 +42,7 @@ private final class AppRevealCaptureProtocol: URLProtocol, URLSessionDataDelegat
         return scheme == "http" || scheme == "https"
     }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
         request
     }
 
