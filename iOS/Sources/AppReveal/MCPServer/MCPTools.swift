@@ -620,11 +620,11 @@ private func registerIOSBuiltInTools() {
             let occurrence = params?["occurrence"]?.intValue ?? -1
             let windowId = params?["window_id"]?.stringValue
 
-            let result = ElementInventory.shared.findElementByText(
+            let result = ElementInventory.shared.findTapTargetByText(
                 text, matchMode: matchMode, occurrence: occurrence, windowId: windowId
             )
 
-            guard result.isSuccess, let view = result.view else {
+            guard result.isSuccess, let target = result.target else {
                 var response: [String: Any] = ["error": result.error ?? "Unknown error"]
                 if let candidates = result.candidates {
                     response["candidates"] = candidates
@@ -633,9 +633,13 @@ private func registerIOSBuiltInTools() {
                 return AnyCodable(response)
             }
 
-            // Tap the resolved view
-            let center = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
-            InteractionEngine.shared.tap(point: center, windowId: windowId)
+            switch target {
+            case .view(let view):
+                let center = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+                InteractionEngine.shared.tap(point: center, windowId: windowId)
+            case .accessibility(let accessibilityTarget):
+                InteractionEngine.shared.tap(point: accessibilityTarget.centerPoint, windowId: windowId)
+            }
             return AnyCodable(["success": true, "text": text] as [String: Any])
         }
     ))

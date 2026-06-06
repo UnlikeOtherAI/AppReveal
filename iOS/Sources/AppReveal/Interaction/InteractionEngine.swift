@@ -36,6 +36,9 @@ enum InteractionError: LocalizedError {
 
 import UIKit
 
+private let appRevealTapPointNotificationName = Notification.Name("appreveal.interaction.tap_point")
+private let appRevealTapPointUserInfoKey = "point"
+
 @MainActor
 final class InteractionEngine {
 
@@ -46,28 +49,12 @@ final class InteractionEngine {
     // MARK: - Tap
 
     func tap(elementId: String, windowId: String? = nil) throws {
-        guard let view = ElementInventory.shared.findElement(byId: elementId, windowId: windowId) else {
+        guard let target = ElementInventory.shared.findTapTarget(byId: elementId, windowId: windowId) else {
             throw InteractionError.elementNotFound(elementId)
         }
 
-        if let button = view as? UIButton {
-            button.sendActions(for: .touchUpInside)
-        } else if let control = view as? UIControl {
-            control.sendActions(for: .touchUpInside)
-        } else if let cell = view as? UITableViewCell,
-                  let tableView = findParentTableView(of: view),
-                  let indexPath = tableView.indexPath(for: cell) {
-            tableView.selectRow(at: indexPath, animated: false, scrollPosition: .none)
-            tableView.delegate?.tableView?(tableView, didSelectRowAt: indexPath)
-        } else if let cell = view as? UICollectionViewCell,
-                  let collectionView = findParentCollectionView(of: view),
-                  let indexPath = collectionView.indexPath(for: cell) {
-            collectionView.selectItem(at: indexPath, animated: false, scrollPosition: [])
-            collectionView.delegate?.collectionView?(collectionView, didSelectItemAt: indexPath)
-        } else {
-            // Simulate tap via gesture recognizers
-            let center = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
-            tap(point: center, windowId: windowId)
+        if !performTap(on: target, windowId: windowId) {
+            throw InteractionError.elementNotFound(elementId)
         }
     }
 
@@ -90,6 +77,8 @@ final class InteractionEngine {
     }
 
     func tap(point: CGPoint, windowId: String? = nil) {
+        postTapPoint(point)
+
         for ref in candidateWindows(windowId: windowId) {
             let window = ref.nativeWindow
             let hitView = window.hitTest(point, with: nil)
@@ -108,19 +97,23 @@ final class InteractionEngine {
                 }
             }
 
-            if let control = findParent(of: hitView, type: UIControl.self) {
-                control.sendActions(for: .touchUpInside)
+            if let hitView, performTap(on: .view(hitView), windowId: ref.id, postPoint: false) {
                 return
             }
 
-            if activateAccessibility(on: hitView) {
-                return
-            }
-
-            if fireTapGestureRecognizers(on: hitView, at: point) {
+            if let accessibilityTarget = AccessibilityElementInventory.shared.findElement(at: point, in: window),
+               performTap(on: .accessibility(accessibilityTarget), windowId: ref.id, postPoint: false) {
                 return
             }
         }
+    }
+
+    private func postTapPoint(_ point: CGPoint) {
+        NotificationCenter.default.post(
+            name: appRevealTapPointNotificationName,
+            object: nil,
+            userInfo: [appRevealTapPointUserInfoKey: NSValue(cgPoint: point)]
+        )
     }
 
     private func fireTapGestureRecognizers(on view: UIView?, at point: CGPoint) -> Bool {
@@ -148,19 +141,6 @@ final class InteractionEngine {
         return false
     }
 
-    private func activateAccessibility(on view: UIView?) -> Bool {
-        var current = view
-        while let candidate = current {
-            if candidate.isAccessibilityElement,
-               candidate.accessibilityTraits.contains(.button),
-               candidate.accessibilityActivate() {
-                return true
-            }
-            current = candidate.superview
-        }
-        return false
-    }
-
     private func findTabBarController(windowId: String? = nil) -> UITabBarController? {
         guard let ref = platformWindowProvider.resolve(windowId: windowId),
               let root = ref.rootViewController else { return nil }
@@ -176,39 +156,75 @@ final class InteractionEngine {
         return nil
     }
 
-    private func candidateWindows(windowId: String?) -> [WindowRef] {
-        if let windowId {
-            return platformWindowProvider.window(id: windowId).map { [$0] } ?? []
+    private func performTap(
+        on target: TapTarget,
+        windowId: String?,
+        postPoint: Bool = true
+    ) -> Bool {
+        switch target {
+        case .view(let view):
+            let point = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+            if postPoint {
+                postTapPoint(point)
+            }
+            return performTap(onView: view, at: point)
+        case .accessibility(let accessibilityTarget):
+            if postPoint {
+                postTapPoint(accessibilityTarget.centerPoint)
+            }
+            if accessibilityTarget.activate() {
+                return true
+            }
+            guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
+                return false
+            }
+            let hitView = ref.nativeWindow.hitTest(accessibilityTarget.centerPoint, with: nil)
+            return performTap(onView: hitView, at: accessibilityTarget.centerPoint)
+        }
+    }
+
+    private func performTap(onView view: UIView?, at point: CGPoint) -> Bool {
+        guard let view else { return false }
+
+        if let control = findAncestorControl(from: view) {
+            control.sendActions(for: .touchUpInside)
+            return true
         }
 
-        return platformWindowProvider.allWindows()
-            .filter { !$0.frame.isEmpty && $0.nativeWindow.alpha > 0 }
-            .enumerated()
-            .sorted { lhs, rhs in
-                if lhs.element.nativeWindow.windowLevel != rhs.element.nativeWindow.windowLevel {
-                    return lhs.element.nativeWindow.windowLevel > rhs.element.nativeWindow.windowLevel
-                }
-                if lhs.element.isKey != rhs.element.isKey {
-                    return lhs.element.isKey && !rhs.element.isKey
-                }
-                return lhs.offset > rhs.offset
+        if let cell = findParent(of: view, type: UITableViewCell.self),
+           let tableView = findParentTableView(of: cell),
+           let indexPath = tableView.indexPath(for: cell) {
+            tableView.selectRow(at: indexPath, animated: false, scrollPosition: .none)
+            tableView.delegate?.tableView?(tableView, didSelectRowAt: indexPath)
+            return true
+        }
+
+        if let cell = findParent(of: view, type: UICollectionViewCell.self),
+           let collectionView = findParentCollectionView(of: cell),
+           let indexPath = collectionView.indexPath(for: cell) {
+            collectionView.selectItem(at: indexPath, animated: false, scrollPosition: [])
+            collectionView.delegate?.collectionView?(collectionView, didSelectItemAt: indexPath)
+            return true
+        }
+
+        return fireTapGestureRecognizers(on: view, at: point)
+    }
+
+    private func findAncestorControl(from view: UIView) -> UIControl? {
+        var current: UIView? = view
+        while let candidate = current {
+            if let control = candidate as? UIControl {
+                return control
             }
-            .map(\.element)
+            current = candidate.superview
+        }
+        return nil
     }
 
     // MARK: - Text
 
     func type(text: String, elementId: String?, windowId: String? = nil) throws {
-        let target: UIView?
-
-        if let id = elementId {
-            target = ElementInventory.shared.findElement(byId: id, windowId: windowId)
-            guard target != nil else {
-                throw InteractionError.elementNotFound(id)
-            }
-        } else {
-            target = UIResponder.currentFirstResponder as? UIView
-        }
+        let target = try resolveEditableTarget(elementId: elementId, windowId: windowId)
 
         if let textField = target as? UITextField {
             textField.becomeFirstResponder()
@@ -222,9 +238,7 @@ final class InteractionEngine {
     }
 
     func clear(elementId: String, windowId: String? = nil) throws {
-        guard let view = ElementInventory.shared.findElement(byId: elementId, windowId: windowId) else {
-            throw InteractionError.elementNotFound(elementId)
-        }
+        let view = try resolveEditableTarget(elementId: elementId, windowId: windowId)
 
         if let textField = view as? UITextField {
             textField.text = ""
@@ -312,6 +326,10 @@ final class InteractionEngine {
 
         let topVC = findTopPresented(from: rootVC)
         guard topVC.presentingViewController != nil else {
+            if let fallbackModal = findVisiblePresentedControllers(from: rootVC).last {
+                fallbackModal.dismiss(animated: true)
+                return
+            }
             throw InteractionError.noModal
         }
         topVC.dismiss(animated: true)
@@ -357,6 +375,132 @@ final class InteractionEngine {
             return findTopPresented(from: presented)
         }
         return vc
+    }
+
+    private func findVisiblePresentedControllers(from root: UIViewController) -> [UIViewController] {
+        var results: [UIViewController] = []
+        var visited: Set<ObjectIdentifier> = []
+
+        func walk(_ vc: UIViewController) {
+            let identifier = ObjectIdentifier(vc)
+            guard visited.insert(identifier).inserted else { return }
+
+            if vc !== root,
+               vc.viewIfLoaded?.window != nil,
+               vc.presentingViewController != nil || vc.presentationController?.presentingViewController != nil {
+                results.append(vc)
+            }
+
+            if let presented = vc.presentedViewController {
+                walk(presented)
+            }
+            if let nav = vc as? UINavigationController, let visible = nav.visibleViewController {
+                walk(visible)
+            }
+            if let tab = vc as? UITabBarController, let selected = tab.selectedViewController {
+                walk(selected)
+            }
+            for child in vc.children {
+                walk(child)
+            }
+        }
+
+        walk(root)
+        return results
+    }
+
+    private func resolveEditableTarget(elementId: String?, windowId: String?) throws -> UIView {
+        if let elementId {
+            if let view = editableView(forElementId: elementId, windowId: windowId) {
+                return view
+            }
+            throw InteractionError.elementNotFound(elementId)
+        }
+
+        if let responder = currentEditableResponder(windowId: windowId) {
+            return responder
+        }
+
+        throw InteractionError.notEditable("current responder")
+    }
+
+    private func editableView(forElementId elementId: String, windowId: String?) -> UIView? {
+        if let view = ElementInventory.shared.findElement(byId: elementId, windowId: windowId),
+           let editable = editableAncestor(for: view) {
+            return editable
+        }
+
+        guard let target = ElementInventory.shared.findTapTarget(byId: elementId, windowId: windowId) else {
+            return nil
+        }
+
+        switch target {
+        case .view(let view):
+            return editableAncestor(for: view)
+        case .accessibility(let accessibilityTarget):
+            if let hitView = hitView(at: accessibilityTarget.centerPoint, windowId: windowId, preferredWindow: accessibilityTarget.containerView.window) {
+                return editableAncestor(for: hitView)
+            }
+            return nil
+        }
+    }
+
+    private func currentEditableResponder(windowId: String?) -> UIView? {
+        if let responder = UIResponder.currentFirstResponder as? UIView,
+           let editable = editableAncestor(for: responder) {
+            return editable
+        }
+
+        for ref in candidateWindows(windowId: windowId) {
+            if let responder = firstResponder(in: ref.nativeWindow),
+               let editable = editableAncestor(for: responder) {
+                return editable
+            }
+        }
+
+        return nil
+    }
+
+    private func hitView(at point: CGPoint, windowId: String?, preferredWindow: UIWindow?) -> UIView? {
+        if let preferredWindow,
+           let hitView = preferredWindow.hitTest(point, with: nil) {
+            return hitView
+        }
+
+        for ref in candidateWindows(windowId: windowId) {
+            if let hitView = ref.nativeWindow.hitTest(point, with: nil) {
+                return hitView
+            }
+        }
+
+        return nil
+    }
+
+    private func editableAncestor(for view: UIView?) -> UIView? {
+        var current = view
+        while let candidate = current {
+            if candidate is UITextField || candidate is UITextView {
+                return candidate
+            }
+            current = candidate.superview
+        }
+        return nil
+    }
+
+    private func firstResponder(in view: UIView) -> UIView? {
+        if view.isFirstResponder {
+            return view
+        }
+        for subview in view.subviews {
+            if let responder = firstResponder(in: subview) {
+                return responder
+            }
+        }
+        return nil
+    }
+
+    private func candidateWindows(windowId: String?) -> [WindowRef] {
+        IOSWindowProvider.shared.windowsForInteraction(windowId: windowId)
     }
 }
 

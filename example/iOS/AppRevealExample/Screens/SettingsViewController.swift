@@ -26,6 +26,7 @@ class SettingsViewController: UITableViewController {
             Setting(id: "settings.sound_enabled", title: "Sound", type: .toggle(true)),
         ]),
         ("Account", [
+            Setting(id: "settings.tap_calibration", title: "Tap Calibration", type: .detail("Open")),
             Setting(id: "settings.change_password", title: "Change Password", type: .action),
             Setting(id: "settings.privacy", title: "Privacy Policy", type: .detail("View")),
             Setting(id: "settings.terms", title: "Terms of Service", type: .detail("View")),
@@ -96,6 +97,11 @@ class SettingsViewController: UITableViewController {
             alert.addAction(UIAlertAction(title: "Delete", style: .destructive))
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
             present(alert, animated: true)
+            return
+        }
+
+        if setting.id == "settings.tap_calibration" {
+            navigationController?.pushViewController(TapCalibrationViewController(), animated: true)
         }
     }
 }

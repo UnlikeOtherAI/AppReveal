@@ -28,6 +28,7 @@ internal object NetworkObserverService : NetworkTrafficObserver {
     fun register(observable: NetworkObservable) {
         this.observable = observable
         observable.addObserver(this)
+        observable.recentRequests.forEach(::didCapture)
     }
 
     @Synchronized

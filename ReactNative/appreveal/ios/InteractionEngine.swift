@@ -60,7 +60,6 @@ final class InteractionEngine {
         for window in candidateWindows() {
             let hitView = window.hitTest(point, with: nil)
 
-            // Check if tapping inside a tab bar
             if let tabBar = findParent(of: hitView, type: UITabBar.self),
                let tabBarController = findTabBarController() {
                 let localPoint = tabBar.convert(point, from: window)
@@ -126,7 +125,7 @@ final class InteractionEngine {
     }
 
     private func findTabBarController() -> UITabBarController? {
-        guard let root = candidateWindows().compactMap(\.rootViewController).first else { return nil }
+        guard let root = contentRootViewController() else { return nil }
         return root as? UITabBarController
     }
 
@@ -139,37 +138,10 @@ final class InteractionEngine {
         return nil
     }
 
-    private func candidateWindows() -> [UIWindow] {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .filter { !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty }
-            .enumerated()
-            .sorted { lhs, rhs in
-                if lhs.element.windowLevel != rhs.element.windowLevel {
-                    return lhs.element.windowLevel > rhs.element.windowLevel
-                }
-                if lhs.element.isKeyWindow != rhs.element.isKeyWindow {
-                    return lhs.element.isKeyWindow && !rhs.element.isKeyWindow
-                }
-                return lhs.offset > rhs.offset
-            }
-            .map(\.element)
-    }
-
     // MARK: - Text
 
     func type(text: String, elementId: String?) throws {
-        let target: UIView?
-
-        if let id = elementId {
-            target = ElementInventory.shared.findElement(byId: id)
-            guard target != nil else {
-                throw InteractionError.elementNotFound(id)
-            }
-        } else {
-            target = UIResponder.currentFirstResponder as? UIView
-        }
+        let target = try resolveEditableTarget(elementId: elementId)
 
         if let textField = target as? UITextField {
             textField.becomeFirstResponder()
@@ -183,9 +155,7 @@ final class InteractionEngine {
     }
 
     func clear(elementId: String) throws {
-        guard let view = ElementInventory.shared.findElement(byId: elementId) else {
-            throw InteractionError.elementNotFound(elementId)
-        }
+        let view = try resolveEditableTarget(elementId: elementId)
 
         if let textField = view as? UITextField {
             textField.text = ""
@@ -253,9 +223,7 @@ final class InteractionEngine {
     // MARK: - Navigation
 
     func navigateBack() throws {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = scene.keyWindow?.rootViewController else {
+        guard let rootVC = contentRootViewController() else {
             throw InteractionError.noNavigation
         }
 
@@ -267,9 +235,7 @@ final class InteractionEngine {
     }
 
     func dismissModal() throws {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let rootVC = scene.keyWindow?.rootViewController else {
+        guard let rootVC = contentRootViewController() else {
             throw InteractionError.noModal
         }
 
@@ -283,10 +249,12 @@ final class InteractionEngine {
     // MARK: - Helpers
 
     private func findFirstScrollView() -> UIScrollView? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else { return nil }
-        return findScrollView(in: window)
+        for window in candidateWindows() {
+            if let scrollView = findScrollView(in: window) {
+                return scrollView
+            }
+        }
+        return nil
     }
 
     private func findScrollView(in view: UIView) -> UIScrollView? {
@@ -322,6 +290,77 @@ final class InteractionEngine {
             return findTopPresented(from: presented)
         }
         return vc
+    }
+
+    private func resolveEditableTarget(elementId: String?) throws -> UIView {
+        if let elementId {
+            guard let view = ElementInventory.shared.findElement(byId: elementId),
+                  let editable = editableAncestor(for: view) else {
+                throw InteractionError.elementNotFound(elementId)
+            }
+            return editable
+        }
+
+        if let responder = UIResponder.currentFirstResponder as? UIView,
+           let editable = editableAncestor(for: responder) {
+            return editable
+        }
+
+        for window in candidateWindows() {
+            if let responder = firstResponder(in: window),
+               let editable = editableAncestor(for: responder) {
+                return editable
+            }
+        }
+
+        throw InteractionError.notEditable("current responder")
+    }
+
+    private func editableAncestor(for view: UIView?) -> UIView? {
+        var current = view
+        while let candidate = current {
+            if candidate is UITextField || candidate is UITextView {
+                return candidate
+            }
+            current = candidate.superview
+        }
+        return nil
+    }
+
+    private func firstResponder(in view: UIView) -> UIView? {
+        if view.isFirstResponder {
+            return view
+        }
+        for subview in view.subviews {
+            if let responder = firstResponder(in: subview) {
+                return responder
+            }
+        }
+        return nil
+    }
+
+    private func candidateWindows() -> [UIWindow] {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty }
+            .enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.windowLevel != rhs.element.windowLevel {
+                    return lhs.element.windowLevel > rhs.element.windowLevel
+                }
+                if lhs.element.isKeyWindow != rhs.element.isKeyWindow {
+                    return lhs.element.isKeyWindow && !rhs.element.isKeyWindow
+                }
+                return lhs.offset > rhs.offset
+            }
+            .map(\.element)
+    }
+
+    private func contentRootViewController() -> UIViewController? {
+        candidateWindows()
+            .compactMap(\.rootViewController)
+            .first { !String(describing: type(of: $0)).contains("UIInputWindowController") }
     }
 }
 

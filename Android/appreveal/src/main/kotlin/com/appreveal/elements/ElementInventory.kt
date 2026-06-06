@@ -40,8 +40,10 @@ internal object ElementInventory {
     fun findElement(id: String): View? {
         return MainThreadExecutor.runBlocking {
             val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking null
-            // Try direct ID match first
-            findView(id, decorView)
+            val seenIds = mutableMapOf<String, Int>()
+            findViewByListedId(id, decorView, null, seenIds)
+                // Try direct Android ID match
+                ?: findView(id, decorView)
                 // Try text-based lookup
                 ?: findViewByNormalizedText(id, decorView)
                 // Try semantics-based lookup
@@ -406,6 +408,29 @@ internal object ElementInventory {
                 if (found != null) return found
             }
         }
+        return null
+    }
+
+    private fun findViewByListedId(
+        targetId: String,
+        view: View,
+        containerId: String?,
+        seenIds: MutableMap<String, Int>,
+    ): View? {
+        val info = makeElementInfo(view, containerId, seenIds)
+        if (info?.id == targetId) return view
+
+        val currentContainerId = info?.id ?: containerId
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val child = view.getChildAt(i)
+                if (child.visibility != View.GONE) {
+                    val found = findViewByListedId(targetId, child, currentContainerId, seenIds)
+                    if (found != null) return found
+                }
+            }
+        }
+
         return null
     }
 

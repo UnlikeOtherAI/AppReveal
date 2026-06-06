@@ -63,6 +63,9 @@ public final class AppReveal {
     // MARK: - Private
 
     private func launch(port: UInt16?) {
+        #if os(iOS)
+        URLSessionCapture.shared.install()
+        #endif
         registerBuiltInTools()
         registerWebViewTools()
         let server = MCPServer(port: port)

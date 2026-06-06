@@ -81,10 +81,7 @@ final class ScreenResolver {
     // MARK: - UIKit hierarchy
 
     private func findTopViewController() -> UIViewController? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }),
-              let rootVC = scene.keyWindow?.rootViewController else {
+        guard let rootVC = contentRootViewControllers().first else {
             return nil
         }
         return topMost(from: rootVC)
@@ -114,9 +111,7 @@ final class ScreenResolver {
     }
 
     private func findActiveTab() -> String? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let root = scene.keyWindow?.rootViewController else { return nil }
+        guard let root = contentRootViewControllers().last else { return nil }
 
         if let tab = root as? UITabBarController {
             return tab.selectedViewController.map { String(describing: type(of: $0)) }
@@ -125,16 +120,21 @@ final class ScreenResolver {
     }
 
     private func findPresentedModals() -> [String] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              var vc = scene.keyWindow?.rootViewController else { return [] }
+        let roots = contentRootViewControllers()
+        guard var vc = roots.last else { return [] }
 
         var modals: [String] = []
         while let presented = vc.presentedViewController {
             modals.append(String(describing: type(of: presented)))
             vc = presented
         }
-        return modals
+
+        if !modals.isEmpty {
+            return modals
+        }
+
+        let overlayWindowModals = roots.dropLast().map { String(describing: type(of: topMost(from: $0))) }
+        return Array(NSOrderedSet(array: overlayWindowModals)) as? [String] ?? overlayWindowModals
     }
 
     private func findNavigationDepth(from vc: UIViewController?) -> Int {
@@ -142,10 +142,12 @@ final class ScreenResolver {
     }
 
     private func extractNavBarTitle() -> String? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else { return nil }
-        return findNavBarTitle(in: window)
+        for root in contentRootViewControllers() {
+            if let title = findNavBarTitle(in: root.view) {
+                return title
+            }
+        }
+        return nil
     }
 
     private func findNavBarTitle(in view: UIView) -> String? {
@@ -165,6 +167,26 @@ final class ScreenResolver {
         let typeName = String(describing: type(of: vc))
         if typeName.contains("HostingController") { return "swiftui" }
         return "uikit"
+    }
+
+    private func contentRootViewControllers() -> [UIViewController] {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty }
+            .enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.windowLevel != rhs.element.windowLevel {
+                    return lhs.element.windowLevel > rhs.element.windowLevel
+                }
+                if lhs.element.isKeyWindow != rhs.element.isKeyWindow {
+                    return lhs.element.isKeyWindow && !rhs.element.isKeyWindow
+                }
+                return lhs.offset > rhs.offset
+            }
+            .map(\.element)
+            .compactMap(\.rootViewController)
+            .filter { !String(describing: type(of: $0)).contains("UIInputWindowController") }
     }
 
     // MARK: - Auto-derivation

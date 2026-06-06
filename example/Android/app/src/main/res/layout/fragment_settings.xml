@@ -99,6 +99,16 @@
             android:tag="settings.privacy" />
 
         <TextView
+            android:id="@+id/tapCalibrationButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tap Calibration"
+            android:textSize="16sp"
+            android:padding="12dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:tag="settings.tap_calibration" />
+
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Terms of Service"

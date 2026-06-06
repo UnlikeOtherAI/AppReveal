@@ -56,10 +56,8 @@ public struct CapturedRequest: Codable {
     ]
 
     private static func redactSensitiveHeaders(_ headers: [String: String]) -> [String: String] {
-        headers.mapValues { value in
-            headers.keys.contains(where: { sensitiveHeaders.contains($0.lowercased()) })
-                ? "[REDACTED]"
-                : value
+        headers.reduce(into: [String: String]()) { partial, item in
+            partial[item.key] = sensitiveHeaders.contains(item.key.lowercased()) ? "[REDACTED]" : item.value
         }
     }
 }

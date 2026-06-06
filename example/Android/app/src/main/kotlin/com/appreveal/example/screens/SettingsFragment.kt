@@ -4,8 +4,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import com.appreveal.example.R
 import com.appreveal.example.navigation.ExampleRouter
 import com.google.android.material.button.MaterialButton
@@ -22,6 +24,7 @@ class SettingsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val deleteAccountButton = view.findViewById<MaterialButton>(R.id.deleteAccountButton)
+        val tapCalibrationButton = view.findViewById<TextView>(R.id.tapCalibrationButton)
 
         deleteAccountButton.setOnClickListener {
             AlertDialog.Builder(requireContext())
@@ -32,6 +35,10 @@ class SettingsFragment : Fragment() {
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
+        }
+
+        tapCalibrationButton.setOnClickListener {
+            findNavController().navigate(R.id.action_settings_to_tap_calibration)
         }
     }
 

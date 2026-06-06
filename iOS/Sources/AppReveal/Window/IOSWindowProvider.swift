@@ -14,15 +14,14 @@ final class IOSWindowProvider: WindowProvider {
     private init() {}
 
     func allWindows() -> [WindowRef] {
-        let keyWin = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .compactMap { $0.keyWindow }
-            .first
-
-        return UIApplication.shared.connectedScenes
+        let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
-            .filter { !$0.isHidden }
+            .filter { !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty }
+
+        let keyWin = windows.first(where: \.isKeyWindow)
+
+        return windows
             .map { window in
                 WindowRef(
                     id: windowId(for: window),
@@ -40,6 +39,30 @@ final class IOSWindowProvider: WindowProvider {
 
     func window(id: String) -> WindowRef? {
         allWindows().first { $0.id == id }
+    }
+
+    func windowsForInteraction(windowId: String? = nil) -> [WindowRef] {
+        if let windowId, let window = window(id: windowId) {
+            return [window]
+        }
+
+        return allWindows()
+            .enumerated()
+            .sorted { lhs, rhs in
+                let left = lhs.element.nativeWindow
+                let right = rhs.element.nativeWindow
+
+                if left.windowLevel != right.windowLevel {
+                    return left.windowLevel > right.windowLevel
+                }
+
+                if lhs.element.isKey != rhs.element.isKey {
+                    return lhs.element.isKey && !rhs.element.isKey
+                }
+
+                return lhs.offset > rhs.offset
+            }
+            .map(\.element)
     }
 
     // MARK: - Private

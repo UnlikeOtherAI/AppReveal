@@ -15,7 +15,8 @@ Example iOS app demonstrating all AppReveal framework features.
 | `cart.main` | CartViewController | title, close, items_table, item_N, total, checkout, empty_message |
 | `profile.main` | ProfileViewController | avatar, name, email, member_since, order_count, tab_selector, edit, logout |
 | `profile.edit` | EditProfileViewController | name, bio, notifications_toggle, save, cancel |
-| `settings.main` | SettingsViewController | table, dark_mode, push_enabled, delete_account, ... |
+| `settings.main` | SettingsViewController | table, dark_mode, push_enabled, tap_calibration, delete_account, ... |
+| `tap.calibration` | TapCalibrationViewController | status_card, summary, result, metrics, frame, target_01-target_24 |
 
 ## Element types covered
 
@@ -34,7 +35,7 @@ Example iOS app demonstrating all AppReveal framework features.
 
 ## Framework features exercised
 
-- **ScreenIdentifiable** -- all 10 screens conform with screenKey, screenTitle, debugMetadata
+- **ScreenIdentifiable** -- all 11 screens conform with screenKey, screenTitle, debugMetadata
 - **Accessibility identifiers** -- 60+ elements with dot-prefixed IDs
 - **StateProviding** -- ExampleStateContainer exposes login state, user info, cart count
 - **NavigationProviding** -- ExampleRouter tracks route stack and modal stack

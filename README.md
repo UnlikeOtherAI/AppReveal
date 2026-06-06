@@ -243,11 +243,11 @@ AppReveal gives agents structured data instead of pixels:
 
 ## Example apps
 
-- [iOS example](example/iOS/) -- 11 screens, 60+ elements, all framework features
+- [iOS example](example/iOS/) -- 12 screens, 60+ elements, all framework features
 - [macOS example](example/macOS/AppRevealMacExample/) -- AppKit desktop example with sidebar navigation and curl verification
-- [Android example](example/Android/) -- 11 screens matching the iOS example
+- [Android example](example/Android/) -- 12 screens matching the iOS example
 - [Flutter example](Flutter/example/) -- 11 screens matching iOS and Android
-- [React Native example](ReactNative/example/) -- 8 screens, React Navigation v7
+- [React Native example](ReactNative/example/) -- 9 screens, React Navigation v7
 
 ## CLI
 

@@ -15,7 +15,8 @@ Example Android app demonstrating all AppReveal framework features.
 | `cart.main` | CartFragment | title, close, items_table, total, checkout, empty_message |
 | `profile.main` | ProfileFragment | avatar, name, email, member_since, order_count, tab_selector, edit, logout |
 | `profile.edit` | EditProfileFragment | name, bio, notifications_toggle, save, cancel |
-| `settings.main` | SettingsFragment | dark_mode, push_enabled, delete_account |
+| `settings.main` | SettingsFragment | dark_mode, push_enabled, tap_calibration, delete_account |
+| `tap.calibration` | TapCalibrationFragment | status_card, summary, result, metrics, frame, target_01-target_24 |
 | `webview.demo` | WebViewDemoFragment | webview with interactive HTML page |
 
 ## Element types covered

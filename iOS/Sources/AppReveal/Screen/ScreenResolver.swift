@@ -134,8 +134,7 @@ final class ScreenResolver {
     // MARK: - UIKit hierarchy
 
     private func findTopViewController(windowId: String? = nil) -> UIViewController? {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId),
-              let rootVC = ref.rootViewController else {
+        guard let rootVC = contentWindowRoots(windowId: windowId).first else {
             return nil
         }
         return topMost(from: rootVC)
@@ -165,8 +164,7 @@ final class ScreenResolver {
     }
 
     private func findActiveTab(windowId: String? = nil) -> String? {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId),
-              let root = ref.rootViewController else { return nil }
+        guard let root = contentWindowRoots(windowId: windowId).last else { return nil }
 
         if let tab = root as? UITabBarController {
             return tab.selectedViewController.map { String(describing: type(of: $0)) }
@@ -175,15 +173,70 @@ final class ScreenResolver {
     }
 
     private func findPresentedModals(windowId: String? = nil) -> [String] {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId),
-              var vc = ref.rootViewController else { return [] }
+        let roots = contentWindowRoots(windowId: windowId)
+        guard var vc = roots.last else { return [] }
 
         var modals: [String] = []
         while let presented = vc.presentedViewController {
             modals.append(String(describing: type(of: presented)))
             vc = presented
         }
-        return modals
+
+        if !modals.isEmpty {
+            return modals
+        }
+
+        let overlayWindowModals = roots.dropLast().map { String(describing: type(of: topMost(from: $0))) }
+        if !overlayWindowModals.isEmpty {
+            return Array(NSOrderedSet(array: overlayWindowModals)) as? [String] ?? overlayWindowModals
+        }
+
+        let fallbackModals = roots.flatMap(findVisiblePresentedControllers(from:))
+            .map { String(describing: type(of: $0)) }
+        return Array(NSOrderedSet(array: fallbackModals)) as? [String] ?? fallbackModals
+    }
+
+    private func contentWindowRoots(windowId: String? = nil) -> [UIViewController] {
+        IOSWindowProvider.shared.windowsForInteraction(windowId: windowId)
+            .compactMap(\.rootViewController)
+            .filter { !isKeyboardController($0) }
+    }
+
+    private func isKeyboardController(_ controller: UIViewController) -> Bool {
+        String(describing: type(of: controller)).contains("UIInputWindowController")
+    }
+
+    private func findVisiblePresentedControllers(from root: UIViewController) -> [UIViewController] {
+
+        var results: [UIViewController] = []
+        var visited: Set<ObjectIdentifier> = []
+
+        func walk(_ vc: UIViewController) {
+            let identifier = ObjectIdentifier(vc)
+            guard visited.insert(identifier).inserted else { return }
+
+            if vc !== root,
+               vc.viewIfLoaded?.window != nil,
+               vc.presentingViewController != nil || vc.presentationController?.presentingViewController != nil {
+                results.append(vc)
+            }
+
+            if let presented = vc.presentedViewController {
+                walk(presented)
+            }
+            if let nav = vc as? UINavigationController, let visible = nav.visibleViewController {
+                walk(visible)
+            }
+            if let tab = vc as? UITabBarController, let selected = tab.selectedViewController {
+                walk(selected)
+            }
+            for child in vc.children {
+                walk(child)
+            }
+        }
+
+        walk(root)
+        return results
     }
 
     private func findNavigationDepth(from vc: UIViewController?) -> Int {
@@ -191,9 +244,12 @@ final class ScreenResolver {
     }
 
     private func extractNavBarTitle(windowId: String? = nil) -> String? {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId) else { return nil }
-        // Walk views for UINavigationBar
-        return findNavBarTitle(in: ref.nativeWindow)
+        for root in contentWindowRoots(windowId: windowId) {
+            if let title = findNavBarTitle(in: root.view) {
+                return title
+            }
+        }
+        return nil
     }
 
     private func findNavBarTitle(in view: UIView) -> String? {

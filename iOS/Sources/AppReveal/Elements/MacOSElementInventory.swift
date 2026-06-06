@@ -31,20 +31,8 @@ final class ElementInventory {
               let contentView = ref.contentView else {
             return nil
         }
-        // 1. Exact accessibilityIdentifier
-        if let view = findView(withAccessibilityId: id, in: contentView) {
-            return view
-        }
-        // 2. accessibilityLabel match
-        if let view = findView(matching: { Self.normalizeToId($0.accessibilityLabel() ?? "") == id }, in: contentView) {
-            return view
-        }
-        // 3. Derived text ID on interactive views
-        if let view = findView(matching: { view in
-            guard self.isInteractive(view) else { return false }
-            guard let text = Self.extractText(from: view) else { return false }
-            return Self.normalizeToId(text) == id
-        }, in: contentView) {
+        var seenIds: [String: Int] = [:]
+        if let view = findView(byListedId: id, in: contentView, containerId: nil, seenIds: &seenIds) {
             return view
         }
         return nil
@@ -369,10 +357,30 @@ final class ElementInventory {
         return result
     }
 
-    private func findView(withAccessibilityId id: String, in view: NSView) -> NSView? {
-        if view.accessibilityIdentifier() == id { return view }
-        for subview in view.subviews {
-            if let found = findView(withAccessibilityId: id, in: subview) {
+    private func findView(
+        byListedId targetId: String,
+        in view: NSView,
+        containerId: String?,
+        seenIds: inout [String: Int]
+    ) -> NSView? {
+        let accessId = view.accessibilityIdentifier()
+        let hasId = !accessId.isEmpty
+
+        if hasId || isInteractive(view) {
+            let (id, _) = resolveId(for: view)
+            if let resolvedId = id {
+                let count = seenIds[resolvedId, default: 0]
+                seenIds[resolvedId] = count + 1
+                let finalId = count == 0 ? resolvedId : "\(resolvedId)_\(count)"
+                if finalId == targetId {
+                    return view
+                }
+            }
+        }
+
+        let currentContainerId = hasId ? accessId : containerId
+        for subview in view.subviews where !subview.isHiddenOrHasHiddenAncestor {
+            if let found = findView(byListedId: targetId, in: subview, containerId: currentContainerId, seenIds: &seenIds) {
                 return found
             }
         }

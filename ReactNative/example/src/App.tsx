@@ -11,6 +11,7 @@ import { OrderDetailScreen } from './screens/OrderDetailScreen';
 import { CatalogScreen } from './screens/CatalogScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { TapCalibrationScreen } from './screens/TapCalibrationScreen';
 import { WebViewScreen } from './screens/WebViewScreen';
 import { ExampleNetworkClient } from './services/ExampleNetworkClient';
 import { ExampleState } from './services/ExampleState';
@@ -98,6 +99,11 @@ function TabNavigator() {
         name="Settings"
         component={SettingsScreen}
         options={{ tabBarLabel: 'Settings', headerShown: true, title: 'Settings' }}
+      />
+      <Tab.Screen
+        name="Tap Test"
+        component={TapCalibrationScreen}
+        options={{ tabBarLabel: 'Tap', headerShown: true, title: 'Tap Test' }}
       />
       <Tab.Screen
         name="Web View"

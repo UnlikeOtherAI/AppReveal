@@ -29,14 +29,19 @@ final class NetworkObserverService: NetworkTrafficObserver {
     func register(_ observable: NetworkObservable) {
         self.observable = observable
         observable.addObserver(self)
+        observable.recentRequests.forEach(addCall)
     }
 
     nonisolated func didCapture(_ request: CapturedRequest) {
         Task { @MainActor in
-            capturedRequests.append(request)
-            if capturedRequests.count > maxBufferSize {
-                capturedRequests.removeFirst(capturedRequests.count - maxBufferSize)
-            }
+            self.addCall(request)
+        }
+    }
+
+    func addCall(_ request: CapturedRequest) {
+        capturedRequests.append(request)
+        if capturedRequests.count > maxBufferSize {
+            capturedRequests.removeFirst(capturedRequests.count - maxBufferSize)
         }
     }
 

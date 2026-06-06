@@ -11,44 +11,38 @@ final class ElementInventory {
     private init() {}
 
     func listElements() -> [ElementInfo] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+        let windows = candidateWindows()
+        guard !windows.isEmpty else {
             return []
         }
 
         var elements: [ElementInfo] = []
         var seenIds: [String: Int] = [:]
-        walkView(window, elements: &elements, seenIds: &seenIds, containerId: nil)
+        for window in windows {
+            walkView(window, elements: &elements, seenIds: &seenIds, containerId: nil)
+        }
         return elements
     }
 
     func findElement(byId id: String) -> UIView? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
-            return nil
-        }
-        // 1. Exact accessibilityIdentifier match
-        if let view = findView(withAccessibilityId: id, in: window) {
-            return view
-        }
-        // 2. Try accessibilityLabel match
-        if let view = findView(matching: { Self.normalizeToId($0.accessibilityLabel ?? "") == id }, in: window) {
-            return view
-        }
-        // 3. Try derived text ID match on interactive views
-        if let view = findView(matching: { view in
-            guard self.isInteractive(view) else { return false }
-            guard let text = Self.extractText(from: view) else { return false }
-            return Self.normalizeToId(text) == id
-        }, in: window) {
-            return view
-        }
-        // 4. Try exact visible text -> tappable ancestor
-        if let view = findViewByExactText(id, in: window),
-           let tappable = Self.findTappableAncestor(of: view) {
-            return tappable
+        for window in candidateWindows() {
+            if let view = findView(withAccessibilityId: id, in: window) {
+                return view
+            }
+            if let view = findView(matching: { Self.normalizeToId($0.accessibilityLabel ?? "") == id }, in: window) {
+                return view
+            }
+            if let view = findView(matching: { view in
+                guard self.isInteractive(view) else { return false }
+                guard let text = Self.extractText(from: view) else { return false }
+                return Self.normalizeToId(text) == id
+            }, in: window) {
+                return view
+            }
+            if let view = findViewByExactText(id, in: window),
+               let tappable = Self.findTappableAncestor(of: view) {
+                return tappable
+            }
         }
         return nil
     }
@@ -59,14 +53,15 @@ final class ElementInventory {
         matchMode: String = "exact",
         occurrence: Int = 0
     ) -> TextResolveResult {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+        let windows = candidateWindows()
+        guard !windows.isEmpty else {
             return TextResolveResult(error: "No window available")
         }
 
         var matches: [(view: UIView, text: String)] = []
-        collectTextMatches(text, matchMode: matchMode, in: window, matches: &matches)
+        for window in windows {
+            collectTextMatches(text, matchMode: matchMode, in: window, matches: &matches)
+        }
 
         if matches.isEmpty {
             return TextResolveResult(error: "No element with text \"\(text)\" found on the current screen.")
@@ -315,12 +310,15 @@ final class ElementInventory {
     // MARK: - Full view tree
 
     func dumpViewTree(maxDepth: Int = 50) -> [[String: Any]] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
+        let windows = candidateWindows()
+        guard !windows.isEmpty else {
             return []
         }
-        return dumpNode(window, depth: 0, maxDepth: maxDepth)
+        var result: [[String: Any]] = []
+        for window in windows {
+            result.append(contentsOf: dumpNode(window, depth: 0, maxDepth: maxDepth))
+        }
+        return result
     }
 
     private func dumpNode(_ view: UIView, depth: Int, maxDepth: Int) -> [[String: Any]] {
@@ -447,6 +445,24 @@ final class ElementInventory {
             "bottom": insets.bottom,
             "trailing": insets.trailing
         ]
+    }
+
+    private func candidateWindows() -> [UIWindow] {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty }
+            .enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.windowLevel != rhs.element.windowLevel {
+                    return lhs.element.windowLevel > rhs.element.windowLevel
+                }
+                if lhs.element.isKeyWindow != rhs.element.isKeyWindow {
+                    return lhs.element.isKeyWindow && !rhs.element.isKeyWindow
+                }
+                return lhs.offset > rhs.offset
+            }
+            .map(\.element)
     }
 }
 

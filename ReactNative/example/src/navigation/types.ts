@@ -42,6 +42,7 @@ export type TabParamList = {
   Catalog: undefined;
   Profile: undefined;
   Settings: undefined;
+  'Tap Test': undefined;
   'Web View': undefined;
 };
 

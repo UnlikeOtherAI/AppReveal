@@ -16,40 +16,37 @@ final class ElementInventory {
     private init() {}
 
     func listElements(windowId: String? = nil) -> [ElementInfo] {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
+        let windows = candidateWindows(windowId: windowId)
+        guard !windows.isEmpty else {
             return []
         }
 
         var elements: [ElementInfo] = []
         var seenIds: [String: Int] = [:]
-        walkView(ref.nativeWindow, elements: &elements, seenIds: &seenIds, containerId: nil)
+        var seenAccessibilityElements: Set<ObjectIdentifier> = []
+        for ref in windows {
+            walkView(
+                ref.nativeWindow,
+                elements: &elements,
+                seenIds: &seenIds,
+                containerId: nil,
+                seenAccessibilityElements: &seenAccessibilityElements
+            )
+        }
         return elements
     }
 
     func findElement(byId id: String, windowId: String? = nil) -> UIView? {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
-            return nil
-        }
-        // 1. Exact accessibilityIdentifier match
-        if let view = findView(withAccessibilityId: id, in: ref.nativeWindow) {
-            return view
-        }
-        // 2. Try accessibilityLabel match
-        if let view = findView(matching: { Self.normalizeToId($0.accessibilityLabel ?? "") == id }, in: ref.nativeWindow) {
-            return view
-        }
-        // 3. Try derived text ID match on interactive views
-        if let view = findView(matching: { view in
-            guard self.isInteractive(view) else { return false }
-            guard let text = Self.extractText(from: view) else { return false }
-            return Self.normalizeToId(text) == id
-        }, in: ref.nativeWindow) {
-            return view
-        }
-        // 4. Try exact visible text → tappable ancestor
-        if let view = findViewByExactText(id, in: ref.nativeWindow),
-           let tappable = Self.findTappableAncestor(of: view) {
-            return tappable
+        for ref in candidateWindows(windowId: windowId) {
+            var seenIds: [String: Int] = [:]
+            if let view = findView(byListedId: id, in: ref.nativeWindow, containerId: nil, seenIds: &seenIds) {
+                return view
+            }
+
+            if let view = findViewByExactText(id, in: ref.nativeWindow),
+               let tappable = Self.findTappableAncestor(of: view) {
+                return tappable
+            }
         }
         return nil
     }
@@ -61,12 +58,15 @@ final class ElementInventory {
         occurrence: Int = 0,
         windowId: String? = nil
     ) -> TextResolveResult {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
+        let windows = candidateWindows(windowId: windowId)
+        guard !windows.isEmpty else {
             return TextResolveResult(error: "No window available")
         }
 
         var matches: [(view: UIView, text: String)] = []
-        collectTextMatches(text, matchMode: matchMode, in: ref.nativeWindow, matches: &matches)
+        for ref in windows {
+            collectTextMatches(text, matchMode: matchMode, in: ref.nativeWindow, matches: &matches)
+        }
 
         if matches.isEmpty {
             return TextResolveResult(error: "No element with text \"\(text)\" found on the current screen.")
@@ -100,6 +100,87 @@ final class ElementInventory {
 
         let index = tappableCandidates.count == 1 ? 0 : occurrence
         return TextResolveResult(view: tappableCandidates[index].view)
+    }
+
+    func findTapTarget(byId id: String, windowId: String? = nil) -> TapTarget? {
+        for ref in candidateWindows(windowId: windowId) {
+            var seenIds: [String: Int] = [:]
+            if let view = findView(byListedId: id, in: ref.nativeWindow, containerId: nil, seenIds: &seenIds) {
+                return .view(view)
+            }
+
+            if let view = findViewByExactText(id, in: ref.nativeWindow),
+               let tappable = Self.findTappableAncestor(of: view) {
+                return .view(tappable)
+            }
+
+            if let accessibilityTarget = AccessibilityElementInventory.shared.findElement(byListedId: id, in: ref.nativeWindow) {
+                return .accessibility(accessibilityTarget)
+            }
+
+            if let accessibilityTarget = AccessibilityElementInventory.shared.findElement(byVisibleText: id, in: ref.nativeWindow) {
+                return .accessibility(accessibilityTarget)
+            }
+        }
+
+        return nil
+    }
+
+    func findTapTargetByText(
+        _ text: String,
+        matchMode: String = "exact",
+        occurrence: Int = 0,
+        windowId: String? = nil
+    ) -> TapTargetResolveResult {
+        let windows = candidateWindows(windowId: windowId)
+        guard !windows.isEmpty else {
+            return TapTargetResolveResult(error: "No window available")
+        }
+
+        var candidates: [String] = []
+        var resolvedTargets: [TapTarget] = []
+
+        for ref in windows {
+            var viewMatches: [(view: UIView, text: String)] = []
+            collectTextMatches(text, matchMode: matchMode, in: ref.nativeWindow, matches: &viewMatches)
+            for match in viewMatches {
+                if let tappable = Self.findTappableAncestor(of: match.view) {
+                    resolvedTargets.append(.view(tappable))
+                    candidates.append(match.text)
+                }
+            }
+
+            let accessibilityMatches = AccessibilityElementInventory.shared.collectTextMatches(
+                text,
+                matchMode: matchMode,
+                in: ref.nativeWindow
+            )
+            for match in accessibilityMatches {
+                resolvedTargets.append(.accessibility(match))
+                candidates.append(match.label ?? match.id)
+            }
+        }
+
+        if resolvedTargets.isEmpty {
+            return TapTargetResolveResult(error: "No element with text \"\(text)\" found on the current screen.")
+        }
+
+        if resolvedTargets.count > 1 && occurrence >= resolvedTargets.count {
+            return TapTargetResolveResult(
+                error: "occurrence \(occurrence) out of range (found \(resolvedTargets.count) matches)",
+                candidates: candidates
+            )
+        }
+
+        if resolvedTargets.count > 1 && occurrence < 0 {
+            return TapTargetResolveResult(
+                error: "Ambiguous: \(resolvedTargets.count) matches found. Use occurrence (0-based) to disambiguate.",
+                candidates: candidates
+            )
+        }
+
+        let index = resolvedTargets.count == 1 ? 0 : occurrence
+        return TapTargetResolveResult(target: resolvedTargets[index])
     }
 
     // MARK: - Text utilities
@@ -150,7 +231,13 @@ final class ElementInventory {
 
     // MARK: - Hierarchy walking
 
-    private func walkView(_ view: UIView, elements: inout [ElementInfo], seenIds: inout [String: Int], containerId: String?) {
+    private func walkView(
+        _ view: UIView,
+        elements: inout [ElementInfo],
+        seenIds: inout [String: Int],
+        containerId: String?,
+        seenAccessibilityElements: inout Set<ObjectIdentifier>
+    ) {
         let accessId = view.accessibilityIdentifier
 
         if accessId != nil || isInteractive(view) {
@@ -160,8 +247,21 @@ final class ElementInventory {
         }
 
         let currentContainerId = accessId ?? containerId
+        AccessibilityElementInventory.shared.appendElements(
+            in: view,
+            elements: &elements,
+            seenIds: &seenIds,
+            containerId: currentContainerId,
+            visited: &seenAccessibilityElements
+        )
         for subview in view.subviews where !subview.isHidden {
-            walkView(subview, elements: &elements, seenIds: &seenIds, containerId: currentContainerId)
+            walkView(
+                subview,
+                elements: &elements,
+                seenIds: &seenIds,
+                containerId: currentContainerId,
+                seenAccessibilityElements: &seenAccessibilityElements
+            )
         }
     }
 
@@ -315,13 +415,31 @@ final class ElementInventory {
     // MARK: - Full view tree
 
     func dumpViewTree(maxDepth: Int = 50, windowId: String? = nil) -> [[String: Any]] {
-        guard let ref = platformWindowProvider.resolve(windowId: windowId) else {
+        let windows = candidateWindows(windowId: windowId)
+        guard !windows.isEmpty else {
             return []
         }
-        return dumpNode(ref.nativeWindow, depth: 0, maxDepth: maxDepth)
+        var seenAccessibilityElements: Set<ObjectIdentifier> = []
+        var result: [[String: Any]] = []
+        for ref in windows {
+            result.append(
+                contentsOf: dumpNode(
+                    ref.nativeWindow,
+                    depth: 0,
+                    maxDepth: maxDepth,
+                    seenAccessibilityElements: &seenAccessibilityElements
+                )
+            )
+        }
+        return result
     }
 
-    private func dumpNode(_ view: UIView, depth: Int, maxDepth: Int) -> [[String: Any]] {
+    private func dumpNode(
+        _ view: UIView,
+        depth: Int,
+        maxDepth: Int,
+        seenAccessibilityElements: inout Set<ObjectIdentifier>
+    ) -> [[String: Any]] {
         guard depth < maxDepth else { return [] }
 
         let screenFrame = view.convert(view.bounds, to: nil)
@@ -391,16 +509,49 @@ final class ElementInventory {
         }
 
         var result = [node]
+        AccessibilityElementInventory.shared.appendViewTreeNodes(
+            for: view,
+            depth: depth + 1,
+            maxDepth: maxDepth,
+            result: &result,
+            visited: &seenAccessibilityElements
+        )
         for subview in view.subviews {
-            result.append(contentsOf: dumpNode(subview, depth: depth + 1, maxDepth: maxDepth))
+            result.append(
+                contentsOf: dumpNode(
+                    subview,
+                    depth: depth + 1,
+                    maxDepth: maxDepth,
+                    seenAccessibilityElements: &seenAccessibilityElements
+                )
+            )
         }
         return result
     }
 
-    private func findView(withAccessibilityId id: String, in view: UIView) -> UIView? {
-        if view.accessibilityIdentifier == id { return view }
-        for subview in view.subviews {
-            if let found = findView(withAccessibilityId: id, in: subview) {
+    private func findView(
+        byListedId targetId: String,
+        in view: UIView,
+        containerId: String?,
+        seenIds: inout [String: Int]
+    ) -> UIView? {
+        let accessId = view.accessibilityIdentifier
+
+        if accessId != nil || isInteractive(view) {
+            let (id, _) = resolveId(for: view)
+            if let resolvedId = id {
+                let count = seenIds[resolvedId, default: 0]
+                seenIds[resolvedId] = count + 1
+                let finalId = count == 0 ? resolvedId : "\(resolvedId)_\(count)"
+                if finalId == targetId {
+                    return view
+                }
+            }
+        }
+
+        let currentContainerId = accessId ?? containerId
+        for subview in view.subviews where !subview.isHidden {
+            if let found = findView(byListedId: targetId, in: subview, containerId: currentContainerId, seenIds: &seenIds) {
                 return found
             }
         }
@@ -445,6 +596,10 @@ final class ElementInventory {
             "bottom": insets.bottom,
             "trailing": insets.trailing
         ]
+    }
+
+    private func candidateWindows(windowId: String?) -> [WindowRef] {
+        IOSWindowProvider.shared.windowsForInteraction(windowId: windowId)
     }
 }
 
