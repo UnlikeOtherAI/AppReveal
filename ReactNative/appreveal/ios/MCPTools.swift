@@ -535,51 +535,81 @@ func registerBuiltInTools() {
                 diskTotalBytes = (attrs[.systemSize]      as? NSNumber)?.int64Value ?? -1
             }
 
-            return AnyCodable([
+            // Break response into typed sub-expressions so the Swift type-checker
+            // doesn't time out on a single large heterogeneous dictionary literal.
+            let osVer = processInfo.operatingSystemVersion
+            let osVersionInfo: [String: Any] = [
+                "major": osVer.majorVersion,
+                "minor": osVer.minorVersion,
+                "patch": osVer.patchVersion
+            ]
+            let thermalState: String
+            switch processInfo.thermalState {
+            case .nominal: thermalState = "nominal"
+            case .fair: thermalState = "fair"
+            case .serious: thermalState = "serious"
+            case .critical: thermalState = "critical"
+            @unknown default: thermalState = "unknown"
+            }
+            let screenInfo: [String: Any] = [
+                "width": Int(screen.bounds.width), "height": Int(screen.bounds.height),
+                "scale": screen.scale, "nativeWidth": Int(screen.nativeBounds.width),
+                "nativeHeight": Int(screen.nativeBounds.height),
+                "nativeScale": screen.nativeScale, "brightness": screen.brightness
+            ]
+            let batteryInfo: [String: Any?] = [
+                "level": batteryLevel >= 0 ? batteryLevel : nil as Float?,
+                "state": batteryState
+            ]
+            let localeInfo: [String: Any] = [
+                "identifier": locale.identifier,
+                "languageCode": locale.language.languageCode?.identifier ?? "",
+                "regionCode": locale.region?.identifier ?? "",
+                "currencyCode": locale.currency?.identifier ?? ""
+            ]
+            let timeZoneInfo: [String: Any] = [
+                "identifier": timeZone.identifier,
+                "abbreviation": timeZone.abbreviation() ?? "",
+                "secondsFromGMT": timeZone.secondsFromGMT()
+            ]
+            let diskInfo: [String: Any] = [
+                "freeMB":  diskFreeBytes  >= 0 ? Int(diskFreeBytes  / 1_048_576) : -1,
+                "totalMB": diskTotalBytes >= 0 ? Int(diskTotalBytes / 1_048_576) : -1
+            ]
+            var result: [String: Any] = [
                 "platform": "iOS", "frameworkType": "react-native",
                 "bundleId":     info["CFBundleIdentifier"] as? String ?? "unknown",
                 "appName":      info["CFBundleName"] as? String ?? "unknown",
                 "displayName":  info["CFBundleDisplayName"] as? String ?? info["CFBundleName"] as? String ?? "unknown",
                 "version":      info["CFBundleShortVersionString"] as? String ?? "unknown",
                 "build":        info["CFBundleVersion"] as? String ?? "unknown",
-                "minOSVersion": info["MinimumOSVersion"] as? String ?? "unknown",
-                "deviceModel": device.model, "deviceName": device.name,
-                "systemName": device.systemName, "systemVersion": device.systemVersion,
-                "userInterfaceIdiom": idiom,
-                "identifierForVendor": device.identifierForVendor?.uuidString ?? "unknown",
-                "isSimulator": processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil,
-                "osVersionString": processInfo.operatingSystemVersionString,
-                "osVersion": ["major": processInfo.operatingSystemVersion.majorVersion,
-                              "minor": processInfo.operatingSystemVersion.minorVersion,
-                              "patch": processInfo.operatingSystemVersion.patchVersion] as [String: Any],
-                "processName": processInfo.processName, "processId": processInfo.processIdentifier,
-                "hostName": processInfo.hostName,
-                "processorCount": processInfo.processorCount,
-                "activeProcessorCount": processInfo.activeProcessorCount,
-                "physicalMemoryMB": Int(processInfo.physicalMemory / 1_048_576),
-                "isLowPowerMode": processInfo.isLowPowerModeEnabled,
-                "thermalState": { switch processInfo.thermalState {
-                    case .nominal: return "nominal"; case .fair: return "fair"
-                    case .serious: return "serious"; case .critical: return "critical"
-                    @unknown default: return "unknown" } }(),
-                "screen": ["width": Int(screen.bounds.width), "height": Int(screen.bounds.height),
-                           "scale": screen.scale, "nativeWidth": Int(screen.nativeBounds.width),
-                           "nativeHeight": Int(screen.nativeBounds.height),
-                           "nativeScale": screen.nativeScale, "brightness": screen.brightness] as [String: Any],
-                "battery": ["level": batteryLevel >= 0 ? batteryLevel : nil as Float?,
-                            "state": batteryState] as [String: Any?],
-                "locale": ["identifier": locale.identifier,
-                           "languageCode": locale.language.languageCode?.identifier ?? "",
-                           "regionCode": locale.region?.identifier ?? "",
-                           "currencyCode": locale.currency?.identifier ?? ""] as [String: Any],
-                "timeZone": ["identifier": timeZone.identifier,
-                             "abbreviation": timeZone.abbreviation() ?? "",
-                             "secondsFromGMT": timeZone.secondsFromGMT()] as [String: Any],
-                "disk": ["freeMB":  diskFreeBytes  >= 0 ? Int(diskFreeBytes  / 1_048_576) : -1,
-                         "totalMB": diskTotalBytes >= 0 ? Int(diskTotalBytes / 1_048_576) : -1] as [String: Any],
-                "declaredPermissions": info.keys.filter { $0.hasPrefix("NS") && $0.hasSuffix("UsageDescription") },
-                "infoPlist": plist
-            ] as [String: Any])
+                "minOSVersion": info["MinimumOSVersion"] as? String ?? "unknown"
+            ]
+            result["deviceModel"] = device.model
+            result["deviceName"] = device.name
+            result["systemName"] = device.systemName
+            result["systemVersion"] = device.systemVersion
+            result["userInterfaceIdiom"] = idiom
+            result["identifierForVendor"] = device.identifierForVendor?.uuidString ?? "unknown"
+            result["isSimulator"] = processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil
+            result["osVersionString"] = processInfo.operatingSystemVersionString
+            result["osVersion"] = osVersionInfo
+            result["processName"] = processInfo.processName
+            result["processId"] = processInfo.processIdentifier
+            result["hostName"] = processInfo.hostName
+            result["processorCount"] = processInfo.processorCount
+            result["activeProcessorCount"] = processInfo.activeProcessorCount
+            result["physicalMemoryMB"] = Int(processInfo.physicalMemory / 1_048_576)
+            result["isLowPowerMode"] = processInfo.isLowPowerModeEnabled
+            result["thermalState"] = thermalState
+            result["screen"] = screenInfo
+            result["battery"] = batteryInfo
+            result["locale"] = localeInfo
+            result["timeZone"] = timeZoneInfo
+            result["disk"] = diskInfo
+            result["declaredPermissions"] = info.keys.filter { $0.hasPrefix("NS") && $0.hasSuffix("UsageDescription") }
+            result["infoPlist"] = plist
+            return AnyCodable(result)
         }
     ))
 

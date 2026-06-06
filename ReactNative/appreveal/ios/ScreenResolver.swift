@@ -133,8 +133,9 @@ final class ScreenResolver {
             return modals
         }
 
-        let overlayWindowModals = roots.dropLast().map { String(describing: type(of: topMost(from: $0))) }
-        return Array(NSOrderedSet(array: overlayWindowModals)) as? [String] ?? overlayWindowModals
+        let overlayWindowModals = roots.dropLast().map { String(describing: Swift.type(of: topMost(from: $0))) }
+        var seen = Set<String>()
+        return overlayWindowModals.filter { seen.insert($0).inserted }
     }
 
     private func findNavigationDepth(from vc: UIViewController?) -> Int {

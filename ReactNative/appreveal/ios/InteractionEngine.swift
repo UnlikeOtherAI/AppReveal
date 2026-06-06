@@ -360,7 +360,7 @@ final class InteractionEngine {
     private func contentRootViewController() -> UIViewController? {
         candidateWindows()
             .compactMap(\.rootViewController)
-            .first { !String(describing: type(of: $0)).contains("UIInputWindowController") }
+            .first { !String(describing: Swift.type(of: $0)).contains("UIInputWindowController") }
     }
 }
 

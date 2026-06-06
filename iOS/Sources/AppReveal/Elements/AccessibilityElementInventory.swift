@@ -24,16 +24,9 @@ struct AccessibilityResolvedTarget {
     }
 
     func activate() -> Bool {
-        if let view = element as? UIView,
-           view.isUserInteractionEnabled {
-            return view.accessibilityActivate()
-        }
-
-        if let accessibilityElement = element as? UIAccessibilityElement {
-            return accessibilityElement.accessibilityActivate()
-        }
-
-        return false
+        // accessibilityActivate() is defined on NSObject via UIKit and works for
+        // UIView, UIAccessibilityElement, and SwiftUI virtual accessibility nodes.
+        return element.accessibilityActivate()
     }
 }
 
@@ -265,21 +258,63 @@ final class AccessibilityElementInventory {
         visited: inout Set<ObjectIdentifier>,
         visitor: (AccessibilityResolvedTarget) -> Void
     ) {
-        let count = view.accessibilityElementCount()
-        guard count > 0 else { return }
-
         let resolvedContainerId = view.accessibilityIdentifier ?? containerId
 
-        for index in 0..<count {
-            guard let rawElement = view.accessibilityElement(at: index) as? NSObject else { continue }
+        // Prefer the modern accessibilityElements array — SwiftUI hosting views use this exclusively.
+        // Fall back to the deprecated count/index API for older UIKit patterns.
+        let rawElements: [Any]
+        if let arr = view.accessibilityElements, !arr.isEmpty {
+            rawElements = arr
+        } else {
+            let count = view.accessibilityElementCount()
+            // Guard against NSNotFound (Int.max) and empty containers.
+            guard count > 0, count < 100_000 else { return }
+            rawElements = (0..<count).compactMap { view.accessibilityElement(at: $0) }
+        }
+
+        for element in rawElements {
+            guard let rawElement = element as? NSObject else { continue }
             if rawElement is UIView { continue }
 
             let objectId = ObjectIdentifier(rawElement)
             guard visited.insert(objectId).inserted else { continue }
-            guard let target = makeTarget(from: rawElement, containerView: view, containerId: resolvedContainerId) else {
-                continue
+            if let target = makeTarget(from: rawElement, containerView: view, containerId: resolvedContainerId) {
+                visitor(target)
             }
-            visitor(target)
+            // Recurse into accessibility sub-containers (SwiftUI nests VStack/HStack groups).
+            enumerateAccessibilitySubelements(
+                of: rawElement,
+                containerView: view,
+                containerId: resolvedContainerId,
+                visited: &visited,
+                visitor: visitor
+            )
+        }
+    }
+
+    private func enumerateAccessibilitySubelements(
+        of element: NSObject,
+        containerView: UIView,
+        containerId: String?,
+        visited: inout Set<ObjectIdentifier>,
+        visitor: (AccessibilityResolvedTarget) -> Void
+    ) {
+        guard let arr = (element.value(forKey: "accessibilityElements") as? [Any]), !arr.isEmpty else { return }
+        let subContainerId = accessibilityIdentifier(for: element) ?? containerId
+        for sub in arr {
+            guard let rawSub = sub as? NSObject, !(rawSub is UIView) else { continue }
+            let objectId = ObjectIdentifier(rawSub)
+            guard visited.insert(objectId).inserted else { continue }
+            if let target = makeTarget(from: rawSub, containerView: containerView, containerId: subContainerId) {
+                visitor(target)
+            }
+            enumerateAccessibilitySubelements(
+                of: rawSub,
+                containerView: containerView,
+                containerId: subContainerId,
+                visited: &visited,
+                visitor: visitor
+            )
         }
     }
 
@@ -343,47 +378,39 @@ final class AccessibilityElementInventory {
     }
 
     private func resolvedFrame(for element: NSObject, containerView: UIView) -> CGRect {
-        if let accessibilityElement = element as? UIAccessibilityElement {
-            let screenFrame = accessibilityElement.accessibilityFrame
-            if !screenFrame.isEmpty {
-                return screenFrame
-            }
-
-            let containerSpaceFrame = accessibilityElement.accessibilityFrameInContainerSpace
-            if !containerSpaceFrame.isEmpty {
-                return containerView.convert(containerSpaceFrame, to: nil)
+        if let ae = element as? UIAccessibilityElement {
+            if !ae.accessibilityFrame.isEmpty { return ae.accessibilityFrame }
+            if !ae.accessibilityFrameInContainerSpace.isEmpty {
+                return containerView.convert(ae.accessibilityFrameInContainerSpace, to: nil)
             }
         }
-
-        return .zero
+        // NSObject UIKit category — works for SwiftUI virtual accessibility nodes.
+        let frame = element.accessibilityFrame
+        return frame.isEmpty ? .zero : frame
     }
 
     private func accessibilityIdentifier(for element: NSObject) -> String? {
         if let identified = element as? UIAccessibilityIdentification {
             return identified.accessibilityIdentifier
         }
+        // SwiftUI nodes respond to the selector without formally conforming to the protocol.
+        if element.responds(to: NSSelectorFromString("accessibilityIdentifier")) {
+            return element.value(forKey: "accessibilityIdentifier") as? String
+        }
         return nil
     }
 
     private func accessibilityLabel(for element: NSObject) -> String? {
-        if let accessibilityElement = element as? UIAccessibilityElement {
-            return accessibilityElement.accessibilityLabel
-        }
-        return nil
+        // NSObject UIKit category provides accessibilityLabel for all objects including SwiftUI nodes.
+        return element.accessibilityLabel
     }
 
     private func accessibilityValue(for element: NSObject) -> String? {
-        if let accessibilityElement = element as? UIAccessibilityElement {
-            return accessibilityElement.accessibilityValue
-        }
-        return nil
+        return element.accessibilityValue
     }
 
     private func accessibilityTraits(for element: NSObject) -> UIAccessibilityTraits {
-        if let accessibilityElement = element as? UIAccessibilityElement {
-            return accessibilityElement.accessibilityTraits
-        }
-        return []
+        return element.accessibilityTraits
     }
 
     private func deduplicatedId(_ id: String, seenIds: inout [String: Int]) -> String {

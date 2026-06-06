@@ -167,7 +167,7 @@ export class AppRevealFetchInterceptor {
 
     const originalFetch = global.fetch;
 
-    global.fetch = async function patchedFetch(
+    const patchedFetch = async function patchedFetch(
       input: RequestInfo | URL,
       init?: RequestInit,
     ): Promise<Response> {
@@ -237,5 +237,9 @@ export class AppRevealFetchInterceptor {
         throw err;
       }
     };
+    // Preserve static properties (e.g. fetch.preconnect in RN 0.83+) so that
+    // TypeScript's structural check against typeof global.fetch passes.
+    Object.assign(patchedFetch, originalFetch);
+    global.fetch = patchedFetch as typeof global.fetch;
   }
 }

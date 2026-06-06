@@ -97,7 +97,11 @@ final class InteractionEngine {
                 }
             }
 
-            if let hitView, performTap(on: .view(hitView), windowId: ref.id, postPoint: false) {
+            // SwiftUI hosting views have internal gesture recognizers that can't be fired
+            // externally. Route directly to the accessibility tree for these views.
+            let isSwiftUIHost = hitView.map { Self.isSwiftUIHostingView($0) } ?? false
+
+            if !isSwiftUIHost, let hitView, performTap(on: .view(hitView), windowId: ref.id, postPoint: false) {
                 return
             }
 
@@ -154,6 +158,11 @@ final class InteractionEngine {
             current = v.superview
         }
         return nil
+    }
+
+    private static func isSwiftUIHostingView(_ view: UIView) -> Bool {
+        let name = Swift.type(of: view).description()
+        return name.hasPrefix("_UIHostingView") || name.hasPrefix("UIHostingView")
     }
 
     private func performTap(
