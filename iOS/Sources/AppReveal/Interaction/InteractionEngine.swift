@@ -220,8 +220,8 @@ final class InteractionEngine {
             let setIntSym      = dlsym(iokit, "IOHIDEventSetIntegerValue"),
             let setFloatSym    = dlsym(iokit, "IOHIDEventSetFloatValue"),
             let setSenderSym   = dlsym(iokit, "IOHIDEventSetSenderID"),
-            let bksSym         = dlsym(bbs,   "BKSHIDEventSetDigitizerInfo"),
-            let msgSendSym     = dlsym(rtld,   "objc_msgSend")
+            let bksSym = dlsym(bbs, "BKSHIDEventSetDigitizerInfo"),
+            let msgSendSym = dlsym(rtld, "objc_msgSend")
         else { return false }
 
         typealias MkDigitizerFn = @convention(c) (
