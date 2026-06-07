@@ -192,7 +192,7 @@ final class InteractionEngine {
     // those methods on earlier OS versions.
     private static func deliverSyntheticTap(at windowPoint: CGPoint, to view: UIView) {
         guard let window = view.window else { return }
-        if #available(iOS 26, *) {
+        if #available(iOS 26, *), AppReveal.privateAPITapsEnabled {
             if hidEventTap(at: windowPoint, in: window) { return }
         }
         kvcTouchTap(at: windowPoint, to: view, window: window)
