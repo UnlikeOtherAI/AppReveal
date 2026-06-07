@@ -274,10 +274,17 @@ final class AccessibilityElementInventory {
 
         for element in rawElements {
             guard let rawElement = element as? NSObject else { continue }
-            if rawElement is UIView { continue }
 
             let objectId = ObjectIdentifier(rawElement)
             guard visited.insert(objectId).inserted else { continue }
+
+            // When an accessibility element is itself a UIView (iOS 26+ SwiftUI may do this),
+            // recurse into it as a view-level container rather than treating it as a leaf node.
+            if let subView = rawElement as? UIView {
+                enumerateElements(in: subView, containerId: resolvedContainerId, visited: &visited, visitor: visitor)
+                continue
+            }
+
             if let target = makeTarget(from: rawElement, containerView: view, containerId: resolvedContainerId) {
                 visitor(target)
             }
