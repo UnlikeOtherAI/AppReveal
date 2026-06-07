@@ -98,9 +98,15 @@ final class InteractionEngine {
                 }
             }
 
-            // SwiftUI hosting views have internal gesture recognizers that can't be fired
-            // externally. Route directly to the accessibility tree for these views.
+            // SwiftUI hosting views need a different tap path: accessibilityActivate() does
+            // not fire Button actions without VoiceOver, so we deliver a synthetic UITouch.
+            // On iOS 26+ this may not fire SwiftUI Button actions (see deliverSyntheticTap).
             let isSwiftUIHost = hitView.map { Self.isSwiftUIHostingView($0) } ?? false
+
+            if isSwiftUIHost, let hostingView = hitView {
+                Self.deliverSyntheticTap(at: point, to: hostingView)
+                return true
+            }
 
             if !isSwiftUIHost, let hitView, performTap(on: .view(hitView), windowId: ref.id, postPoint: false) {
                 return true
@@ -127,19 +133,15 @@ final class InteractionEngine {
         while let v = current {
             if let recognizers = v.gestureRecognizers {
                 for recognizer in recognizers where recognizer is UITapGestureRecognizer && recognizer.isEnabled {
-                    // Invoke the action associated with the recognizer
                     if let targets = recognizer.value(forKey: "_targets") as? [NSObject] {
                         for target in targets {
-                            // Extract target and action from the internal representation
                             let description = String(describing: target)
                             if description.contains("action=") {
-                                // Use performSelector-based invocation
                                 recognizer.state = .ended
-                                break
+                                return true
                             }
                         }
                     }
-                    return true
                 }
             }
             current = v.superview
@@ -163,8 +165,53 @@ final class InteractionEngine {
     }
 
     private static func isSwiftUIHostingView(_ view: UIView) -> Bool {
+        // On iOS 26+ Swift.type(of:).description() returns the ObjC mangled name
+        // (e.g. `_TtGC7SwiftUI14_UIHostingView…`) rather than the Swift qualified name,
+        // so check with contains rather than hasPrefix on a stripped base component.
         let name = Swift.type(of: view).description()
-        return name.hasPrefix("_UIHostingView") || name.hasPrefix("UIHostingView")
+        return name.contains("_UIHostingView") || name.contains("UIHostingView")
+    }
+
+    // Synthesises a UITouch via KVC and delivers it via touchesBegan/touchesEnded.
+    //
+    // On iOS 26+, SwiftUI's gesture engine runs inside UIKit's window-level event dispatch
+    // (UIWindow.sendEvent) and requires an IOHIDEvent-backed UIEvent — it does not override
+    // touchesBegan on _UIHostingView. This means SwiftUI Button actions cannot be fired
+    // reliably via in-process touch synthesis on iOS 26+ without deeper private-API access
+    // to UIApplication's event-processing pipeline. On iOS < 26 this path works correctly
+    // for SwiftUI hosting views and all UIKit views.
+    //
+    // On iOS 26+ UITouch.`_view` was removed; `_responder` and `_cachedResponderView`
+    // replaced it. We enumerate ivars at runtime to avoid crashing across OS versions.
+    private static func deliverSyntheticTap(at windowPoint: CGPoint, to view: UIView) {
+        guard let window = view.window else { return }
+
+        let knownIvars: Set<String> = {
+            var count: UInt32 = 0
+            guard let list = class_copyIvarList(UITouch.self, &count) else { return [] }
+            defer { free(list) }
+            var names = Set<String>()
+            for i in 0..<Int(count) { if let n = ivar_getName(list[i]) { names.insert(String(cString: n)) } }
+            return names
+        }()
+
+        let touch = UITouch()
+        touch.setValue(window, forKey: "_window")
+        for ivar in ["_responder", "_cachedResponderView", "_view"] where knownIvars.contains(ivar) {
+            touch.setValue(view, forKey: ivar)
+        }
+        touch.setValue(NSValue(cgPoint: windowPoint), forKey: "_locationInWindow")
+        touch.setValue(NSValue(cgPoint: windowPoint), forKey: "_previousLocationInWindow")
+        touch.setValue(1, forKey: "_tapCount")
+        touch.setValue(CACurrentMediaTime(), forKey: "_timestamp")
+
+        let touches: Set<UITouch> = [touch]
+        touch.setValue(UITouch.Phase.began.rawValue, forKey: "_phase")
+        view.touchesBegan(touches, with: nil)
+        DispatchQueue.main.async {
+            touch.setValue(UITouch.Phase.ended.rawValue, forKey: "_phase")
+            view.touchesEnded(touches, with: nil)
+        }
     }
 
     private func performTap(
