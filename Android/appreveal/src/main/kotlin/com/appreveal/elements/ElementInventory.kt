@@ -33,7 +33,88 @@ internal object ElementInventory {
             val elements = mutableListOf<ElementInfo>()
             val seenIds = mutableMapOf<String, Int>()
             walkView(decorView, elements, null, seenIds)
+            // Append Compose semantics nodes for any AndroidComposeView in the hierarchy.
+            elements.addAll(ComposeElementInventory.listElements(decorView))
             elements
+        }
+    }
+
+    /**
+     * Tap an element by ID, handling both View-based and Compose semantics elements.
+     * Returns true if a tap was dispatched.
+     */
+    fun tapElementById(id: String): Boolean {
+        return MainThreadExecutor.runBlocking {
+            val view = findElement(id)
+            if (view != null) {
+                if (view.isClickable || view.hasOnClickListeners()) {
+                    view.performClick()
+                } else {
+                    var parent: View? = view.parent as? View
+                    while (parent != null) {
+                        if (parent.isClickable || parent.hasOnClickListeners()) {
+                            parent.performClick()
+                            break
+                        }
+                        parent = parent.parent as? View
+                    }
+                }
+                return@runBlocking true
+            }
+            // Fall back to Compose accessibility node
+            val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking false
+            val node = ComposeElementInventory.findElementById(decorView, id) ?: return@runBlocking false
+            node.clickCompose()
+        }
+    }
+
+    /**
+     * Tap by text, handling both View and Compose elements.
+     */
+    fun tapElementByText(
+        text: String,
+        matchMode: String = "exact",
+        occurrence: Int = 0,
+    ): Map<String, Any> {
+        return MainThreadExecutor.runBlocking {
+            val decorView =
+                ScreenResolver.currentActivity?.window?.decorView
+                    ?: return@runBlocking mapOf("success" to false, "error" to "No active window")
+
+            // View-based match
+            val viewMatches = mutableListOf<Pair<View, String>>()
+            collectTextMatches(decorView, text, matchMode, viewMatches)
+
+            // Compose match
+            val composeNode = ComposeElementInventory.findNodeByText(decorView, text, matchMode, occurrence)
+
+            if (viewMatches.isEmpty() && composeNode == null) {
+                return@runBlocking mapOf("success" to false, "error" to "No element found with text: $text")
+            }
+
+            if (composeNode != null && viewMatches.size <= occurrence) {
+                val clicked = composeNode.clickCompose()
+                return@runBlocking if (clicked) {
+                    mapOf("success" to true, "text" to text)
+                } else {
+                    mapOf("success" to false, "error" to "Compose action click failed for: $text")
+                }
+            }
+
+            if (occurrence >= viewMatches.size) {
+                return@runBlocking mapOf(
+                    "success" to false,
+                    "error" to "occurrence $occurrence out of range",
+                    "candidates" to viewMatches.map { it.second },
+                )
+            }
+
+            val (matchedView, _) = viewMatches[occurrence]
+            val tappable = findTappableAncestor(matchedView) ?: matchedView
+            if (tappable.isClickable || tappable.hasOnClickListeners()) {
+                tappable.performClick()
+            }
+            mapOf("success" to true, "text" to text)
         }
     }
 

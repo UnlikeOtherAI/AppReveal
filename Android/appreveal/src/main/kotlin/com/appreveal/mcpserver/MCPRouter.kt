@@ -1,5 +1,6 @@
 package com.appreveal.mcpserver
 
+import com.appreveal.APPREVEAL_VERSION
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -46,7 +47,7 @@ internal object MCPRouter {
                             "serverInfo",
                             JsonObject().apply {
                                 addProperty("name", "AppReveal")
-                                addProperty("version", "0.8.0")
+                                addProperty("version", APPREVEAL_VERSION)
                             },
                         )
                     }

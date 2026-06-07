@@ -42,7 +42,7 @@ final class MCPRouter {
                 ],
                 "serverInfo": [
                     "name": "AppReveal",
-                    "version": "0.8.0"
+                    "version": AppRevealVersion.current
                 ]
             ] as [String: Any]))
 
