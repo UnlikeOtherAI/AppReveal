@@ -240,13 +240,13 @@ final class InteractionEngine {
         typealias MsgSendU32  = @convention(c) (AnyObject, Selector) -> UInt32
 
         let mkDigitizer = unsafeBitCast(mkDigitizerSym, to: MkDigitizerFn.self)
-        let mkFinger    = unsafeBitCast(mkFingerSym,    to: MkFingerFn.self)
-        let appendFn    = unsafeBitCast(appendSym,      to: AppendFn.self)
-        let setIntFn    = unsafeBitCast(setIntSym,      to: SetIntFn.self)
-        let setFloatFn  = unsafeBitCast(setFloatSym,    to: SetFloatFn.self)
-        let setSenderFn = unsafeBitCast(setSenderSym,   to: SetSenderFn.self)
-        let bksFn       = unsafeBitCast(bksSym,         to: BKSFn.self)
-        let msgSendU32  = unsafeBitCast(msgSendSym,     to: MsgSendU32.self)
+        let mkFinger = unsafeBitCast(mkFingerSym, to: MkFingerFn.self)
+        let appendFn = unsafeBitCast(appendSym, to: AppendFn.self)
+        let setIntFn = unsafeBitCast(setIntSym, to: SetIntFn.self)
+        let setFloatFn = unsafeBitCast(setFloatSym, to: SetFloatFn.self)
+        let setSenderFn = unsafeBitCast(setSenderSym, to: SetSenderFn.self)
+        let bksFn = unsafeBitCast(bksSym, to: BKSFn.self)
+        let msgSendU32 = unsafeBitCast(msgSendSym, to: MsgSendU32.self)
 
         let contextId = msgSendU32(window, NSSelectorFromString("_contextId"))
 
