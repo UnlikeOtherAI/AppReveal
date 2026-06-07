@@ -9,7 +9,7 @@ Build a debug-only, in-app MCP framework for iOS that gives LLM agents Playwrigh
 - **Streamable HTTP** transport (MCP standard) -- not WebSocket or custom
 - **Bonjour/mDNS** for zero-config LAN discovery
 - **Explicit instrumentation** -- screen keys, accessibility IDs, protocol conformance
-- **No private APIs** -- no SwiftUI internal tree inspection
+- **Minimal private API** -- no SwiftUI internal tree inspection; private API used only where the public API is insufficient (iOS 26 SwiftUI tap delivery)
 - **Convention-based adoption** -- one-line startup, protocol conformance for depth
 - **Read-first rollout** -- observation tools before mutation tools
 - **Swift Package** -- distributed as a Swift package, iOS 16+

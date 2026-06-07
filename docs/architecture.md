@@ -103,6 +103,8 @@ Executes UI actions on the main thread:
 
 Uses platform-native event dispatch and direct view/control method calls. Scroll uses `UIScrollView.setContentOffset` on iOS and `NSScrollView` APIs on macOS.
 
+**iOS 26+ SwiftUI tap delivery:** On iOS 26+ SwiftUI's gesture engine runs entirely inside UIKit's window-level event dispatch; direct `touchesBegan`/`touchesEnded` calls on `_UIHostingView` are ignored. `tap_point` and `tap_element` on SwiftUI targets instead synthesise an `IOHIDDigitizerEvent` (hand + finger sub-event), bind it to the target window via `BKSHIDEventSetDigitizerInfo`, and inject via `UIApplication._enqueueHIDEvent:`. This is the only reliable path and intentionally uses private API — AppReveal is a debug-only library and is never shipped to production.
+
 ### ScreenshotCapture / MacOSScreenshotCapture
 
 Captures the current window using `UIGraphicsImageRenderer` on iOS and window snapshots on macOS. Returns PNG or JPEG data with metadata (dimensions, scale).
@@ -326,7 +328,7 @@ iOS/                                   (single Swift package for iOS + macOS)
 ## Design principles
 
 1. **Convention over configuration** -- works with minimal setup if naming conventions are followed
-2. **Explicit over magic** -- no private API usage, no SwiftUI internal tree walking
+2. **Explicit over magic** -- no SwiftUI internal tree walking; private API is used only where the public API is insufficient (e.g. iOS 26 SwiftUI tap delivery via `_enqueueHIDEvent:`)
 3. **Read-first** -- observation tools before mutation tools
 4. **Debug-only** -- zero production impact, compile-time guarantee
 5. **Standard transport** -- MCP Streamable HTTP for maximum client compatibility
