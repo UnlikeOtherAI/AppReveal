@@ -192,9 +192,11 @@ final class InteractionEngine {
     // those methods on earlier OS versions.
     private static func deliverSyntheticTap(at windowPoint: CGPoint, to view: UIView) {
         guard let window = view.window else { return }
-        if #available(iOS 26, *), AppReveal.privateAPITapsEnabled {
+        #if APPREVEAL_PRIVATE_API_TAPS
+        if #available(iOS 26, *) {
             if hidEventTap(at: windowPoint, in: window) { return }
         }
+        #endif
         kvcTouchTap(at: windowPoint, to: view, window: window)
     }
 
@@ -202,9 +204,13 @@ final class InteractionEngine {
     // finger sub-event, bind it to the target window via BKSHIDEventSetDigitizerInfo, and
     // inject it into UIKit's HID pipeline via UIApplication._enqueueHIDEvent:.
     //
+    // This entire method is compiled out unless APPREVEAL_PRIVATE_API_TAPS is defined,
+    // ensuring private API symbols are absent from production/review binaries.
+    //
     // Coordinates are absolute screen points (not normalised 0–1).
     // Event-mask values: range=0x1, touch=0x2, position=0x4.
     // Parent hand mask = child masks ∩ {touch, attribute} → 0x2 for a single finger tap.
+    #if APPREVEAL_PRIVATE_API_TAPS
     @available(iOS 26, *)
     private static func hidEventTap(at windowPoint: CGPoint, in window: UIWindow) -> Bool {
         let iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW)
@@ -295,6 +301,7 @@ final class InteractionEngine {
         }
         return true
     }
+    #endif // APPREVEAL_PRIVATE_API_TAPS
 
     // Fallback for iOS < 26: synthesise a UITouch via KVC and deliver via
     // touchesBegan/touchesEnded (SwiftUI overrode these on pre-iOS 26).

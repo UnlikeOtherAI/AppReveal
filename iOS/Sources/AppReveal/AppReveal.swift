@@ -16,17 +16,6 @@ public final class AppReveal {
 
     private init() {}
 
-    /// Allow AppReveal to use private UIKit APIs for synthetic tap delivery on iOS 26+.
-    ///
-    /// When `true`, `tap_point` and `tap_element` on SwiftUI views inject an
-    /// `IOHIDDigitizerEvent` via `UIApplication._enqueueHIDEvent:` so SwiftUI gesture
-    /// recognisers fire correctly. This is the only reliable tap path on iOS 26+, but
-    /// requires private Apple APIs. Opt-in because some teams prefer to avoid private
-    /// API usage even in debug builds. Set to `true` before calling `AppReveal.start()`.
-    ///
-    /// Defaults to `false`.
-    public static var privateAPITapsEnabled: Bool = false
-
     /// Start the AppReveal MCP server and Bonjour advertising.
     /// - Parameter port: Optional specific port. Uses a dynamic port if nil.
     public static func start(port: UInt16? = nil) {

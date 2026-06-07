@@ -17,7 +17,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         ExampleStateContainer.shared.isLoggedIn = true
 
         // One-line AppReveal integration
-        AppReveal.privateAPITapsEnabled = true   // enable iOS 26 SwiftUI tap injection
         AppReveal.start()
 
         // Register providers
