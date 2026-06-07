@@ -24,29 +24,9 @@ internal object InteractionEngine {
 
     fun tap(elementId: String) {
         MainThreadExecutor.runBlocking {
-            val view =
-                ElementInventory.findElement(elementId)
-                    ?: throw InteractionError.ElementNotFound(elementId)
-
-            if (view.isClickable || view.hasOnClickListeners()) {
-                view.performClick()
-            } else {
-                // Try to find a parent that is clickable
-                var parent: View? = view.parent as? View
-                while (parent != null) {
-                    if (parent.isClickable || parent.hasOnClickListeners()) {
-                        parent.performClick()
-                        return@runBlocking
-                    }
-                    parent = parent.parent as? View
-                }
-                // Fall back to point tap at center
-                val location = IntArray(2)
-                view.getLocationOnScreen(location)
-                val x = location[0] + view.width / 2f
-                val y = location[1] + view.height / 2f
-                tapPoint(x, y)
-            }
+            // Handles both View-based and Compose semantics elements.
+            val tapped = ElementInventory.tapElementById(elementId)
+            if (!tapped) throw InteractionError.ElementNotFound(elementId)
         }
     }
 
@@ -83,38 +63,7 @@ internal object InteractionEngine {
         text: String,
         matchMode: String = "exact",
         occurrence: Int = 0,
-    ): Map<String, Any> =
-        MainThreadExecutor.runBlocking {
-            val (view, candidates) = ElementInventory.findElementByText(text, matchMode, occurrence)
-            if (view == null) {
-                if (candidates.isEmpty()) {
-                    mapOf("success" to false, "error" to "No element found with text: $text")
-                } else {
-                    mapOf(
-                        "success" to false,
-                        "error" to "Element not found at occurrence $occurrence",
-                        "candidates" to candidates,
-                    )
-                }
-            } else {
-                if (view.isClickable || view.hasOnClickListeners()) {
-                    view.performClick()
-                } else {
-                    // Fall back to center-point tap
-                    val location = IntArray(2)
-                    view.getLocationOnScreen(location)
-                    val x = location[0] + view.width / 2f
-                    val y = location[1] + view.height / 2f
-                    tapPoint(x, y)
-                }
-                mapOf(
-                    "success" to true,
-                    "tappedText" to text,
-                    "matchMode" to matchMode,
-                    "candidates" to candidates,
-                )
-            }
-        }
+    ): Map<String, Any> = ElementInventory.tapElementByText(text, matchMode, occurrence)
 
     // MARK: - Text
 
