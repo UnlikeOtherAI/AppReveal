@@ -648,7 +648,8 @@ private func registerIOSBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "tap_point",
-        description: "Tap at specific screen coordinates. Coordinates are UIKit logical points (NOT device pixels) — match the values shown by get_elements or screenshot metadata. success:false means no interactive element was found at that point; check coordinate_hint for the resolved hit-test class.",
+        description: "Tap at specific UIKit logical-point coordinates (NOT device pixels). " +
+            "success:false + coordinate_hint is returned when no element activated.",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
@@ -893,7 +894,8 @@ private func registerIOSBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "touch_imprint_enable",
-        description: "Enable a persistent debug overlay that draws a crosshair + coordinate label at the resolved point of every AppReveal-dispatched tap. Imprints accumulate until touch_imprint_reset. Use touch_imprint_disable to remove the overlay entirely.",
+        description: "Enable a debug overlay that draws a crosshair + (x,y) label at each dispatched tap. " +
+            "Imprints accumulate until touch_imprint_reset. Disable with touch_imprint_disable.",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
