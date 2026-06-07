@@ -6,6 +6,7 @@ final class TapCalibrationViewController: UIViewController {
     private let instructionLabel = UILabel()
     private let targetView = UIView()
     private let resultLabel = UILabel()
+    private let imageButtonResultLabel = UILabel()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -39,6 +40,14 @@ final class TapCalibrationViewController: UIViewController {
         resultLabel.accessibilityIdentifier = "calibration.result"
         view.addSubview(resultLabel)
 
+        imageButtonResultLabel.text = "Image button not yet tapped"
+        imageButtonResultLabel.textAlignment = .center
+        imageButtonResultLabel.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        imageButtonResultLabel.textColor = .secondaryLabel
+        imageButtonResultLabel.translatesAutoresizingMaskIntoConstraints = false
+        imageButtonResultLabel.accessibilityIdentifier = "calibration.image_button_result"
+        view.addSubview(imageButtonResultLabel)
+
         NSLayoutConstraint.activate([
             instructionLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 32),
             instructionLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
@@ -51,24 +60,29 @@ final class TapCalibrationViewController: UIViewController {
 
             resultLabel.topAnchor.constraint(equalTo: targetView.bottomAnchor, constant: 32),
             resultLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            resultLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24)
+            resultLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+
+            imageButtonResultLabel.topAnchor.constraint(equalTo: resultLabel.bottomAnchor, constant: 8),
+            imageButtonResultLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            imageButtonResultLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24)
         ])
     }
 
     private func embedSwiftUIButton() {
-        let swiftUIVC = UIHostingController(rootView: SwiftUITapTestView(onTap: { [weak self] in
-            self?.swiftUIButtonTapped()
-        }))
+        let swiftUIVC = UIHostingController(rootView: SwiftUITapTestView(
+            onTap: { [weak self] in self?.swiftUIButtonTapped() },
+            onImageTap: { [weak self] in self?.swiftUIImageButtonTapped() }
+        ))
         addChild(swiftUIVC)
         swiftUIVC.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(swiftUIVC.view)
         swiftUIVC.didMove(toParent: self)
 
         NSLayoutConstraint.activate([
-            swiftUIVC.view.topAnchor.constraint(equalTo: resultLabel.bottomAnchor, constant: 32),
+            swiftUIVC.view.topAnchor.constraint(equalTo: imageButtonResultLabel.bottomAnchor, constant: 16),
             swiftUIVC.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             swiftUIVC.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            swiftUIVC.view.heightAnchor.constraint(equalToConstant: 100)
+            swiftUIVC.view.heightAnchor.constraint(equalToConstant: 130)
         ])
     }
 
@@ -90,25 +104,46 @@ final class TapCalibrationViewController: UIViewController {
         resultLabel.text = "SwiftUI button tapped!"
         resultLabel.textColor = .systemBlue
     }
+
+    private func swiftUIImageButtonTapped() {
+        imageButtonResultLabel.text = "SwiftUI image button tapped!"
+        imageButtonResultLabel.textColor = .systemOrange
+    }
 }
 
 private struct SwiftUITapTestView: View {
     let onTap: () -> Void
+    let onImageTap: () -> Void
 
     var body: some View {
         VStack(spacing: 8) {
             Text("SwiftUI Button Test")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button(action: onTap) {
-                Text("Tap Me (SwiftUI)")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            HStack(spacing: 12) {
+                Button(action: onTap) {
+                    Text("Tap Me (SwiftUI)")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .accessibilityIdentifier("calibration.swiftui_button")
+                #if DEBUG
+                .appReveal("calibration.swiftui_button", label: "Tap Me (SwiftUI)")
+                #endif
+                // Image-only button — no label/identifier. Use .appReveal() for discovery on iOS 26+.
+                Button(action: onImageTap) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .resizable()
+                        .frame(width: 44, height: 44)
+                        .foregroundStyle(Color.orange)
+                }
+                #if DEBUG
+                .appReveal("calibration.image_button", label: "Send")
+                #endif
             }
-            .accessibilityIdentifier("calibration.swiftui_button")
             .padding(.horizontal, 24)
         }
     }

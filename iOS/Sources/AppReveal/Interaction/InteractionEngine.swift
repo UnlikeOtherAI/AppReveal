@@ -358,6 +358,11 @@ final class InteractionEngine {
             }
             let hitView = ref.nativeWindow.hitTest(accessibilityTarget.centerPoint, with: nil)
             return performTap(onView: hitView, at: accessibilityTarget.centerPoint)
+        case .point(let point):
+            // SwiftUI element registered via .appReveal() — no UIView backing.
+            // Delegate to tap(point:) which handles SwiftUI hosting views, HID events,
+            // and the full fallback stack. postTapPoint is called inside tap(point:).
+            return tap(point: point, windowId: windowId)
         }
     }
 
@@ -617,6 +622,11 @@ final class InteractionEngine {
             return editableAncestor(for: view)
         case .accessibility(let accessibilityTarget):
             if let hitView = hitView(at: accessibilityTarget.centerPoint, windowId: windowId, preferredWindow: accessibilityTarget.containerView.window) {
+                return editableAncestor(for: hitView)
+            }
+            return nil
+        case .point(let point):
+            if let hitView = hitView(at: point, windowId: windowId, preferredWindow: nil) {
                 return editableAncestor(for: hitView)
             }
             return nil
