@@ -98,12 +98,19 @@ final class InteractionEngine {
                 }
             }
 
-            // SwiftUI hosting views need a different tap path: accessibilityActivate() does
-            // not fire Button actions without VoiceOver, so we deliver a synthetic UITouch.
-            // On iOS 26+ this may not fire SwiftUI Button actions (see deliverSyntheticTap).
+            // SwiftUI hosting views need a dedicated tap path. On iOS 26+ SwiftUI moved all
+            // touch handling into UIKit's window-level event dispatch, so direct touchesBegan
+            // calls are ignored. We try accessibilityActivate() first (SwiftUI Button
+            // implements this to fire its action, works without VoiceOver) and fall back to
+            // IOHIDEvent injection via UIApplication._handleHIDEvent: on iOS 26+, then KVC
+            // touch injection on older OS.
             let isSwiftUIHost = hitView.map { Self.isSwiftUIHostingView($0) } ?? false
 
             if isSwiftUIHost, let hostingView = hitView {
+                let axTarget = AccessibilityElementInventory.shared.findElement(at: point, in: window)
+                if let accessibilityTarget = axTarget, accessibilityTarget.activate() {
+                    return true
+                }
                 Self.deliverSyntheticTap(at: point, to: hostingView)
                 return true
             }
@@ -172,20 +179,126 @@ final class InteractionEngine {
         return name.contains("_UIHostingView") || name.contains("UIHostingView")
     }
 
-    // Synthesises a UITouch via KVC and delivers it via touchesBegan/touchesEnded.
+    // Delivers a tap to a SwiftUI hosting view.
     //
-    // On iOS 26+, SwiftUI's gesture engine runs inside UIKit's window-level event dispatch
-    // (UIWindow.sendEvent) and requires an IOHIDEvent-backed UIEvent — it does not override
-    // touchesBegan on _UIHostingView. This means SwiftUI Button actions cannot be fired
-    // reliably via in-process touch synthesis on iOS 26+ without deeper private-API access
-    // to UIApplication's event-processing pipeline. On iOS < 26 this path works correctly
-    // for SwiftUI hosting views and all UIKit views.
+    // On iOS 26+, SwiftUI's gesture engine runs entirely inside UIKit's window-level event
+    // dispatch. Direct touchesBegan/touchesEnded calls on _UIHostingView are ignored. We
+    // synthesise a real IOHIDDigitizerEvent (hand + finger) and inject it via the private
+    // UIApplication._enqueueHIDEvent: after binding the window's context ID via
+    // BKSHIDEventSetDigitizerInfo. This mirrors what Lyft's Hammer library does and works in
+    // both Simulator and on device. Private APIs are intentional — AppReveal is debug-only.
     //
-    // On iOS 26+ UITouch.`_view` was removed; `_responder` and `_cachedResponderView`
-    // replaced it. We enumerate ivars at runtime to avoid crashing across OS versions.
+    // On iOS < 26 the touchesBegan/touchesEnded path works because _UIHostingView overrode
+    // those methods on earlier OS versions.
     private static func deliverSyntheticTap(at windowPoint: CGPoint, to view: UIView) {
         guard let window = view.window else { return }
+        if #available(iOS 26, *) {
+            if hidEventTap(at: windowPoint, in: window) { return }
+        }
+        kvcTouchTap(at: windowPoint, to: view, window: window)
+    }
 
+    // iOS 26+: synthesise a proper IOHIDDigitizerEvent with a hand parent event and a
+    // finger sub-event, bind it to the target window via BKSHIDEventSetDigitizerInfo, and
+    // inject it into UIKit's HID pipeline via UIApplication._enqueueHIDEvent:.
+    //
+    // Coordinates are absolute screen points (not normalised 0–1).
+    // Event-mask values: range=0x1, touch=0x2, position=0x4.
+    // Parent hand mask = child masks ∩ {touch, attribute} → 0x2 for a single finger tap.
+    @available(iOS 26, *)
+    private static func hidEventTap(at windowPoint: CGPoint, in window: UIWindow) -> Bool {
+        let iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW)
+        let bbs = dlopen(
+            "/System/Library/PrivateFrameworks/BackBoardServices.framework/BackBoardServices",
+            RTLD_NOW)
+        let rtld = UnsafeMutableRawPointer(bitPattern: -2) // RTLD_DEFAULT
+
+        guard
+            let mkDigitizerSym = dlsym(iokit, "IOHIDEventCreateDigitizerEvent"),
+            let mkFingerSym    = dlsym(iokit, "IOHIDEventCreateDigitizerFingerEvent"),
+            let appendSym      = dlsym(iokit, "IOHIDEventAppendEvent"),
+            let setIntSym      = dlsym(iokit, "IOHIDEventSetIntegerValue"),
+            let setFloatSym    = dlsym(iokit, "IOHIDEventSetFloatValue"),
+            let setSenderSym   = dlsym(iokit, "IOHIDEventSetSenderID"),
+            let bksSym         = dlsym(bbs,   "BKSHIDEventSetDigitizerInfo"),
+            let msgSendSym     = dlsym(rtld,   "objc_msgSend")
+        else { return false }
+
+        typealias MkDigitizerFn = @convention(c) (
+            CFAllocator?, UInt64, UInt32, UInt32, UInt32, UInt32, UInt32,
+            CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, Bool, Bool, CFOptionFlags
+        ) -> AnyObject
+        typealias MkFingerFn = @convention(c) (
+            CFAllocator?, UInt64, UInt32, UInt32, UInt32,
+            CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, Bool, Bool, CFOptionFlags
+        ) -> AnyObject
+        typealias AppendFn    = @convention(c) (AnyObject, AnyObject, CFOptionFlags) -> Void
+        typealias SetIntFn    = @convention(c) (AnyObject, UInt32, Int) -> Void
+        typealias SetFloatFn  = @convention(c) (AnyObject, UInt32, CGFloat) -> Void
+        typealias SetSenderFn = @convention(c) (AnyObject, UInt64) -> Void
+        typealias BKSFn       = @convention(c) (AnyObject, UInt32, Bool, Bool, CFString?, CFTimeInterval, Float) -> Void
+        typealias MsgSendU32  = @convention(c) (AnyObject, Selector) -> UInt32
+
+        let mkDigitizer = unsafeBitCast(mkDigitizerSym, to: MkDigitizerFn.self)
+        let mkFinger    = unsafeBitCast(mkFingerSym,    to: MkFingerFn.self)
+        let appendFn    = unsafeBitCast(appendSym,      to: AppendFn.self)
+        let setIntFn    = unsafeBitCast(setIntSym,      to: SetIntFn.self)
+        let setFloatFn  = unsafeBitCast(setFloatSym,    to: SetFloatFn.self)
+        let setSenderFn = unsafeBitCast(setSenderSym,   to: SetSenderFn.self)
+        let bksFn       = unsafeBitCast(bksSym,         to: BKSFn.self)
+        let msgSendU32  = unsafeBitCast(msgSendSym,     to: MsgSendU32.self)
+
+        let contextId = msgSendU32(window, NSSelectorFromString("_contextId"))
+
+        let enqueueHIDSel = NSSelectorFromString("_enqueueHIDEvent:")
+        guard UIApplication.shared.responds(to: enqueueHIDSel) else { return false }
+
+        // finger eventMask: touch(0x2)|range(0x1) = 0x3 for both began and ended
+        // parent hand eventMask: finger masks ∩ {touch(0x2), attribute(0x40)} = 0x2
+        let fingerMask: UInt32 = 0x3
+        let handMask:   UInt32 = 0x2
+        let senderId:   UInt64 = 0x0000000123456789
+
+        func makeEvent(at time: UInt64, touching: Bool) -> AnyObject {
+            let hand = mkDigitizer(
+                nil, time,
+                3, 0, 0,        // transducerType=hand, index=0, identifier=0
+                handMask, 0,    // eventMask, buttonEvent
+                0, 0, 0, 0, 0,  // x, y, z, pressure, twist (unused on parent)
+                false, touching,
+                0)
+            setIntFn(hand, 0xB0019, 1)      // isDisplayIntegrated = 1
+            setSenderFn(hand, senderId)
+
+            let finger = mkFinger(
+                nil, time,
+                1, 1,           // identifier=1, fingerIndex=1 (rightThumb)
+                fingerMask,
+                windowPoint.x, windowPoint.y, 0,  // absolute screen coordinates
+                0, 0,           // pressure, twist
+                touching, touching,
+                0)
+            setFloatFn(finger, 0xB0014, 5)  // majorRadius
+            setFloatFn(finger, 0xB0015, 5)  // minorRadius
+            appendFn(hand, finger, 0)
+            return hand
+        }
+
+        let beganEvent = makeEvent(at: mach_absolute_time(), touching: true)
+        bksFn(beganEvent, contextId, false, false, nil, 0, 0)
+        UIApplication.shared.perform(enqueueHIDSel, with: beganEvent)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            let endedEvent = makeEvent(at: mach_absolute_time(), touching: false)
+            bksFn(endedEvent, contextId, false, false, nil, 0, 0)
+            UIApplication.shared.perform(enqueueHIDSel, with: endedEvent)
+        }
+        return true
+    }
+
+    // Fallback for iOS < 26: synthesise a UITouch via KVC and deliver via
+    // touchesBegan/touchesEnded (SwiftUI overrode these on pre-iOS 26).
+    private static func kvcTouchTap(at windowPoint: CGPoint, to view: UIView, window: UIWindow) {
         let knownIvars: Set<String> = {
             var count: UInt32 = 0
             guard let list = class_copyIvarList(UITouch.self, &count) else { return [] }
