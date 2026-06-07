@@ -13,6 +13,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     ) -> Bool {
 
         #if DEBUG
+        // Skip login modal so MCP tests can reach inner screens immediately.
+        ExampleStateContainer.shared.isLoggedIn = true
+
         // One-line AppReveal integration
         AppReveal.start()
 
