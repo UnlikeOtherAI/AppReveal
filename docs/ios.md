@@ -61,7 +61,32 @@ If your team prefers zero private API usage even in debug builds, remove (or com
 
 Without the flag, `tap_point` still works for all UIKit views and SwiftUI views on iOS < 26. On iOS 26+ SwiftUI buttons will not respond to synthetic taps.
 
-### 2. Add screen identity (optional)
+### 2. Register SwiftUI elements (required on iOS 26+)
+
+On iOS 26, SwiftUI defers building its accessibility tree until VoiceOver is actually running. AppReveal's in-process scan can't trigger that build, so SwiftUI buttons inside `UIHostingController` are invisible to `get_elements` by default.
+
+**Fix:** apply `.appReveal("id")` to SwiftUI views that agents need to interact with.
+
+```swift
+// Works on iOS 16+ — no-op in release (compiled only under #if DEBUG)
+Button(action: sendMessage) {
+    Image(systemName: "arrow.up.circle.fill")
+}
+#if DEBUG
+.appReveal("chat.send_button", label: "Send")
+#endif
+
+Button("Submit") { submit() }
+#if DEBUG
+.appReveal("form.submit")
+#endif
+```
+
+After this, `get_elements` returns the element with `idSource: "appReveal"` and `tap_element("chat.send_button")` works correctly — the tap is delivered through the same SwiftUI-aware IOHIDDigitizerEvent path as `tap_point`.
+
+**Elements without `.appReveal()`:** UIKit views (`UIButton`, `UITextField`, `UISwitch`, etc.) and SwiftUI elements with an `accessibilityIdentifier` set **on iOS < 26** continue to work automatically.
+
+### 3. Add screen identity (optional)
 
 Screen identity is auto-derived from class names -- `LoginViewController` becomes key `"login"`, title `"Login"`. Override only when you want a custom key:
 

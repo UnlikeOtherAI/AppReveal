@@ -55,6 +55,9 @@ struct TapTargetResolveResult {
 enum TapTarget {
     case view(UIView)
     case accessibility(AccessibilityResolvedTarget)
+    /// Fallback for SwiftUI elements registered via .appReveal() whose frame is known
+    /// but that have no backing UIView or UIAccessibilityElement (iOS 26+).
+    case point(CGPoint)
 }
 
 @MainActor
@@ -306,9 +309,21 @@ final class AccessibilityElementInventory {
         visited: inout Set<ObjectIdentifier>,
         visitor: (AccessibilityResolvedTarget) -> Void
     ) {
-        guard let arr = (element.value(forKey: "accessibilityElements") as? [Any]), !arr.isEmpty else { return }
+        // SwiftUI virtual accessibility proxy nodes expose children via accessibilityElementCount /
+        // accessibilityElement(at:) rather than a KVC-accessible "accessibilityElements" key.
+        // Try the array property first; fall back to count/index for SwiftUI nodes.
+        let rawArr: [Any]
+        if let arr = element.value(forKey: "accessibilityElements") as? [Any], !arr.isEmpty {
+            rawArr = arr
+        } else {
+            let count = element.accessibilityElementCount()
+            guard count > 0, count < 100_000 else { return }
+            rawArr = (0..<count).compactMap { element.accessibilityElement(at: $0) }
+        }
+        guard !rawArr.isEmpty else { return }
+
         let subContainerId = accessibilityIdentifier(for: element) ?? containerId
-        for sub in arr {
+        for sub in rawArr {
             guard let rawSub = sub as? NSObject, !(rawSub is UIView) else { continue }
             let objectId = ObjectIdentifier(rawSub)
             guard visited.insert(objectId).inserted else { continue }
@@ -355,10 +370,15 @@ final class AccessibilityElementInventory {
         if let label = accessibilityLabel(for: element), !label.isEmpty {
             return (ElementInventory.normalizeToId(label), "semantics")
         }
-        let typeName = String(describing: type(of: element))
-            .lowercased()
-            .replacingOccurrences(of: "ui", with: "")
-        return (typeName, "derived")
+        // Use trait to derive a human-readable type prefix for unlabeled elements
+        // (e.g. SwiftUI image-only buttons with no accessibilityLabel set).
+        let traits = accessibilityTraits(for: element)
+        if traits.contains(.button) { return ("button", "derived") }
+        if traits.contains(.link) { return ("link", "derived") }
+        if traits.contains(.header) { return ("header", "derived") }
+        if traits.contains(.image) { return ("image", "derived") }
+        if traits.contains(.adjustable) { return ("slider", "derived") }
+        return ("element", "derived")
     }
 
     private func classifyElement(_ element: NSObject) -> ElementType {

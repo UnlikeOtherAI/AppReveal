@@ -639,6 +639,8 @@ private func registerIOSBuiltInTools() {
                 InteractionEngine.shared.tap(point: center, windowId: windowId)
             case .accessibility(let accessibilityTarget):
                 InteractionEngine.shared.tap(point: accessibilityTarget.centerPoint, windowId: windowId)
+            case .point(let point):
+                InteractionEngine.shared.tap(point: point, windowId: windowId)
             }
             return AnyCodable(["success": true, "text": text] as [String: Any])
         }

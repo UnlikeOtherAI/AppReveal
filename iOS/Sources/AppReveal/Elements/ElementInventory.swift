@@ -33,6 +33,7 @@ final class ElementInventory {
                 seenAccessibilityElements: &seenAccessibilityElements
             )
         }
+        appendSwiftUIRegisteredElements(to: &elements, seenIds: &seenIds)
         return elements
     }
 
@@ -121,6 +122,11 @@ final class ElementInventory {
             if let accessibilityTarget = AccessibilityElementInventory.shared.findElement(byVisibleText: id, in: ref.nativeWindow) {
                 return .accessibility(accessibilityTarget)
             }
+        }
+
+        // Check elements registered via .appReveal() modifier (required for SwiftUI on iOS 26+).
+        if let entry = SwiftUIElementRegistry.shared.findElement(byId: id) {
+            return .point(entry.frame.center)
         }
 
         return nil
@@ -596,6 +602,36 @@ final class ElementInventory {
             "bottom": insets.bottom,
             "trailing": insets.trailing
         ]
+    }
+
+    private func appendSwiftUIRegisteredElements(
+        to elements: inout [ElementInfo],
+        seenIds: inout [String: Int]
+    ) {
+        for entry in SwiftUIElementRegistry.shared.currentElements() {
+            let count = seenIds[entry.id, default: 0]
+            seenIds[entry.id] = count + 1
+            let finalId = count == 0 ? entry.id : "\(entry.id)_\(count)"
+            let frame = entry.frame
+            let safeAreaInsets = ElementInfo.ElementInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+            elements.append(
+                ElementInfo(
+                    id: finalId,
+                    type: .button,
+                    label: entry.label,
+                    value: nil,
+                    enabled: true,
+                    visible: !frame.isEmpty,
+                    tappable: true,
+                    frame: Self.makeFrame(frame),
+                    safeAreaInsets: safeAreaInsets,
+                    safeAreaLayoutGuideFrame: Self.makeFrame(frame),
+                    containerId: nil,
+                    actions: ["tap"],
+                    idSource: "appReveal"
+                )
+            )
+        }
     }
 
     private func candidateWindows(windowId: String?) -> [WindowRef] {
