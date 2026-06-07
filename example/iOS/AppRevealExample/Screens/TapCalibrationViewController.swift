@@ -13,7 +13,7 @@ final class TapCalibrationViewController: UIViewController {
         title = "Tap Calibration"
         view.backgroundColor = .systemBackground
         setupViews()
-        embedSwiftUIButton()
+        embedSwiftUIView()
     }
 
     private func setupViews() {
@@ -68,7 +68,7 @@ final class TapCalibrationViewController: UIViewController {
         ])
     }
 
-    private func embedSwiftUIButton() {
+    private func embedSwiftUIView() {
         let swiftUIVC = UIHostingController(rootView: SwiftUITapTestView(
             onTap: { [weak self] in self?.swiftUIButtonTapped() },
             onImageTap: { [weak self] in self?.swiftUIImageButtonTapped() }
@@ -82,7 +82,7 @@ final class TapCalibrationViewController: UIViewController {
             swiftUIVC.view.topAnchor.constraint(equalTo: imageButtonResultLabel.bottomAnchor, constant: 16),
             swiftUIVC.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             swiftUIVC.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            swiftUIVC.view.heightAnchor.constraint(equalToConstant: 130)
+            swiftUIVC.view.heightAnchor.constraint(equalToConstant: 180)
         ])
     }
 
@@ -115,6 +115,8 @@ private struct SwiftUITapTestView: View {
     let onTap: () -> Void
     let onImageTap: () -> Void
 
+    @State private var textFieldValue = ""
+
     var body: some View {
         VStack(spacing: 8) {
             Text("SwiftUI Button Test")
@@ -145,6 +147,16 @@ private struct SwiftUITapTestView: View {
                 #endif
             }
             .padding(.horizontal, 24)
+
+            // SwiftUI TextField for iOS 26 tap-to-focus verification.
+            // tap_point on this field should bring up the keyboard (type_text should then work).
+            TextField("Type here (SwiftUI)", text: $textFieldValue)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 24)
+                .accessibilityIdentifier("calibration.swiftui_field")
+                #if DEBUG
+                .appReveal("calibration.swiftui_field", label: "Type here (SwiftUI)")
+                #endif
         }
     }
 }

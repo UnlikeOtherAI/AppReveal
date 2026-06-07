@@ -107,6 +107,14 @@ final class InteractionEngine {
             let isSwiftUIHost = hitView.map { Self.isSwiftUIHostingView($0) } ?? false
 
             if isSwiftUIHost, let hostingView = hitView {
+                // On iOS 26, synthetic taps reach SwiftUI Button gesture recognizers but do
+                // NOT propagate through SwiftUI's focus system to make a TextField become
+                // first responder. Check for an editable UITextField/UITextView at the tap
+                // point first — if found, activate it directly and skip the gesture path.
+                if let textInput = findEditableView(at: point, in: hostingView) {
+                    textInput.becomeFirstResponder()
+                    return true
+                }
                 let axTarget = AccessibilityElementInventory.shared.findElement(at: point, in: window)
                 if let accessibilityTarget = axTarget, accessibilityTarget.activate() {
                     return true
@@ -177,6 +185,23 @@ final class InteractionEngine {
         // so check with contains rather than hasPrefix on a stripped base component.
         let name = Swift.type(of: view).description()
         return name.contains("_UIHostingView") || name.contains("UIHostingView")
+    }
+
+    // Find a UITextField or UITextView inside a SwiftUI hosting view whose frame
+    // in window coordinates contains the given point. SwiftUI renders TextFields as
+    // real UITextField instances in the hosting view's subview tree.
+    private func findEditableView(at windowPoint: CGPoint, in root: UIView) -> UIView? {
+        let frameInWindow = root.convert(root.bounds, to: nil)
+        guard frameInWindow.contains(windowPoint) else { return nil }
+        if root is UITextField || root is UITextView {
+            return root
+        }
+        for subview in root.subviews where !subview.isHidden {
+            if let found = findEditableView(at: windowPoint, in: subview) {
+                return found
+            }
+        }
+        return nil
     }
 
     // Delivers a tap to a SwiftUI hosting view.
@@ -370,6 +395,16 @@ final class InteractionEngine {
         guard let view else { return false }
 
         if let control = findAncestorControl(from: view) {
+            // UITextField/UITextView respond to tap by becoming first responder.
+            // sendActions(for:) does not trigger focus — call becomeFirstResponder directly.
+            if let textInput = control as? UITextField {
+                textInput.becomeFirstResponder()
+                return true
+            }
+            if let textInput = control as? UITextView {
+                textInput.becomeFirstResponder()
+                return true
+            }
             control.sendActions(for: .touchUpInside)
             return true
         }
