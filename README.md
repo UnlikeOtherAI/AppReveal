@@ -39,7 +39,11 @@ AppReveal.start()
 #endif
 ```
 
-See [iOS guide](docs/ios.md) for full setup.
+#### SwiftUI tap support on iOS 26+
+
+`tap_point` and `tap_element` on SwiftUI views require private UIKit APIs on iOS 26+. AppReveal compiles this code in automatically for **debug builds** and compiles it **out for release builds** — no private symbols reach your App Store binary. No setup needed.
+
+To opt out of private APIs entirely (even in debug builds), remove the `swiftSettings` line from AppReveal's `Package.swift`. See [iOS guide](docs/ios.md) for details.
 
 ### macOS
 

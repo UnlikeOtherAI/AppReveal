@@ -25,12 +25,6 @@ import AppReveal
 
 func application(_ application: UIApplication, didFinishLaunchingWithOptions ...) -> Bool {
     #if DEBUG
-    // Optional: enable private-API tap injection for SwiftUI views on iOS 26+.
-    // On iOS 26+ SwiftUI gestures require IOHIDDigitizerEvent injection via private UIKit
-    // APIs. This is off by default — opt in if you need tap_point/tap_element to fire
-    // SwiftUI button actions.
-    AppReveal.privateAPITapsEnabled = true
-
     AppReveal.start()
 
     // Optional: register providers for deeper inspection
@@ -44,6 +38,28 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions ...
 ```
 
 WKWebView support works automatically -- no additional integration needed.
+
+### SwiftUI tap support on iOS 26+
+
+On iOS 26+ SwiftUI gesture recognisers require private UIKit APIs for synthetic tap delivery (`IOHIDDigitizerEvent` + `UIApplication._enqueueHIDEvent:`). AppReveal gates this code behind the `APPREVEAL_PRIVATE_API_TAPS` compile flag, which is set automatically for debug builds in `Package.swift`:
+
+| Build configuration | Private API code | Notes |
+|---|---|---|
+| Debug | ✅ compiled in | SwiftUI taps work |
+| Release | ❌ absent | No private symbols — safe for App Store review |
+
+No setup needed. The flag is already wired up in AppReveal's `Package.swift`.
+
+#### Opting out of private APIs entirely
+
+If your team prefers zero private API usage even in debug builds, remove (or comment out) the `swiftSettings` entry from AppReveal's `Package.swift`:
+
+```swift
+// iOS/Package.swift — remove to disable private API taps in all builds:
+// .define("APPREVEAL_PRIVATE_API_TAPS", .when(configuration: .debug))
+```
+
+Without the flag, `tap_point` still works for all UIKit views and SwiftUI views on iOS < 26. On iOS 26+ SwiftUI buttons will not respond to synthetic taps.
 
 ### 2. Add screen identity (optional)
 
