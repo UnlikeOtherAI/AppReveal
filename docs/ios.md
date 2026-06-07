@@ -25,6 +25,12 @@ import AppReveal
 
 func application(_ application: UIApplication, didFinishLaunchingWithOptions ...) -> Bool {
     #if DEBUG
+    // Optional: enable private-API tap injection for SwiftUI views on iOS 26+.
+    // On iOS 26+ SwiftUI gestures require IOHIDDigitizerEvent injection via private UIKit
+    // APIs. This is off by default — opt in if you need tap_point/tap_element to fire
+    // SwiftUI button actions.
+    AppReveal.privateAPITapsEnabled = true
+
     AppReveal.start()
 
     // Optional: register providers for deeper inspection
