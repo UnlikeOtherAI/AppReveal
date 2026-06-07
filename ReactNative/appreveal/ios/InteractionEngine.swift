@@ -114,9 +114,10 @@ final class InteractionEngine {
     private func activateAccessibility(on view: UIView?) -> Bool {
         var current = view
         while let candidate = current {
-            if candidate.isAccessibilityElement,
-               candidate.accessibilityTraits.contains(.button),
-               candidate.accessibilityActivate() {
+            // Call accessibilityActivate() without trait filtering. RN Pressable wires
+            // onPress to accessibilityActivate() via onAccessibilityTap and only returns
+            // true when it handles the action, so there are no false positives.
+            if candidate.accessibilityActivate() {
                 return true
             }
             current = candidate.superview
