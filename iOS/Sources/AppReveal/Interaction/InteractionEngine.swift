@@ -36,8 +36,8 @@ enum InteractionError: LocalizedError {
 
 import UIKit
 
-private let appRevealTapPointNotificationName = Notification.Name("appreveal.interaction.tap_point")
-private let appRevealTapPointUserInfoKey = "point"
+let appRevealTapPointNotificationName = Notification.Name("appreveal.interaction.tap_point")
+let appRevealTapPointUserInfoKey = "point"
 
 @MainActor
 final class InteractionEngine {
@@ -76,7 +76,8 @@ final class InteractionEngine {
         return nil
     }
 
-    func tap(point: CGPoint, windowId: String? = nil) {
+    @discardableResult
+    func tap(point: CGPoint, windowId: String? = nil) -> Bool {
         postTapPoint(point)
 
         for ref in candidateWindows(windowId: windowId) {
@@ -92,7 +93,7 @@ final class InteractionEngine {
                     let index = Int(localPoint.x / itemWidth)
                     if index >= 0 && index < items.count {
                         tabBarController.selectedIndex = index
-                        return
+                        return true
                     }
                 }
             }
@@ -102,14 +103,15 @@ final class InteractionEngine {
             let isSwiftUIHost = hitView.map { Self.isSwiftUIHostingView($0) } ?? false
 
             if !isSwiftUIHost, let hitView, performTap(on: .view(hitView), windowId: ref.id, postPoint: false) {
-                return
+                return true
             }
 
             if let accessibilityTarget = AccessibilityElementInventory.shared.findElement(at: point, in: window),
                performTap(on: .accessibility(accessibilityTarget), windowId: ref.id, postPoint: false) {
-                return
+                return true
             }
         }
+        return false
     }
 
     private func postTapPoint(_ point: CGPoint) {

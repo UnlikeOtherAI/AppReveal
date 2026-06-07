@@ -648,12 +648,12 @@ private func registerIOSBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "tap_point",
-        description: "Tap at specific screen coordinates",
+        description: "Tap at specific screen coordinates. Coordinates are UIKit logical points (NOT device pixels) — match the values shown by get_elements or screenshot metadata. success:false means no interactive element was found at that point; check coordinate_hint for the resolved hit-test class.",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
-                "x": ["type": "number"],
-                "y": ["type": "number"],
+                "x": ["type": "number", "description": "Horizontal position in UIKit logical points"],
+                "y": ["type": "number", "description": "Vertical position in UIKit logical points"],
                 "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any]),
             "required": AnyCodable(["x", "y"])
@@ -664,8 +664,26 @@ private func registerIOSBuiltInTools() {
                 return AnyCodable(["error": "x and y are required numeric coordinates"])
             }
             let windowId = params?["window_id"]?.stringValue
-            InteractionEngine.shared.tap(point: CGPoint(x: x, y: y), windowId: windowId)
-            return AnyCodable(["success": true, "x": x, "y": y] as [String: Any])
+            let point = CGPoint(x: x, y: y)
+            let activated = InteractionEngine.shared.tap(point: point, windowId: windowId)
+            var result: [String: Any] = ["x": x, "y": y, "success": activated]
+            if !activated {
+                // Provide the hit-test class to help diagnose coordinate-space mismatches.
+                #if os(iOS)
+                if let hitClass = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .flatMap(\.windows)
+                    .filter({ !$0.isHidden })
+                    .compactMap({ $0.hitTest(point, with: nil) })
+                    .first
+                    .map({ String(describing: Swift.type(of: $0)) }) {
+                    result["coordinate_hint"] = "No interactive element activated. Hit-test resolved to: \(hitClass). Verify x/y are UIKit logical points."
+                } else {
+                    result["coordinate_hint"] = "No window hit at (\(Int(x)),\(Int(y))). Verify x/y are UIKit logical points, not device pixels."
+                }
+                #endif
+            }
+            return AnyCodable(result)
         }
     ))
 
@@ -868,6 +886,64 @@ private func registerIOSBuiltInTools() {
             let windowId = params?["window_id"]?.stringValue
             let tree = ElementInventory.shared.dumpViewTree(maxDepth: maxDepth, windowId: windowId)
             return AnyCodable(["views": tree, "count": tree.count] as [String: Any])
+        }
+    ))
+
+    // MARK: - touch_imprint_enable
+
+    router.register(MCPToolDefinition(
+        name: "touch_imprint_enable",
+        description: "Enable a persistent debug overlay that draws a crosshair + coordinate label at the resolved point of every AppReveal-dispatched tap. Imprints accumulate until touch_imprint_reset. Use touch_imprint_disable to remove the overlay entirely.",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable([
+                "color": ["type": "string", "description": "Crosshair and label color as hex (#FF3B30) or CSS name (red, blue …). Default: #FF3B30"],
+                "crosshair_size": ["type": "number", "description": "Crosshair arm length in logical points. Default: 20"],
+                "show_label": ["type": "boolean", "description": "Whether to render the (x,y) coordinate label. Default: true"],
+                "font_size": ["type": "number", "description": "Label font size in points. Default: 10"],
+                "persist": ["type": "boolean", "description": "true = imprints accumulate; false = only the latest imprint is shown. Default: true"]
+            ] as [String: Any])
+        ],
+        handler: { params in
+            let colorStr = params?["color"]?.stringValue ?? "#FF3B30"
+            let color = UIColor(hex: colorStr) ?? .systemRed
+            let crosshairSize = params?["crosshair_size"]?.doubleValue.map { CGFloat($0) }
+            let showLabel = params?["show_label"]?.boolValue
+            let fontSize = params?["font_size"]?.doubleValue.map { CGFloat($0) } ?? 10
+            let font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            let persist = params?["persist"]?.boolValue
+            TapImprintOverlay.shared.enable(
+                color: color,
+                crosshairSize: crosshairSize,
+                showLabel: showLabel,
+                labelFont: font,
+                persist: persist
+            )
+            return AnyCodable(["success": true, "enabled": true] as [String: Any])
+        }
+    ))
+
+    // MARK: - touch_imprint_reset
+
+    router.register(MCPToolDefinition(
+        name: "touch_imprint_reset",
+        description: "Clear all tap imprints currently shown by the touch imprint overlay. The overlay remains active and will draw new imprints on subsequent taps.",
+        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
+        handler: { _ in
+            TapImprintOverlay.shared.reset()
+            return AnyCodable(["success": true] as [String: Any])
+        }
+    ))
+
+    // MARK: - touch_imprint_disable
+
+    router.register(MCPToolDefinition(
+        name: "touch_imprint_disable",
+        description: "Disable the touch imprint overlay and clear all existing imprints. Re-enable with touch_imprint_enable.",
+        inputSchema: ["type": AnyCodable("object"), "properties": AnyCodable([String: Any]())],
+        handler: { _ in
+            TapImprintOverlay.shared.disable()
+            return AnyCodable(["success": true, "enabled": false] as [String: Any])
         }
     ))
 }

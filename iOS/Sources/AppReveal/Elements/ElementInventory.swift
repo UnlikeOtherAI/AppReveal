@@ -240,7 +240,7 @@ final class ElementInventory {
     ) {
         let accessId = view.accessibilityIdentifier
 
-        if accessId != nil || isInteractive(view) {
+        if accessId != nil || isInteractive(view) || view.isAccessibilityElement {
             if let info = makeElementInfo(view, containerId: containerId, seenIds: &seenIds) {
                 elements.append(info)
             }
