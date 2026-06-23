@@ -127,7 +127,10 @@ internal class MCPServer(
         }
     }
 
-    private fun constantTimeEquals(actual: String?, expected: String): Boolean {
+    private fun constantTimeEquals(
+        actual: String?,
+        expected: String,
+    ): Boolean {
         if (actual == null) return false
         val actualBytes = actual.toByteArray(Charsets.UTF_8)
         val expectedBytes = expected.toByteArray(Charsets.UTF_8)

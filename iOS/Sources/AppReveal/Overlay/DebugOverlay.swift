@@ -11,10 +11,13 @@ public struct AppRevealDebugOverlay: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button(action: { isExpanded.toggle() }) {
-                Label(statusTitle, systemImage: AppReveal.url == nil ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
+            Button(
+                action: { isExpanded.toggle() },
+                label: {
+                    Label(statusTitle, systemImage: statusIcon)
                     .font(.system(size: 12, weight: .semibold))
-            }
+                }
+            )
             .buttonStyle(.borderedProminent)
 
             if isExpanded {
@@ -41,6 +44,10 @@ public struct AppRevealDebugOverlay: View {
 
     private var statusTitle: String {
         AppReveal.url == nil ? "AppReveal stopped" : "AppReveal running"
+    }
+
+    private var statusIcon: String {
+        AppReveal.url == nil ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right"
     }
 
     private var currentScreen: ScreenInfo {

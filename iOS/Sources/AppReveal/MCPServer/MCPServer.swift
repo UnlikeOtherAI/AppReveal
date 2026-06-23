@@ -87,7 +87,8 @@ final class MCPServer {
                 }
             case .failed(let error):
                 print("[AppReveal] Server failed: \(error)")
-                print("[AppReveal] If loopback works but LAN fails, verify Local Network permission, NSLocalNetworkUsageDescription, NSBonjourServices, firewall, and sandbox network.server entitlement where applicable.")
+                print("[AppReveal] If loopback works but LAN fails, verify Local Network permission,")
+                print("[AppReveal] NSLocalNetworkUsageDescription, NSBonjourServices, firewall, and sandbox policy.")
                 Task { @MainActor [weak self] in
                     self?.actualPort = 0
                 }
