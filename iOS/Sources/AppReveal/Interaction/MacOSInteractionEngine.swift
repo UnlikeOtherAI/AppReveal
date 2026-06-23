@@ -20,20 +20,30 @@ final class MacOSInteractionEngine {
     // MARK: - Tap
 
     func tap(elementId: String, windowId: String? = nil) throws {
-        guard let view = MacOSElementInventory.shared.findElement(byId: elementId, windowId: windowId) else {
-            throw InteractionError.elementNotFound(elementId)
-        }
+        if let view = MacOSElementInventory.shared.findElement(byId: elementId, windowId: windowId) {
+            if performClick(on: view) {
+                return
+            }
 
-        if performClick(on: view) {
+            if performTableSelection(for: view) {
+                return
+            }
+
+            let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            tap(point: view.convert(point, to: nil), windowId: windowId)
             return
         }
 
-        if performTableSelection(for: view) {
+        let windowIds = candidateWindowIds(windowId: windowId)
+        if let entry = SwiftUIElementRegistry.shared.findElement(byId: elementId, windowIds: windowIds) {
+            if SwiftUIElementRegistry.shared.activate(id: entry.id) {
+                return
+            }
+            tap(point: entry.frame.center, windowId: windowId)
             return
         }
 
-        let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
-        tap(point: view.convert(point, to: nil), windowId: windowId)
+        throw InteractionError.elementNotFound(elementId)
     }
 
     func tap(point: CGPoint, windowId: String? = nil) {
@@ -352,6 +362,13 @@ final class MacOSInteractionEngine {
 
     private func findAncestorTableView(from view: NSView) -> NSTableView? {
         findAncestor(of: view, matching: { $0 is NSTableView }) as? NSTableView
+    }
+
+    private func candidateWindowIds(windowId: String?) -> Set<String> {
+        if let ref = MacOSWindowProvider.shared.resolve(windowId: windowId) {
+            return Set([ref.id])
+        }
+        return Set(MacOSWindowProvider.shared.allWindows().map(\.id))
     }
 }
 

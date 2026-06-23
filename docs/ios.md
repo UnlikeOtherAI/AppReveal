@@ -11,7 +11,7 @@
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.4.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.0")
 ```
 
 ## Quick start
@@ -39,6 +39,8 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions ...
 
 WKWebView support works automatically -- no additional integration needed.
 
+When the listener is ready, AppReveal prints a loopback URL and an authenticated session URL. You can also read them from `AppReveal.url`, `AppReveal.sessionURL`, and `AppReveal.sessionToken`.
+
 ### SwiftUI tap support on iOS 26+
 
 On iOS 26+ SwiftUI gesture recognisers require private UIKit APIs for synthetic tap delivery (`IOHIDDigitizerEvent` + `UIApplication._enqueueHIDEvent:`). AppReveal gates this code behind the `APPREVEAL_PRIVATE_API_TAPS` compile flag, which is set automatically for debug builds in `Package.swift`:
@@ -65,7 +67,7 @@ Without the flag, `tap_point` still works for all UIKit views and SwiftUI views 
 
 On iOS 26, SwiftUI defers building its accessibility tree until VoiceOver is actually running. AppReveal's in-process scan can't trigger that build, so SwiftUI buttons inside `UIHostingController` are invisible to `get_elements` by default.
 
-**Fix:** apply `.appReveal("id")` to SwiftUI views that agents need to interact with.
+**Fix:** apply `.appReveal("id")` to SwiftUI views that agents need to interact with. For buttons in `ScrollView`, `LazyVGrid`, or other gesture-heavy containers, pass the optional `activate:` closure so AppReveal can invoke the debug action directly instead of depending on coordinate synthesis.
 
 ```swift
 // Works on iOS 16+ — no-op in release (compiled only under #if DEBUG)
@@ -73,20 +75,33 @@ Button(action: sendMessage) {
     Image(systemName: "arrow.up.circle.fill")
 }
 #if DEBUG
-.appReveal("chat.send_button", label: "Send")
+.appReveal("chat.send_button", label: "Send", activate: sendMessage)
 #endif
 
 Button("Submit") { submit() }
 #if DEBUG
-.appReveal("form.submit")
+.appReveal("form.submit", activate: submit)
 #endif
 ```
 
-After this, `get_elements` returns the element with `idSource: "appReveal"` and `tap_element("chat.send_button")` works correctly — the tap is delivered through the same SwiftUI-aware IOHIDDigitizerEvent path as `tap_point`.
+After this, `get_elements` returns the element with `idSource: "appReveal"` and `tap_element("chat.send_button")` or `tap_text("Send")` can find it. If an `activate:` closure is registered, AppReveal calls that closure directly; otherwise it falls back to the SwiftUI-aware coordinate path used by `tap_point`.
 
 **Elements without `.appReveal()`:** UIKit views (`UIButton`, `UITextField`, `UISwitch`, etc.) and SwiftUI elements with an `accessibilityIdentifier` set **on iOS < 26** continue to work automatically.
 
-### 3. Add screen identity (optional)
+### 3. Add Bonjour keys to `Info.plist`
+
+Loopback simulator testing works without Bonjour, but physical-device discovery and LAN clients need Local Network permission:
+
+```xml
+<key>NSLocalNetworkUsageDescription</key>
+<string>AppReveal uses the local network for debug MCP connections.</string>
+<key>NSBonjourServices</key>
+<array>
+    <string>_appreveal._tcp</string>
+</array>
+```
+
+### 4. Add screen identity (optional)
 
 Screen identity is auto-derived from class names -- `LoginViewController` becomes key `"login"`, title `"Login"`. Override only when you want a custom key:
 
@@ -99,7 +114,7 @@ extension LoginViewController: ScreenIdentifiable {
 #endif
 ```
 
-### 3. Add accessibility identifiers
+### 5. Add accessibility identifiers
 
 ```swift
 emailField.accessibilityIdentifier = "login.email"
@@ -107,22 +122,39 @@ passwordField.accessibilityIdentifier = "login.password"
 loginButton.accessibilityIdentifier = "login.submit"
 ```
 
-### 4. Connect and use
+### 6. Connect and use
 
 ```bash
 # Discover the service
 dns-sd -B _appreveal._tcp local.
 
+# Check listener health. This endpoint is intentionally unauthenticated.
+curl http://localhost:<port>/health
+
+# Copy the token from the AppReveal log or AppReveal.sessionToken.
+TOKEN="<session-token>"
+
 # Initialize MCP session
 curl -X POST http://localhost:<port>/ \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 
 # Get current screen
 curl -X POST http://localhost:<port>/ \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_screen","arguments":{}}}'
 ```
+
+For manual testing you can also paste the printed `AppReveal.sessionURL`, which carries the token as `appreveal_session_token`. For LAN clients, resolve the Bonjour service host/port and include the same token via `Authorization: Bearer <token>` or `X-AppReveal-Session`.
+
+`GET /health` returns `bonjourDiagnostics` and `lan` objects. Use them when a device is reachable by loopback but not by LAN:
+
+- `bonjour: "advertising"` means mDNS published successfully.
+- `bonjour: "suppressed"` means AppReveal kept the HTTP listener running but did not advertise because no usable LAN interface/path was visible. Check `bonjourDiagnostics.suppressionReason`.
+- `bonjour: "retrying"` or `"failed"` includes `lastError` and `lastErrorHint`; `-65555` is Bonjour `NoAuth`, usually Local Network permission or missing `NSBonjourServices`.
+- `lan.interfaces` lists the process-visible IPv4/IPv6 interfaces and marks which ones are LAN candidates.
 
 ## Integration protocols
 
@@ -156,16 +188,20 @@ protocol NetworkObservable: AnyObject {
 ## Security
 
 - All code behind `#if DEBUG` -- zero production footprint
-- Local network only (NWListener)
+- Generated per-session token required for MCP POST requests
+- Health diagnostics available at `GET /health`
+- Loopback CORS only; LAN clients should use native MCP clients or explicit headers
+- Local Network permission and Bonjour keys required for physical-device discovery
+- Bonjour publish failures retry automatically; advertising is suppressed when no LAN candidate is visible
 - Sensitive headers (Authorization, Cookie) redacted in network capture
 
 ## Platform details
 
 - Transport: NWListener (Network.framework)
-- Discovery: NWListener.Service (Bonjour/mDNS)
+- Discovery: NetService (Bonjour/mDNS) publishing `_appreveal._tcp` after listener readiness and LAN diagnostics
 - View hierarchy: UIView tree walking
 - Screenshots: UIGraphicsImageRenderer
-- WebView: WKWebView + evaluateJavaScript
+- WebView: WKWebView + evaluateJavaScript; `tap_point` routes into DOM clicks when the point lands inside a WebView
 
 ## Example app
 

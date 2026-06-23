@@ -24,10 +24,27 @@ object AppReveal {
     internal var application: Application? = null
 
     @JvmStatic
+    val sessionToken: String?
+        get() = server?.sessionToken
+
+    @JvmStatic
+    val url: String?
+        get() = server?.url
+
+    @JvmStatic
+    val sessionUrl: String?
+        get() = server?.sessionUrl
+
+    @JvmStatic
     fun start(
         application: Application,
         port: Int = 0,
     ) {
+        server?.let {
+            Log.i("AppReveal", "start ignored; already running at ${it.sessionUrl}")
+            return
+        }
+
         this.application = application
         ScreenResolver.init(application)
         registerBuiltInTools()
@@ -36,6 +53,8 @@ object AppReveal {
         srv.start()
         server = srv
         Log.i("AppReveal", "MCP server listening on port ${srv.actualPort}")
+        Log.i("AppReveal", "Session URL: ${srv.sessionUrl}")
+        Log.i("AppReveal", "Clients must include Authorization: Bearer <token> or X-AppReveal-Session.")
         advertiser = NsdAdvertiser(application, srv.actualPort)
         advertiser?.register()
     }

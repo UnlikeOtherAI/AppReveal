@@ -24,11 +24,11 @@ includeBuild("path/to/AppReveal/Android") {
 // app/build.gradle.kts
 dependencies {
     debugImplementation("com.appreveal:appreveal")
-    releaseImplementation("com.appreveal:appreveal-noop")  // no-op stub for release
+    releaseImplementation("com.appreveal:appreveal-noop")  // release-safe empty artifact
 }
 ```
 
-The `appreveal-noop` module provides an empty `AppReveal.start()` stub so you don't need `BuildConfig.DEBUG` checks in your code (though they're recommended as a safety net).
+The `appreveal-noop` module provides empty release methods so you don't need `BuildConfig.DEBUG` checks in your code, though they're recommended as a safety net.
 
 ## Quick start
 
@@ -52,6 +52,8 @@ class MyApp : Application() {
 ```
 
 WebView support works automatically -- no additional integration needed.
+
+When the listener is ready, AppReveal logs a loopback URL, an authenticated session URL, and the session token. You can also read them from `AppReveal.url`, `AppReveal.sessionUrl`, and `AppReveal.sessionToken`.
 
 ### 2. Add screen identity (optional)
 
@@ -99,14 +101,22 @@ Element IDs are resolved in this order:
 ```bash
 # The server port is logged to logcat:
 # [AppReveal] MCP server listening on port 56209
+# [AppReveal] Session URL: http://127.0.0.1:56209/?appreveal_session_token=<token>
+
+# Check listener health. This endpoint is intentionally unauthenticated.
+curl http://<device-ip>:<port>/health
+
+TOKEN="<session-token>"
 
 # Initialize MCP session
 curl -X POST http://<device-ip>:<port>/ \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 
 # Get current screen
 curl -X POST http://<device-ip>:<port>/ \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_screen","arguments":{}}}'
 ```
@@ -147,7 +157,10 @@ interface NetworkObservable {
 ## Security
 
 - Library added as `debugImplementation` -- not included in release APK
-- Local network only
+- Generated per-session token required for MCP POST requests
+- Health diagnostics available at `GET /health`
+- Loopback CORS only
+- NsdManager advertises `_appreveal._tcp` with `auth=session-token`
 - Sensitive headers (Authorization, Cookie) redacted in network capture
 
 ## Platform details

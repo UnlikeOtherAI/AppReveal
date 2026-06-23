@@ -1,6 +1,8 @@
 # MCP Tools Reference
 
-49 tools are available across all platforms (iOS, macOS, Android, Flutter, React Native). The shared tool surface (native UI, state, network, diagnostics, WebView DOM) is identical on every platform. macOS adds 3 desktop-specific tools and all native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting.
+AppReveal exposes a shared MCP tool surface for native UI, state, network, diagnostics, WebView DOM, and batch operations. Desktop targets add `list_windows` plus menu/window tools, and native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting where the platform supports it. Windows integrations use capability-aware registration: .NET advertises its functional UI Automation tools by default, while Tauri lists only implemented built-ins and host-registered extensions.
+
+All current server implementations require a generated per-session token for MCP POST requests and expose `GET /health` as an unauthenticated liveness/diagnostics endpoint.
 
 ### `list_windows`
 List visible app windows with stable IDs. Use the returned `window_id` to target a specific window in any UI or WebView tool. If `window_id` is omitted, the key window is used.
@@ -79,7 +81,7 @@ List all visible interactive elements on the current screen.
 }
 ```
 
-- `idSource` — how the element's `id` was derived: `"explicit"` (accessibility identifier / tag / resource ID), `"text"` (from visible text), `"semantics"` (accessibility label / content description), `"tooltip"`, or `"derived"` (auto-generated fallback)
+- `idSource` — how the element's `id` was derived: `"explicit"` (accessibility identifier / tag / resource ID), `"appReveal"` (SwiftUI `.appReveal(...)` registration), `"text"` (from visible text), `"semantics"` (accessibility label / content description), `"tooltip"`, or `"derived"` (auto-generated fallback)
 - `safeAreaInsets` — per-view safe area insets using `leading` / `trailing` instead of physical `left` / `right`
 - `safeAreaLayoutGuideFrame` — the view's safe area layout guide frame in screen coordinates
 - Platform mapping: iOS/macOS use native safe areas, Android uses system bar/display-cutout insets, Flutter uses the nearest `MediaQuery.padding`
@@ -164,6 +166,8 @@ Tap at specific screen coordinates.
 - `y` (number, required)
 
 **Response:** `{ "success": true }`
+
+On iOS, when the point lands inside a `WKWebView`, AppReveal routes the coordinate to a DOM click through `document.elementFromPoint(...)`. Use `web_click` with a selector when you need deterministic DOM-level confirmation.
 
 ---
 
@@ -443,6 +447,8 @@ React Native response mirrors iOS or Android depending on the host platform.
 
 All WebView tools accept an optional `webview_id` parameter. If omitted, the first discovered WebView is used. Use `get_webviews` to list available WebViews and their IDs.
 
+`get_elements` is a native UI inventory and treats embedded web content as an opaque WebView. For DOM-level work, use `get_webviews`, then `get_dom_interactive`, `get_dom_forms`, `find_dom_text`, `web_click`, and `web_type`.
+
 ### `get_webviews`
 List all web views in the current screen.
 
@@ -679,9 +685,9 @@ Execute multiple tool calls in a single request. Actions run sequentially.
 
 ---
 
-## macOS Desktop Tools
+## Desktop Tools
 
-These tools are only available on macOS targets.
+These tools are available on desktop targets such as macOS and Windows when the target implementation has a menu/window provider.
 
 ### `get_menu_bar`
 Read the app's main menu bar hierarchy recursively.
@@ -731,6 +737,7 @@ Bring a specific window to the front and make it the key window.
 |----------|-----------|
 | iOS | `view.accessibilityIdentifier` |
 | macOS | `view.accessibilityIdentifier()` |
+| Windows | framework provider ID, usually `AutomationId`, Tauri window label, or React Native `testID` |
 | Android | `view.tag` (via `R.id.appreveal_id`) or resource entry name or `contentDescription` |
 | Flutter | `ValueKey<String>` on the widget |
 | React Native | `testID` prop (maps to `accessibilityIdentifier` on iOS, resource name on Android) |

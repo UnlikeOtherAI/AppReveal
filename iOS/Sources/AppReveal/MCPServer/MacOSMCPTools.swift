@@ -145,7 +145,7 @@ func registerMacOSBuiltInToolsImpl() {
                 text, matchMode: matchMode, occurrence: occurrence, windowId: windowId
             )
 
-            guard result.isSuccess, let view = result.view else {
+            guard result.isSuccess else {
                 var response: [String: Any] = ["error": result.error ?? "Unknown error"]
                 if let candidates = result.candidates {
                     response["candidates"] = candidates
@@ -154,8 +154,17 @@ func registerMacOSBuiltInToolsImpl() {
                 return AnyCodable(response)
             }
 
-            let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
-            MacOSInteractionEngine.shared.tap(point: view.convert(point, to: nil), windowId: windowId)
+            if let view = result.view {
+                let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+                MacOSInteractionEngine.shared.tap(point: view.convert(point, to: nil), windowId: windowId)
+            } else if let appRevealId = result.appRevealId,
+                      SwiftUIElementRegistry.shared.activate(id: appRevealId) {
+                // Direct debug activation path for SwiftUI controls registered with .appReveal(..., activate:).
+            } else if let point = result.point {
+                MacOSInteractionEngine.shared.tap(point: point, windowId: windowId)
+            } else {
+                return AnyCodable(["error": result.error ?? "Resolved text target is not tappable"])
+            }
             return AnyCodable(["success": true, "text": text] as [String: Any])
         }
     ))

@@ -58,6 +58,9 @@ enum TapTarget {
     /// Fallback for SwiftUI elements registered via .appReveal() whose frame is known
     /// but that have no backing UIView or UIAccessibilityElement (iOS 26+).
     case point(CGPoint)
+    /// SwiftUI element registered via .appReveal(). May include a direct activation
+    /// closure for controls whose gestures are intercepted by SwiftUI containers.
+    case appReveal(id: String, point: CGPoint)
 }
 
 @MainActor

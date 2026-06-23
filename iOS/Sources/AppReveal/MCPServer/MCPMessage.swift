@@ -67,6 +67,14 @@ struct MCPError: Codable {
         MCPError(code: -32602, message: "Invalid params: \(detail)", data: nil)
     }
 
+    static func invalidRequest(_ detail: String) -> MCPError {
+        MCPError(code: -32600, message: "Invalid request: \(detail)", data: nil)
+    }
+
+    static func parseError(_ detail: String) -> MCPError {
+        MCPError(code: -32700, message: "Parse error: \(detail)", data: nil)
+    }
+
     static func internalError(_ detail: String) -> MCPError {
         MCPError(code: -32603, message: detail, data: nil)
     }

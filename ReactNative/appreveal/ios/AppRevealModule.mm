@@ -36,6 +36,10 @@ RCT_EXPORT_METHOD(setScreen:(NSString *)key
     [[AppRevealRNBridge shared] setScreenWithKey:key title:title confidence:confidence];
 }
 
+RCT_EXPORT_METHOD(setState:(NSDictionary *)state) {
+    [[AppRevealRNBridge shared] setState:state];
+}
+
 RCT_EXPORT_METHOD(setNavigationStack:(NSArray *)routes
                   current:(NSString *)current
                   modals:(NSArray *)modals) {

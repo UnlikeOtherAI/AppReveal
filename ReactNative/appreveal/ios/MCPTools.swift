@@ -183,8 +183,23 @@ func registerBuiltInTools() {
                   let y = params?["y"]?.doubleValue else {
                 return AnyCodable(["error": "x and y are required numeric coordinates"])
             }
-            InteractionEngine.shared.tap(point: CGPoint(x: x, y: y))
-            return AnyCodable(["success": true, "x": x, "y": y] as [String: Any])
+            let point = CGPoint(x: x, y: y)
+            let activated = InteractionEngine.shared.tap(point: point)
+            var result: [String: Any] = ["success": activated, "x": x, "y": y]
+            if !activated {
+                if let hitClass = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .flatMap(\.windows)
+                    .filter({ !$0.isHidden })
+                    .compactMap({ $0.hitTest(point, with: nil) })
+                    .first
+                    .map({ String(describing: Swift.type(of: $0)) }) {
+                    result["coordinate_hint"] = "No interactive element activated. Hit-test resolved to: \(hitClass). Verify x/y are UIKit logical points."
+                } else {
+                    result["coordinate_hint"] = "No window hit at (\(Int(x)),\(Int(y))). Verify x/y are UIKit logical points, not device pixels."
+                }
+            }
+            return AnyCodable(result)
         }
     ))
 

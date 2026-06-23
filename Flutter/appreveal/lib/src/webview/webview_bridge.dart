@@ -6,8 +6,16 @@ class WebViewEntry {
   final String id;
   final WebViewController controller;
   String? title;
+  bool loading;
+  String? frame;
 
-  WebViewEntry({required this.id, required this.controller, this.title});
+  WebViewEntry({
+    required this.id,
+    required this.controller,
+    this.title,
+    this.loading = false,
+    this.frame,
+  });
 }
 
 class WebViewBridge {
@@ -21,8 +29,20 @@ class WebViewBridge {
   /// ```dart
   /// AppReveal.registerWebView('main', myWebViewController);
   /// ```
-  void register(String id, WebViewController controller, {String? title}) {
-    _webViews[id] = WebViewEntry(id: id, controller: controller, title: title);
+  void register(
+    String id,
+    WebViewController controller, {
+    String? title,
+    bool loading = false,
+    String? frame,
+  }) {
+    _webViews[id] = WebViewEntry(
+      id: id,
+      controller: controller,
+      title: title,
+      loading: loading,
+      frame: frame,
+    );
   }
 
   void unregister(String id) {
@@ -43,8 +63,10 @@ class WebViewBridge {
         'id': entry.id,
         'url': url ?? '',
         'title': title,
+        'loading': entry.loading,
         'canGoBack': await entry.controller.canGoBack(),
         'canGoForward': await entry.controller.canGoForward(),
+        'frame': entry.frame ?? '',
       });
     }
     return results;

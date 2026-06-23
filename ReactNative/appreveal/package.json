@@ -1,6 +1,6 @@
 {
   "name": "react-native-appreveal",
-  "version": "0.8.0",
+  "version": "0.10.0",
   "description": "Debug-only in-app MCP framework for React Native",
   "main": "src/index",
   "types": "src/index",
@@ -26,5 +26,25 @@
     "testing",
     "debug"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "android/build.gradle",
+    "android/gradle.properties",
+    "android/src",
+    "ios",
+    "src",
+    "appreveal.podspec",
+    "react-native.config.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UnlikeOtherAI/AppReveal.git",
+    "directory": "ReactNative/appreveal"
+  },
+  "homepage": "https://github.com/UnlikeOtherAI/AppReveal/tree/main/ReactNative/appreveal",
+  "bugs": {
+    "url": "https://github.com/UnlikeOtherAI/AppReveal/issues"
+  }
 }

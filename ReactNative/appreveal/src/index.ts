@@ -30,6 +30,11 @@ export class AppReveal {
     NativeAppReveal.setScreen(key, title, 1.0);
   }
 
+  static setState(state: Record<string, unknown>): void {
+    if (!__DEV__) return;
+    NativeAppReveal.setState(state);
+  }
+
   static setNavigationStack(
     routes: string[],
     current: string,
@@ -59,14 +64,12 @@ export class AppReveal {
   }
 
   /**
-   * Returns a React Navigation compatible listener object.
+   * Returns a React Navigation compatible `onStateChange` handler.
    *
    * Usage:
    * ```tsx
-   * const navListener = AppReveal.createNavigationListener();
    * <NavigationContainer
-   *   onStateChange={navListener.onStateChange}
-   *   ref={navListener.ref}
+   *   onStateChange={AppReveal.createNavigationListener()}
    * >
    * ```
    */
@@ -165,10 +168,10 @@ export class AppRevealFetchInterceptor {
     if (_fetchPatched) return;
     _fetchPatched = true;
 
-    const originalFetch = global.fetch;
+    const originalFetch = globalThis.fetch;
 
     const patchedFetch = async function patchedFetch(
-      input: RequestInfo | URL,
+      input: RequestInfo,
       init?: RequestInit,
     ): Promise<Response> {
       const url =
@@ -238,8 +241,8 @@ export class AppRevealFetchInterceptor {
       }
     };
     // Preserve static properties (e.g. fetch.preconnect in RN 0.83+) so that
-    // TypeScript's structural check against typeof global.fetch passes.
+    // TypeScript's structural check against typeof globalThis.fetch passes.
     Object.assign(patchedFetch, originalFetch);
-    global.fetch = patchedFetch as typeof global.fetch;
+    globalThis.fetch = patchedFetch as typeof globalThis.fetch;
   }
 }

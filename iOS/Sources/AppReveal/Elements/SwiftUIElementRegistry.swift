@@ -11,10 +11,14 @@
 
 import Foundation
 
-#if os(iOS)
+#if os(iOS) || os(macOS)
 
-import UIKit
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 #if DEBUG
 
@@ -26,27 +30,85 @@ final class SwiftUIElementRegistry {
     private struct Entry {
         let frame: CGRect
         let label: String?
+        let windowId: String?
+        let activate: (() -> Void)?
     }
 
     private var entries: [String: Entry] = [:]
 
     private init() {}
 
-    func register(id: String, frame: CGRect, label: String?) {
-        entries[id] = Entry(frame: frame, label: label)
+    func register(id: String, frame: CGRect, label: String?, activate: (() -> Void)? = nil) {
+        entries[id] = Entry(
+            frame: frame,
+            label: label,
+            windowId: Self.windowId(containing: frame),
+            activate: activate
+        )
     }
 
     func unregister(id: String) {
         entries.removeValue(forKey: id)
     }
 
-    func currentElements() -> [(id: String, frame: CGRect, label: String?)] {
-        entries.map { (id: $0.key, frame: $0.value.frame, label: $0.value.label) }
+    func currentElements(windowIds: Set<String>) -> [(id: String, frame: CGRect, label: String?)] {
+        entries.compactMap { id, entry in
+            guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
+            return (id: id, frame: entry.frame, label: entry.label)
+        }
     }
 
-    func findElement(byId id: String) -> (id: String, frame: CGRect, label: String?)? {
+    func findElement(byId id: String, windowIds: Set<String>) -> (id: String, frame: CGRect, label: String?)? {
         guard let entry = entries[id] else { return nil }
+        guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
         return (id: id, frame: entry.frame, label: entry.label)
+    }
+
+    func matchingElements(text: String, matchMode: String, windowIds: Set<String>) -> [(id: String, frame: CGRect, label: String?)] {
+        entries.compactMap { id, entry in
+            guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
+            let candidates = [entry.label, id].compactMap { $0 }
+            let matches = candidates.contains { candidate in
+                switch matchMode {
+                case "contains":
+                    return candidate.localizedCaseInsensitiveContains(text)
+                default:
+                    return candidate.caseInsensitiveCompare(text) == .orderedSame
+                }
+            }
+            return matches ? (id: id, frame: entry.frame, label: entry.label) : nil
+        }
+    }
+
+    func activate(id: String) -> Bool {
+        guard let activate = entries[id]?.activate else {
+            return false
+        }
+
+        activate()
+        return true
+    }
+
+    private static func entry(_ entry: Entry, matchesAnyOf windowIds: Set<String>) -> Bool {
+        guard !windowIds.isEmpty else { return true }
+        guard let windowId = entry.windowId ?? windowId(containing: entry.frame) else { return true }
+        return windowIds.contains(windowId)
+    }
+
+    private static func windowId(containing frame: CGRect) -> String? {
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        #if os(iOS)
+        return IOSWindowProvider.shared.allWindows().first { ref in
+            let windowFrame = ref.nativeWindow.convert(ref.nativeWindow.bounds, to: nil)
+            return windowFrame.contains(center) || windowFrame.intersects(frame)
+        }?.id
+        #elseif os(macOS)
+        return MacOSWindowProvider.shared.allWindows().first { ref in
+            guard let contentView = ref.contentView else { return false }
+            let windowFrame = contentView.convert(contentView.bounds, to: nil)
+            return windowFrame.contains(center) || windowFrame.intersects(frame)
+        }?.id
+        #endif
     }
 }
 
@@ -70,6 +132,7 @@ private struct AppRevealFramePreference: PreferenceKey {
 struct AppRevealModifier: ViewModifier {
     let id: String
     let label: String?
+    let activate: (() -> Void)?
 
     func body(content: Content) -> some View {
         content
@@ -90,7 +153,8 @@ struct AppRevealModifier: ViewModifier {
                     SwiftUIElementRegistry.shared.register(
                         id: registeredId,
                         frame: frame,
-                        label: registeredLabel
+                        label: registeredLabel,
+                        activate: activate
                     )
                 }
             }
@@ -109,6 +173,8 @@ public extension View {
     /// Register this SwiftUI view as a discoverable AppReveal element.
     ///
     /// Required on iOS 26+ for SwiftUI elements that should appear in `get_elements`.
+    /// Also available on macOS for SwiftUI controls that do not expose AppKit views
+    /// or accessibility identifiers reliably through the NSView hierarchy.
     /// SwiftUI defers building its accessibility tree until VoiceOver is active, so
     /// AppReveal's in-process scan cannot find these elements automatically.
     ///
@@ -118,15 +184,17 @@ public extension View {
     ///     Image(systemName: "arrow.up.circle.fill")
     /// }
     /// #if DEBUG
-    /// .appReveal("chat.send_button", label: "Send")
+    /// .appReveal("chat.send_button", label: "Send", activate: send)
     /// #endif
     /// ```
     ///
     /// - Parameters:
     ///   - id: Stable dot-namespaced identifier (e.g. `"chat.send_button"`).
     ///   - label: Optional human-readable label for the element.
-    func appReveal(_ id: String, label: String? = nil) -> some View {
-        modifier(AppRevealModifier(id: id, label: label))
+    ///   - activate: Optional direct debug activation closure. Use this for SwiftUI
+    ///     controls whose gestures are intercepted by ScrollView/Lazy containers.
+    func appReveal(_ id: String, label: String? = nil, activate: (() -> Void)? = nil) -> some View {
+        modifier(AppRevealModifier(id: id, label: label, activate: activate))
     }
 }
 

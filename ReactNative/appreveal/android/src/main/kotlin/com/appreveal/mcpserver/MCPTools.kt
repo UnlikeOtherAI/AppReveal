@@ -573,6 +573,7 @@ internal fun registerBuiltInTools() {
             val pkgInfo = try { pm.getPackageInfo(packageName, android.content.pm.PackageManager.GET_META_DATA) } catch (_: Exception) { null }
             val appInfo = pkgInfo?.applicationInfo
             val metaData = JsonObject()
+            @Suppress("DEPRECATION")
             appInfo?.metaData?.keySet()?.forEach { key -> metaData.addProperty(key, appInfo.metaData.get(key)?.toString() ?: "") }
             val dm = ctx.resources.displayMetrics
             val wm = ctx.getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager

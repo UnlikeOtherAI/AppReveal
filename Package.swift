@@ -11,11 +11,15 @@ let package = Package(
     ],
     products: [
         .library(name: "AppReveal", targets: ["AppReveal"]),
-        .library(name: "AppRevealClient", targets: ["AppRevealClient"]),
     ],
     targets: [
-        .target(name: "AppReveal", path: "iOS/Sources/AppReveal"),
-        .target(name: "AppRevealClient", path: "iOS/Sources/AppRevealClient"),
+        .target(
+            name: "AppReveal",
+            path: "iOS/Sources/AppReveal",
+            swiftSettings: [
+                .define("APPREVEAL_PRIVATE_API_TAPS", .when(configuration: .debug))
+            ]
+        ),
         .testTarget(name: "AppRevealTests", dependencies: ["AppReveal"], path: "iOS/Tests/AppRevealTests"),
     ]
 )

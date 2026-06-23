@@ -59,6 +59,15 @@ class AppReveal {
   static final AppRevealNavigatorObserver navigatorObserver =
       AppRevealNavigatorObserver();
 
+  /// Per-session token required for MCP POST requests.
+  static String? get sessionToken => _server.sessionToken;
+
+  /// Loopback MCP endpoint, available after the server starts.
+  static String? get url => _server.url;
+
+  /// Loopback MCP endpoint with `appreveal_session_token` query auth.
+  static String? get sessionUrl => _server.sessionUrl;
+
   /// Start the AppReveal MCP server and mDNS advertisement.
   /// No-ops silently in release mode — safe to call unconditionally.
   static void start({int port = 0}) {
@@ -114,10 +123,21 @@ class AppReveal {
   ///
   /// AppReveal.registerWebView('main', controller);
   /// ```
-  static void registerWebView(String id, WebViewController controller,
-      {String? title}) {
+  static void registerWebView(
+    String id,
+    WebViewController controller, {
+    String? title,
+    bool loading = false,
+    String? frame,
+  }) {
     if (kReleaseMode) return;
-    WebViewBridge.shared.register(id, controller, title: title);
+    WebViewBridge.shared.register(
+      id,
+      controller,
+      title: title,
+      loading: loading,
+      frame: frame,
+    );
   }
 
   /// Unregister a previously registered [WebViewController].
@@ -160,7 +180,7 @@ class AppReveal {
 
     // Advertise via mDNS (use real bundle ID from PackageInfo)
     String bundleId = 'com.appreveal.app';
-    String version = '0.8.0';
+    String version = '0.10.0';
     try {
       final info = await PackageInfo.fromPlatform();
       bundleId = info.packageName;
@@ -171,6 +191,7 @@ class AppReveal {
       port: _server.port,
       bundleId: bundleId,
       version: version,
+      auth: 'session-token',
     );
   }
 }

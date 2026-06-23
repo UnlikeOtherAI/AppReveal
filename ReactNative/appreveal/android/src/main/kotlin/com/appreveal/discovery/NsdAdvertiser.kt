@@ -36,6 +36,7 @@ internal class NsdAdvertiser(
             setAttribute("bundleId", packageName)
             setAttribute("version", version)
             setAttribute("transport", "streamable-http")
+            setAttribute("auth", "session-token")
         }
 
         val listener = object : NsdManager.RegistrationListener {

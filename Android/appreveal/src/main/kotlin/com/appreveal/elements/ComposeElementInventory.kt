@@ -4,8 +4,12 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Traverses Jetpack Compose UI trees via the accessibility node provider.
@@ -33,11 +37,7 @@ internal object ComposeElementInventory {
         val seenIds = mutableMapOf<String, Int>()
         forEachComposeView(root) { composeView ->
             if (found != null) return@forEachComposeView
-            val provider = ViewCompat.getAccessibilityNodeProvider(composeView) ?: return@forEachComposeView
-            val rootNode =
-                provider.createAccessibilityNodeInfoForVirtualView(
-                    AccessibilityNodeInfoCompat.FOCUS_INPUT,
-                ) ?: provider.createAccessibilityNodeInfoForVirtualView(View.NO_ID) ?: return@forEachComposeView
+            val rootNode = rootNodeFor(composeView) ?: return@forEachComposeView
             found = findNodeById(rootNode, id, seenIds, composeView)
         }
         return found
@@ -51,8 +51,7 @@ internal object ComposeElementInventory {
     ): AccessibilityNodeInfoCompat? {
         val candidates = mutableListOf<AccessibilityNodeInfoCompat>()
         forEachComposeView(root) { composeView ->
-            val provider = ViewCompat.getAccessibilityNodeProvider(composeView) ?: return@forEachComposeView
-            val rootNode = provider.createAccessibilityNodeInfoForVirtualView(View.NO_ID) ?: return@forEachComposeView
+            val rootNode = rootNodeFor(composeView) ?: return@forEachComposeView
             collectNodesByText(rootNode, text, matchMode, candidates)
         }
         return candidates.getOrNull(occurrence)
@@ -66,8 +65,7 @@ internal object ComposeElementInventory {
         var best: AccessibilityNodeInfoCompat? = null
         var bestArea = Long.MAX_VALUE
         forEachComposeView(root) { composeView ->
-            val provider = ViewCompat.getAccessibilityNodeProvider(composeView) ?: return@forEachComposeView
-            val rootNode = provider.createAccessibilityNodeInfoForVirtualView(View.NO_ID) ?: return@forEachComposeView
+            val rootNode = rootNodeFor(composeView) ?: return@forEachComposeView
             findNodeAtPoint(rootNode, x.toInt(), y.toInt()) { node, area ->
                 if (area < bestArea) {
                     bestArea = area
@@ -97,18 +95,23 @@ internal object ComposeElementInventory {
 
     private fun isComposeView(view: View): Boolean = view.javaClass.name.contains("AndroidComposeView")
 
+    private fun rootNodeFor(composeView: View): AccessibilityNodeInfoCompat? {
+        val provider = ViewCompat.getAccessibilityNodeProvider(composeView) ?: return null
+        return provider.createAccessibilityNodeInfo(View.NO_ID)
+    }
+
     private fun traverseProviderTree(
         composeView: View,
         results: MutableList<ElementInfo>,
         seenIds: MutableMap<String, Int>,
     ) {
-        val provider = ViewCompat.getAccessibilityNodeProvider(composeView) ?: return
-        val rootNode = provider.createAccessibilityNodeInfoForVirtualView(View.NO_ID) ?: return
-        walkNode(rootNode, results, seenIds, containerId = null)
+        val rootNode = rootNodeFor(composeView) ?: return
+        walkNode(rootNode, composeView, results, seenIds, containerId = null)
     }
 
     private fun walkNode(
         node: AccessibilityNodeInfoCompat,
+        composeView: View,
         results: MutableList<ElementInfo>,
         seenIds: MutableMap<String, Int>,
         containerId: String?,
@@ -128,6 +131,14 @@ internal object ComposeElementInventory {
             if (!rect.isEmpty) {
                 val rawId = nodeId(node, label)
                 val finalId = deduplicatedId(rawId, seenIds)
+                val frame =
+                    ElementInfo.ElementFrame(
+                        x = rect.left.toDouble(),
+                        y = rect.top.toDouble(),
+                        width = rect.width().toDouble(),
+                        height = rect.height().toDouble(),
+                    )
+                val systemInsets = systemSafeAreaInsets(composeView)
 
                 results.add(
                     ElementInfo(
@@ -138,14 +149,9 @@ internal object ComposeElementInventory {
                         enabled = isEnabled,
                         visible = isVisible,
                         tappable = isClickable,
-                        frame =
-                            ElementInfo.Frame(
-                                x = rect.left.toFloat(),
-                                y = rect.top.toFloat(),
-                                width = rect.width().toFloat(),
-                                height = rect.height().toFloat(),
-                            ),
-                        safeAreaInsets = null,
+                        frame = frame,
+                        safeAreaInsets = safeAreaInsets(composeView, systemInsets),
+                        safeAreaLayoutGuideFrame = safeAreaLayoutGuideFrame(frame, composeView, systemInsets),
                         containerId = containerId,
                         actions = nodeActions(node),
                         idSource = nodeIdSource(node),
@@ -157,7 +163,7 @@ internal object ComposeElementInventory {
         val currentContainerId = nodeId(node, label).takeIf { label != null } ?: containerId
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            walkNode(child, results, seenIds, currentContainerId)
+            walkNode(child, composeView, results, seenIds, currentContainerId)
         }
     }
 
@@ -249,17 +255,62 @@ internal object ComposeElementInventory {
         return "derived"
     }
 
-    private fun classifyNode(node: AccessibilityNodeInfoCompat): String {
+    private fun classifyNode(node: AccessibilityNodeInfoCompat): ElementType {
         val cls = node.className?.toString() ?: ""
         return when {
-            cls.contains("EditText") || node.isEditable -> "textField"
-            node.isClickable -> "button"
-            cls.contains("Switch") -> "toggle"
-            cls.contains("Slider") || cls.contains("SeekBar") -> "slider"
-            cls.contains("CheckBox") -> "toggle"
-            cls.contains("RadioButton") -> "other"
-            else -> "label"
+            cls.contains("EditText") || node.isEditable -> ElementType.TEXT_FIELD
+            node.isClickable -> ElementType.BUTTON
+            cls.contains("Switch") -> ElementType.TOGGLE
+            cls.contains("Slider") || cls.contains("SeekBar") -> ElementType.SLIDER
+            cls.contains("CheckBox") -> ElementType.TOGGLE
+            cls.contains("RadioButton") -> ElementType.OTHER
+            else -> ElementType.LABEL
         }
+    }
+
+    private fun systemSafeAreaInsets(view: View): Insets =
+        ViewCompat.getRootWindowInsets(view)
+            ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            ?: Insets.NONE
+
+    private fun safeAreaInsets(
+        view: View,
+        systemInsets: Insets,
+    ): ElementInfo.ElementInsets {
+        val isRightToLeft = ViewCompat.getLayoutDirection(view) == ViewCompat.LAYOUT_DIRECTION_RTL
+        return ElementInfo.ElementInsets(
+            top = systemInsets.top.toDouble(),
+            leading = if (isRightToLeft) systemInsets.right.toDouble() else systemInsets.left.toDouble(),
+            bottom = systemInsets.bottom.toDouble(),
+            trailing = if (isRightToLeft) systemInsets.left.toDouble() else systemInsets.right.toDouble(),
+        )
+    }
+
+    private fun safeAreaLayoutGuideFrame(
+        frame: ElementInfo.ElementFrame,
+        composeView: View,
+        systemInsets: Insets,
+    ): ElementInfo.ElementFrame {
+        val rootView = composeView.rootView ?: return frame
+        val rootLocation = IntArray(2)
+        rootView.getLocationOnScreen(rootLocation)
+
+        val safeLeft = rootLocation[0].toDouble() + systemInsets.left
+        val safeTop = rootLocation[1].toDouble() + systemInsets.top
+        val safeRight = rootLocation[0].toDouble() + rootView.width - systemInsets.right
+        val safeBottom = rootLocation[1].toDouble() + rootView.height - systemInsets.bottom
+
+        val x = max(frame.x, safeLeft)
+        val y = max(frame.y, safeTop)
+        val right = min(frame.x + frame.width, safeRight)
+        val bottom = min(frame.y + frame.height, safeBottom)
+
+        return ElementInfo.ElementFrame(
+            x = x,
+            y = y,
+            width = max(0.0, right - x),
+            height = max(0.0, bottom - y),
+        )
     }
 
     private fun nodeActions(node: AccessibilityNodeInfoCompat): List<String> {

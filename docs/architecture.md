@@ -29,7 +29,7 @@ External Agent
 
 **Primary:** Streamable HTTP -- the MCP standard transport. Maximum compatibility with existing and future MCP clients.
 
-**Discovery:** Bonjour/mDNS advertising as `_appreveal._tcp.local` with TXT records for app bundle ID, version, and capabilities.
+**Discovery:** Bonjour/mDNS advertising as `_appreveal._tcp.local` with TXT records for app bundle ID, version, transport, and authentication mode.
 
 ## Module design
 
@@ -40,16 +40,17 @@ Embedded HTTP server using `NWListener` on a dynamic port. Handles JSON-RPC MCP 
 - Serves tool metadata via `tools/list`
 - Executes tool calls via `tools/call`
 - Per-session token authentication
+- `GET /health` for unauthenticated listener and Bonjour diagnostics
 - Runs on main actor for UI access
 
 ### BonjourDiscovery
 
-Wraps `NWListener.Service` to advertise the MCP endpoint. Publishes TXT metadata:
+Publishes a separate `NetService` advertisement after the HTTP listener is ready. Bonjour failure does not close the MCP HTTP listener, so loopback and manual host/port connections can still work while Local Network permission or firewall issues are diagnosed. Publishes TXT metadata:
 
 - `bundleId` -- app bundle identifier
 - `version` -- app version
-- `port` -- server port
 - `transport` -- `streamable-http`
+- `auth` -- `session-token`
 
 Requires `NSLocalNetworkUsageDescription` and `NSBonjourServices` in Info.plist.
 
@@ -82,7 +83,7 @@ Enumerates visible interactive elements. Each element exposes:
 - `enabled`, `visible`, `tappable`
 - `frame` (CGRect in screen coordinates)
 - `actions` (available interaction types)
-- `idSource` — how the ID was derived: `"explicit"`, `"text"`, `"semantics"`, `"tooltip"`, `"derived"`
+- `idSource` — how the ID was derived: `"explicit"`, `"appReveal"`, `"text"`, `"semantics"`, `"tooltip"`, `"derived"`
 
 ID resolution cascade: explicit accessibility identifier → semantics (accessibility label / content description) → visible text (normalized to snake_case) → auto-generated derived ID. Duplicate IDs are disambiguated with `_1`, `_2`, etc.
 
@@ -113,7 +114,7 @@ Optional element-level cropping by accessibility identifier.
 
 ### WebViewBridge / MacOSWebViewBridge
 
-Discovers `WKWebView` instances inside the selected window and powers the DOM tools.
+Discovers `WKWebView` instances inside the selected window and powers the DOM tools. Native `get_elements` reports the WebView as a native view; DOM content is intentionally exposed through the WebView tools. On iOS, `tap_point` can route a coordinate inside a `WKWebView` to `document.elementFromPoint(...).click()` for mixed native/web flows.
 
 - Auto-discovers web views from the native view hierarchy
 - Evaluates JavaScript for DOM inspection and interaction
@@ -227,25 +228,20 @@ protocol FeatureFlagProviding {
 | Tool | Description |
 |------|-------------|
 | `get_network_calls` | Recent HTTP traffic |
-| `get_network_call_detail` | Full request/response for a call |
-| `mock_network_response` | Inject mock response for URL pattern |
-| `simulate_latency` | Add artificial delay |
-| `simulate_timeout` | Force timeout on matching requests |
-| `disable_network` | Simulate offline state |
 
 ### Diagnostics
 | Tool | Description |
 |------|-------------|
 | `get_logs` | Recent app logs |
 | `get_recent_errors` | Recent errors and assertions |
-| `get_metrics_summary` | MetricKit performance summary |
 
 ### App Control
 | Tool | Description |
 |------|-------------|
 | `launch_context` | App launch environment info |
 | `open_deeplink` | Navigate via deep link URL |
-| `reset_app_state` | Clear app state for clean testing |
+
+Network call detail, network mocking, MetricKit summaries, and reset-state commands are planned extension tools. They are not part of the current cross-platform parity set until every target can advertise and implement them consistently.
 
 All UI and WKWebView tools accept an optional `window_id` parameter from `list_windows`. If omitted, AppReveal targets the current key window.
 
@@ -259,8 +255,10 @@ All UI and WKWebView tools accept an optional `window_id` parameter from `list_w
 ## Security model
 
 - All code wrapped in `#if DEBUG` -- zero production footprint
-- `NWListener` binds to local network only
-- Optional pairing token displayed in DebugOverlay
+- MCP POST requests require a generated per-session token, accepted via `Authorization: Bearer`, `X-AppReveal-Session`, or `appreveal_session_token`
+- `GET /health` is unauthenticated and returns listener/auth/Bonjour diagnostics
+- CORS is limited to loopback origins
+- Bonjour advertises only after `AppReveal.start()` and listener readiness
 - Sensitive fields (auth tokens, passwords) redacted in network capture
 - State mutation tools require explicit opt-in registration
 - Service hidden until `AppReveal.start()` is called
@@ -318,9 +316,6 @@ iOS/                                   (single Swift package for iOS + macOS)
  |    |    |    +-- DebugOverlay.swift
  |    |    +-- Shared/
  |    |         +-- AnyCodable.swift
- |    +-- AppRevealClient/               (optional companion for agents)
- |         +-- AppRevealClient.swift
- |         +-- BonjourBrowser.swift
  +-- Tests/
       +-- AppRevealTests/
 ```

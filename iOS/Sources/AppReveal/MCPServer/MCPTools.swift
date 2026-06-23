@@ -641,6 +641,10 @@ private func registerIOSBuiltInTools() {
                 InteractionEngine.shared.tap(point: accessibilityTarget.centerPoint, windowId: windowId)
             case .point(let point):
                 InteractionEngine.shared.tap(point: point, windowId: windowId)
+            case .appReveal(let id, let point):
+                if !SwiftUIElementRegistry.shared.activate(id: id) {
+                    InteractionEngine.shared.tap(point: point, windowId: windowId)
+                }
             }
             return AnyCodable(["success": true, "text": text] as [String: Any])
         }

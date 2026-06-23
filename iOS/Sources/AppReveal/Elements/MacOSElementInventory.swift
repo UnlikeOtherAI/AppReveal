@@ -23,6 +23,7 @@ final class ElementInventory {
         var elements: [ElementInfo] = []
         var seenIds: [String: Int] = [:]
         walkView(contentView, elements: &elements, seenIds: &seenIds, containerId: nil)
+        appendSwiftUIRegisteredElements(to: &elements, seenIds: &seenIds, windowIds: Set([ref.id]))
         return elements
     }
 
@@ -53,37 +54,45 @@ final class ElementInventory {
         var matches: [(view: NSView, text: String)] = []
         collectTextMatches(text, matchMode: matchMode, in: contentView, matches: &matches)
 
-        if matches.isEmpty {
-            return MacOSTextResolveResult(error: "No element with text \"\(text)\" found on the current screen.")
-        }
-
-        var tappableCandidates: [(view: NSView, label: String)] = []
+        var resolvedTargets: [(view: NSView?, appRevealId: String?, point: CGPoint?, label: String)] = []
         for match in matches {
             if let tappable = Self.findTappableAncestor(of: match.view) {
-                tappableCandidates.append((tappable, match.text))
+                resolvedTargets.append((tappable, nil, nil, match.text))
             }
         }
 
-        if tappableCandidates.isEmpty {
+        for entry in SwiftUIElementRegistry.shared.matchingElements(text: text, matchMode: matchMode, windowIds: Set([ref.id])) {
+            resolvedTargets.append((nil, entry.id, entry.frame.center, entry.label ?? entry.id))
+        }
+
+        if matches.isEmpty && resolvedTargets.isEmpty {
+            return MacOSTextResolveResult(error: "No element with text \"\(text)\" found on the current screen.")
+        }
+
+        if resolvedTargets.isEmpty {
             return MacOSTextResolveResult(error: "Text \"\(text)\" found but no tappable ancestor. The text is a static label.")
         }
 
-        if tappableCandidates.count > 1 && occurrence < 0 {
+        if resolvedTargets.count > 1 && occurrence < 0 {
             return MacOSTextResolveResult(
-                error: "Ambiguous: \(tappableCandidates.count) matches found. Use occurrence (0-based) to disambiguate.",
-                candidates: tappableCandidates.map { $0.label }
+                error: "Ambiguous: \(resolvedTargets.count) matches found. Use occurrence (0-based) to disambiguate.",
+                candidates: resolvedTargets.map { $0.label }
             )
         }
 
-        if occurrence >= tappableCandidates.count {
+        if occurrence >= resolvedTargets.count {
             return MacOSTextResolveResult(
-                error: "occurrence \(occurrence) out of range (found \(tappableCandidates.count) matches)",
-                candidates: tappableCandidates.map { $0.label }
+                error: "occurrence \(occurrence) out of range (found \(resolvedTargets.count) matches)",
+                candidates: resolvedTargets.map { $0.label }
             )
         }
 
-        let index = tappableCandidates.count == 1 ? 0 : occurrence
-        return MacOSTextResolveResult(view: tappableCandidates[index].view)
+        let index = resolvedTargets.count == 1 ? 0 : occurrence
+        let target = resolvedTargets[index]
+        if let view = target.view {
+            return MacOSTextResolveResult(view: view)
+        }
+        return MacOSTextResolveResult(appRevealId: target.appRevealId, point: target.point)
     }
 
     // MARK: - Text utilities
@@ -282,7 +291,9 @@ final class ElementInventory {
               let contentView = ref.contentView else {
             return []
         }
-        return dumpNode(contentView, depth: 0, maxDepth: maxDepth)
+        var nodes = dumpNode(contentView, depth: 0, maxDepth: maxDepth)
+        appendSwiftUIRegisteredViewTreeNodes(to: &nodes, windowIds: Set([ref.id]))
+        return nodes
     }
 
     private func dumpNode(_ view: NSView, depth: Int, maxDepth: Int) -> [[String: Any]] {
@@ -426,24 +437,89 @@ final class ElementInventory {
             "trailing": insets.trailing
         ]
     }
+
+    private func appendSwiftUIRegisteredElements(
+        to elements: inout [ElementInfo],
+        seenIds: inout [String: Int],
+        windowIds: Set<String>
+    ) {
+        for entry in SwiftUIElementRegistry.shared.currentElements(windowIds: windowIds) {
+            let count = seenIds[entry.id, default: 0]
+            seenIds[entry.id] = count + 1
+            let finalId = count == 0 ? entry.id : "\(entry.id)_\(count)"
+            let frame = entry.frame
+            let safeAreaInsets = ElementInfo.ElementInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+            elements.append(
+                ElementInfo(
+                    id: finalId,
+                    type: .button,
+                    label: entry.label,
+                    value: nil,
+                    enabled: true,
+                    visible: !frame.isEmpty,
+                    tappable: true,
+                    frame: Self.makeFrame(frame),
+                    safeAreaInsets: safeAreaInsets,
+                    safeAreaLayoutGuideFrame: Self.makeFrame(frame),
+                    containerId: nil,
+                    actions: ["tap"],
+                    idSource: "appReveal"
+                )
+            )
+        }
+    }
+
+    private func appendSwiftUIRegisteredViewTreeNodes(to nodes: inout [[String: Any]], windowIds: Set<String>) {
+        for entry in SwiftUIElementRegistry.shared.currentElements(windowIds: windowIds) {
+            let frame = entry.frame
+            var node: [String: Any] = [
+                "class": "SwiftUI.AppRevealElement",
+                "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))",
+                "hidden": frame.isEmpty,
+                "alphaValue": 1,
+                "depth": 0,
+                "accessibilityId": entry.id,
+                "idSource": "appReveal",
+                "actions": ["tap"]
+            ]
+            if let label = entry.label, !label.isEmpty {
+                node["accessibilityLabel"] = label
+            }
+            nodes.append(node)
+        }
+    }
 }
 
 /// Result of text-based element resolution (macOS).
 struct MacOSTextResolveResult {
     let view: NSView?
+    let appRevealId: String?
+    let point: CGPoint?
     let error: String?
     let candidates: [String]?
 
-    var isSuccess: Bool { view != nil }
+    var isSuccess: Bool { view != nil || appRevealId != nil || point != nil }
 
     init(view: NSView) {
         self.view = view
+        self.appRevealId = nil
+        self.point = nil
+        self.error = nil
+        self.candidates = nil
+    }
+
+    init(appRevealId: String?, point: CGPoint?) {
+        self.view = nil
+        self.appRevealId = appRevealId
+        self.point = point
         self.error = nil
         self.candidates = nil
     }
 
     init(error: String, candidates: [String]? = nil) {
         self.view = nil
+        self.appRevealId = nil
+        self.point = nil
         self.error = error
         self.candidates = candidates
     }

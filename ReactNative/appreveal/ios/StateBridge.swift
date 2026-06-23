@@ -16,14 +16,15 @@ final class StateBridge {
     // MARK: - Feature flags (set by JS)
     var featureFlags: [String: AnyCodable] = [:]
 
+    // MARK: - App state (set by JS)
+    var state: [String: AnyCodable] = [:]
+
     private init() {}
 
     // MARK: - Queries
 
-    /// Returns empty dict — no StateProviding protocol in the RN module.
-    /// JS manages its own state; use React DevTools or custom tooling for state inspection.
     func getState() -> [String: AnyCodable] {
-        return [:]
+        return state
     }
 
     func getNavigationStack() -> [String: AnyCodable] {

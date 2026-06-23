@@ -1,11 +1,11 @@
 buildscript {
-    ext.kotlin_version = '1.9.22'
+    ext.kotlin_version = '2.1.0'
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.2'
+        classpath 'com.android.tools.build:gradle:8.7.3'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -15,7 +15,8 @@ apply plugin: 'kotlin-android'
 
 android {
     namespace 'com.appreveal'
-    compileSdk 34
+    compileSdk 35
+    buildToolsVersion '36.0.0'
 
     defaultConfig {
         minSdk 26
@@ -42,9 +43,11 @@ repositories {
     mavenCentral()
 }
 
+def appRevealReactNativeVersion = findProperty('appRevealReactNativeVersion') ?: '0.81.4'
+
 dependencies {
     // React Native — provided by the host app, not bundled
-    compileOnly 'com.facebook.react:react-native:+'
+    compileOnly "com.facebook.react:react-android:$appRevealReactNativeVersion"
 
     // HTTP server
     implementation 'org.nanohttpd:nanohttpd:2.3.1'

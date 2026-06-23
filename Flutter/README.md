@@ -10,7 +10,7 @@ In your `pubspec.yaml`:
 dependencies:
   appreveal:
     git:
-      url: https://github.com/your-org/appreveal
+      url: https://github.com/UnlikeOtherAI/AppReveal
       path: Flutter/appreveal
 ```
 
@@ -21,7 +21,7 @@ dependencies:
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  AppReveal.start(); // no-ops in release builds
+AppReveal.start(); // no-ops in release builds
 
   // Optional providers
   AppReveal.registerStateProvider(MyStateContainer());
@@ -32,6 +32,8 @@ void main() {
   runApp(AppReveal.wrap(const MyApp())); // wrap enables screenshots
 }
 ```
+
+When the listener is ready, AppReveal prints a session URL. MCP POST requests require the generated token via `Authorization: Bearer <token>`, `X-AppReveal-Session`, or the `appreveal_session_token` query parameter. `GET /health` is unauthenticated for diagnostics.
 
 ```dart
 // In MaterialApp — enables automatic screen tracking
@@ -122,7 +124,7 @@ final controller = WebViewController()
   ..loadRequest(Uri.parse('https://example.com'));
 
 // Register with AppReveal
-AppReveal.registerWebView('main', controller);
+AppReveal.registerWebView('main', controller, title: 'Example');
 
 // Unregister when the widget is disposed
 AppReveal.unregisterWebView('main');
@@ -164,8 +166,8 @@ class MyHttpClient implements NetworkObservable { ... }
 
 ## Tools
 
-### UI / Native (23)
-`get_screen`, `get_elements`, `get_view_tree`, `screenshot`, `tap_element`, `tap_text`, `tap_point`, `type_text`, `clear_text`, `scroll`, `scroll_to_element`, `select_tab`, `navigate_back`, `dismiss_modal`, `open_deeplink`, `get_state`, `get_navigation_stack`, `get_feature_flags`, `get_network_calls`, `get_logs`, `get_recent_errors`, `launch_context`, `batch`
+### UI / Native (24)
+`get_screen`, `get_elements`, `get_view_tree`, `screenshot`, `tap_element`, `tap_text`, `tap_point`, `type_text`, `clear_text`, `scroll`, `scroll_to_element`, `select_tab`, `navigate_back`, `dismiss_modal`, `open_deeplink`, `get_state`, `get_navigation_stack`, `get_feature_flags`, `get_network_calls`, `get_logs`, `get_recent_errors`, `launch_context`, `device_info`, `batch`
 
 ### WebView / DOM (21)
 `get_webviews`, `get_dom_tree`, `get_dom_interactive`, `query_dom`, `find_dom_text`, `web_click`, `web_type`, `web_select`, `web_toggle`, `web_scroll_to`, `web_evaluate`, `web_navigate`, `web_back`, `web_forward`, `get_dom_links`, `get_dom_text`, `get_dom_forms`, `get_dom_headings`, `get_dom_images`, `get_dom_tables`, `get_dom_summary`
@@ -190,5 +192,6 @@ The server advertises via mDNS as `_appreveal._tcp.local` with TXT records:
 - `bundleId` — app package name
 - `version` — app version
 - `transport` — `streamable-http`
+- `auth` — `session-token`
 
-Connect with any MCP client using `http://localhost:<port>`.
+Connect with any MCP client using the printed `AppReveal.sessionUrl`, or pass the token in the `Authorization`/`X-AppReveal-Session` header.

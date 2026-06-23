@@ -35,6 +35,7 @@ enum InteractionError: LocalizedError {
 #if os(iOS)
 
 import UIKit
+import WebKit
 
 let appRevealTapPointNotificationName = Notification.Name("appreveal.interaction.tap_point")
 let appRevealTapPointUserInfoKey = "point"
@@ -83,6 +84,11 @@ final class InteractionEngine {
         for ref in candidateWindows(windowId: windowId) {
             let window = ref.nativeWindow
             let hitView = window.hitTest(point, with: nil)
+
+            if hitView.map({ findParent(of: $0, type: WKWebView.self) != nil }) == true,
+               WebViewBridge.shared.clickElement(at: point, windowId: ref.id) {
+                return true
+            }
 
             // Check if tapping inside a tab bar
             if let tabBar = findParent(of: hitView, type: UITabBar.self),
@@ -388,6 +394,14 @@ final class InteractionEngine {
             // Delegate to tap(point:) which handles SwiftUI hosting views, HID events,
             // and the full fallback stack. postTapPoint is called inside tap(point:).
             return tap(point: point, windowId: windowId)
+        case .appReveal(let id, let point):
+            if SwiftUIElementRegistry.shared.activate(id: id) {
+                if postPoint {
+                    postTapPoint(point)
+                }
+                return true
+            }
+            return tap(point: point, windowId: windowId)
         }
     }
 
@@ -661,6 +675,11 @@ final class InteractionEngine {
             }
             return nil
         case .point(let point):
+            if let hitView = hitView(at: point, windowId: windowId, preferredWindow: nil) {
+                return editableAncestor(for: hitView)
+            }
+            return nil
+        case .appReveal(_, let point):
             if let hitView = hitView(at: point, windowId: windowId, preferredWindow: nil) {
                 return editableAncestor(for: hitView)
             }

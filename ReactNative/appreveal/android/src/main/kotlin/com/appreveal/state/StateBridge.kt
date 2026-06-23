@@ -13,10 +13,9 @@ internal object StateBridge {
     @Volatile var presentedModals: List<String> = emptyList()
 
     // Feature flags — set by AppRevealModule.setFeatureFlags()
-    @Volatile var featureFlags: Map<String, Any> = emptyMap()
+    @Volatile var featureFlagSnapshot: Map<String, Any> = emptyMap()
 
-    // App state snapshot — set by AppRevealModule.setState() if ever needed
-    // For now, returns an empty map (RN apps push state via captureNetworkCall etc.)
+    // App state snapshot — set by AppRevealModule.setState()
     @Volatile var stateSnapshot: Map<String, Any?> = emptyMap()
 
     fun getState(): Map<String, Any?> {
@@ -33,6 +32,6 @@ internal object StateBridge {
 
     fun getFeatureFlags(): Map<String, Any?> {
         @Suppress("UNCHECKED_CAST")
-        return featureFlags as Map<String, Any?>
+        return featureFlagSnapshot as Map<String, Any?>
     }
 }

@@ -1,6 +1,6 @@
 # AppReveal — React Native
 
-Debug-only in-app MCP server for React Native. Lets LLM agents discover, inspect, and control native apps over the local network via standard MCP protocol — like Playwright for native, with direct access to app state, navigation, network traffic, and native UI elements.
+Debug-only in-app MCP server for React Native iOS and Android. Lets LLM agents discover, inspect, and control native apps over the local network via standard MCP protocol — like Playwright for native, with direct access to app state, navigation, network traffic, and native UI elements.
 
 ## How it works
 
@@ -14,11 +14,15 @@ Your App (debug build)                    External Agent
 ```
 
 1. App calls `AppReveal.start()` in a debug build
-2. Framework starts an HTTP server on a dynamic port
+2. iOS and Android start an HTTP server on a dynamic port
 3. mDNS advertises the service as `_appreveal._tcp` on the LAN
 4. Agent discovers the service, connects, and calls MCP tools
 
-All 43 MCP tools are identical across iOS, Android, Flutter, and React Native.
+On iOS and Android, React Native exposes the same MCP tool set as the other
+AppReveal platforms. React Native Windows is not autolinked or advertised until
+there is a real MCP server bridge for that runtime.
+
+On iOS and Android, MCP POST requests require the generated session token. The native logs print a session URL, and clients can also pass the token with `Authorization: Bearer <token>` or `X-AppReveal-Session`. `GET /health` is unauthenticated for diagnostics.
 
 ## Installation
 
@@ -60,7 +64,7 @@ import { AppReveal, AppRevealFetchInterceptor } from 'react-native-appreveal';
 // In your root component
 useEffect(() => {
   if (__DEV__) {
-    AppReveal.start();              // starts MCP server + mDNS
+    AppReveal.start(); // starts MCP + mDNS in debug builds
     AppRevealFetchInterceptor.install(); // intercepts fetch for network capture
   }
 }, []);
@@ -82,16 +86,13 @@ function OrdersScreen() {
 ### React Navigation integration
 
 ```tsx
-import { AppReveal, createNavigationListener } from 'react-native-appreveal';
+import { createNavigationListener } from 'react-native-appreveal';
 import { NavigationContainer } from '@react-navigation/native';
 
 function App() {
-  const navListener = createNavigationListener();
-
   return (
     <NavigationContainer
-      ref={navListener.ref}
-      onStateChange={navListener.onStateChange}>
+      onStateChange={createNavigationListener()}>
       {/* ... */}
     </NavigationContainer>
   );
@@ -110,7 +111,9 @@ if (__DEV__) {
 }
 ```
 
-All `fetch()` calls are then captured and exposed via the `get_network_calls` MCP tool.
+All `fetch()` calls are then captured and exposed via the `get_network_calls`
+MCP tool on platforms with the MCP server bridge. On Windows they are buffered
+in the native module until that bridge lands.
 
 ### Manual network capture
 
@@ -150,13 +153,15 @@ class AppReveal {
   static start(port?: number): void;
   static stop(): void;
   static setScreen(key: string, title: string): void;
+  static setState(state: Record<string, unknown>): void;
   static setNavigationStack(routes: string[], current: string, modals?: string[]): void;
   static setFeatureFlags(flags: Record<string, unknown>): void;
   static captureNetworkCall(call: CapturedRequest): void;
   static captureError(domain: string, message: string, stackTrace?: string): void;
-  static createNavigationListener(): { ref: RefObject<any>; onStateChange: (state) => void };
+  static createNavigationListener(): (state: NavigationState | undefined) => void;
 }
 
+function createNavigationListener(): (state: NavigationState | undefined) => void;
 function useAppRevealScreen(screenKey: string, screenTitle: string): void;
 
 class AppRevealFetchInterceptor {
@@ -164,9 +169,12 @@ class AppRevealFetchInterceptor {
 }
 ```
 
-All methods are no-ops when `__DEV__` is false — no production impact.
+All methods are inert when `__DEV__` is false. In a debug build, a missing native
+module throws immediately so installation/configuration problems are visible.
 
-## MCP tools (43 total)
+## MCP tools (iOS/Android)
+
+These tools are available on React Native iOS and Android.
 
 ### UI and navigation
 
@@ -176,6 +184,7 @@ All methods are no-ops when `__DEV__` is false — no production impact.
 | `get_elements` | All visible interactive elements with id, type, frame, safe-area data, actions |
 | `get_view_tree` | Full view hierarchy with class, frame, safe-area data, properties, accessibility info |
 | `tap_element` | Tap by element identifier (buttons, cells, controls) |
+| `tap_text` | Tap by visible text content |
 | `tap_point` | Tap at screen coordinates |
 | `type_text` | Type text into a field (by element ID or current responder) |
 | `clear_text` | Clear a text field |
@@ -198,6 +207,7 @@ All methods are no-ops when `__DEV__` is false — no production impact.
 | `get_logs` | Recent app logs |
 | `get_recent_errors` | Recent captured errors |
 | `launch_context` | App ID, version, device model, OS version |
+| `device_info` | Comprehensive app/device/runtime snapshot |
 
 ### WebView — DOM access
 
@@ -280,7 +290,7 @@ npx react-native run-android
 
 ## Security
 
-All AppReveal code is guarded by `__DEV__` — zero production impact. Local network only. Sensitive headers (Authorization, Cookie) are redacted in network capture.
+All AppReveal code is guarded by `__DEV__` — zero production impact. MCP POST requests require a per-session token on iOS and Android. Sensitive headers (Authorization, Cookie) are redacted in network capture.
 
 ## License
 

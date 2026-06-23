@@ -14,15 +14,11 @@ final class WebViewBridge {
     // MARK: - Discovery
 
     func findWebViews() -> [(id: String, webView: WKWebView)] {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.keyWindow else {
-            return []
-        }
-
         var results: [(id: String, webView: WKWebView)] = []
         var counter = 0
-        collectWebViews(in: window, results: &results, counter: &counter)
+        for window in candidateWindows() {
+            collectWebViews(in: window, results: &results, counter: &counter)
+        }
         return results
     }
 
@@ -43,6 +39,64 @@ final class WebViewBridge {
             return webViews.first(where: { $0.id == id })?.webView
         }
         return webViews.first?.webView
+    }
+
+    @discardableResult
+    func clickElement(at windowPoint: CGPoint) -> Bool {
+        guard let webView = findWebViews()
+            .map(\.webView)
+            .first(where: { webView in
+                webView.convert(webView.bounds, to: nil).contains(windowPoint)
+            }) else {
+            return false
+        }
+        return clickElement(at: windowPoint, in: webView)
+    }
+
+    @discardableResult
+    func clickElement(at windowPoint: CGPoint, in webView: WKWebView) -> Bool {
+        guard webView.convert(webView.bounds, to: nil).contains(windowPoint) else {
+            return false
+        }
+        let localPoint = webView.convert(windowPoint, from: nil)
+        let js = """
+        (() => {
+          const viewWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || \(webView.bounds.width));
+          const viewHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || \(webView.bounds.height));
+          const x = \(localPoint.x) * viewWidth / Math.max(1, \(webView.bounds.width));
+          const y = \(localPoint.y) * viewHeight / Math.max(1, \(webView.bounds.height));
+          const element = document.elementFromPoint(x, y);
+          if (!element) {
+            return JSON.stringify({ success: false, error: "no_dom_element", x, y });
+          }
+          const target = element.closest('button,a,input,textarea,select,label,[role="button"],[onclick]') || element;
+          if (typeof target.focus === 'function') {
+            try { target.focus({ preventScroll: true }); } catch (_) { target.focus(); }
+          }
+          const eventInit = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+          for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
+            target.dispatchEvent(new MouseEvent(type, eventInit));
+          }
+          if (typeof target.click === 'function') {
+            target.click();
+          } else {
+            target.dispatchEvent(new MouseEvent('click', eventInit));
+          }
+          return JSON.stringify({
+            success: true,
+            tag: target.tagName,
+            id: target.id || null,
+            text: (target.innerText || target.value || '').slice(0, 120)
+          });
+        })()
+        """
+
+        webView.evaluateJavaScript(js) { _, error in
+            if let error {
+                print("[AppReveal] WebView tap_point DOM click failed: \(error.localizedDescription)")
+            }
+        }
+        return true
     }
 
     // MARK: - Metadata
@@ -76,6 +130,24 @@ final class WebViewBridge {
         // For non-string results, convert to JSON
         let data = try JSONSerialization.data(withJSONObject: result, options: [])
         return String(data: data, encoding: .utf8) ?? "null"
+    }
+
+    private func candidateWindows() -> [UIWindow] {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty }
+            .enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.windowLevel != rhs.element.windowLevel {
+                    return lhs.element.windowLevel > rhs.element.windowLevel
+                }
+                if lhs.element.isKeyWindow != rhs.element.isKeyWindow {
+                    return lhs.element.isKeyWindow && !rhs.element.isKeyWindow
+                }
+                return lhs.offset > rhs.offset
+            }
+            .map(\.element)
     }
 }
 

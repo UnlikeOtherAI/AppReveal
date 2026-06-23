@@ -4,7 +4,7 @@
 
 **[unlikeotherai.github.io/AppReveal](https://unlikeotherai.github.io/AppReveal/)**
 
-Debug-only in-app MCP server for iOS, macOS, Android, Flutter, and React Native. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
+Debug-only in-app MCP server for iOS, macOS, Android, Flutter, React Native, and Windows app stacks. Lets LLM agents discover, inspect, and control native apps over the local network -- like Playwright for native, but with direct access to app state, navigation, network traffic, DOM, and diagnostics.
 
 ## How it works
 
@@ -19,10 +19,10 @@ Your App (debug build)                    External Agent
 
 1. App calls `AppReveal.start()` in a debug build
 2. Framework starts an HTTP server on a dynamic port
-3. mDNS advertises the service as `_appreveal._tcp` on the LAN
-4. Agent discovers the service, connects, and calls MCP tools
+3. Platforms with a discovery backend advertise `_appreveal._tcp` on the LAN
+4. Agent discovers the service, or is given the localhost URL, and calls MCP tools
 
-AppReveal shares the same core MCP surface across platforms. macOS adds desktop-specific window and menu tools on top of the shared native and web view tools.
+Full AppReveal integrations share the same core MCP surface across platforms. Foundation targets advertise only implemented built-ins and host-registered provider tools; desktop targets such as macOS and Windows add window and menu tools when those providers are available.
 
 ## Quick start
 
@@ -30,7 +30,7 @@ AppReveal shares the same core MCP surface across platforms. macOS adds desktop-
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.8.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.0")
 ```
 
 ```swift
@@ -49,7 +49,7 @@ To opt out of private APIs entirely (even in debug builds), remove the `swiftSet
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.8.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.0")
 ```
 
 ```swift
@@ -119,6 +119,21 @@ if (__DEV__) {
 
 See [React Native guide](ReactNative/README.md) for full setup.
 
+### Windows
+
+Native .NET and Tauri MCP foundations live under `Windows/`. The Tauri crate
+advertises only its functional foundation tools plus provider-backed tools after
+the host registers real providers. React Native Windows is not autolinked or
+advertised until there is a real MCP server bridge for that runtime.
+
+```csharp
+#if DEBUG
+AppReveal.Windows.AppReveal.Start();
+#endif
+```
+
+See [Windows guide](docs/windows.md) for the native C# and Tauri/Rust setup notes.
+
 ## MCP tools
 
 ### UI and navigation
@@ -144,7 +159,7 @@ See [React Native guide](ReactNative/README.md) for full setup.
 
 All native UI tools and all web view tools accept an optional `window_id` parameter from `list_windows`. If omitted, AppReveal targets the current key window.
 
-### macOS desktop tools
+### Desktop tools
 
 | Tool | Description |
 |------|-------------|
@@ -161,7 +176,7 @@ All native UI tools and all web view tools accept an optional `window_id` parame
 | `get_feature_flags` | All active feature flags |
 | `get_network_calls` | Recent HTTP traffic with method, URL, status, duration |
 | `get_logs` | Recent app logs |
-| `get_recent_errors` | Recent captured errors |
+| `get_recent_errors` | Recent captured errors when an error-capture provider is available |
 | `launch_context` | App ID, version, device model, OS version |
 | `device_info` | Full device snapshot: Info.plist / manifest metadata, hardware, OS build, screen metrics, locale, timezone, battery, memory, storage, declared permissions |
 
@@ -204,7 +219,7 @@ Purpose-built tools that return only what you need, saving tokens.
 
 | Tool | Description |
 |------|-------------|
-| `batch` | Execute multiple tools in one call. Supports `delay_ms` per action for animations/transitions and `stop_on_error`. Works with all native and web tools. |
+| `batch` | Execute multiple tools in one call. Supports `delay_ms` per action for animations/transitions and `stop_on_error`. Works with currently advertised tools. |
 
 ## Naming conventions
 
@@ -244,6 +259,8 @@ AppReveal gives agents structured data instead of pixels:
 | Android | Working | Shared native + web view tool surface |
 | Flutter | Working | Shared native + web view tool surface |
 | React Native | Working | Shared native + web view tool surface |
+| Windows .NET | Working | Shared MCP contract, UI Automation native/desktop tools |
+| Windows Tauri | Foundation | Shared MCP contract, Tauri provider hooks |
 
 ## Example apps
 
@@ -265,7 +282,9 @@ Install it with `npm install -g @unlikeotherai/appreveal`.
 - **Android**: Added as `debugImplementation` -- not included in release APK
 - **Flutter**: `kReleaseMode` check in `AppReveal.start()` -- zero code paths execute in release
 - **React Native**: `__DEV__` guard -- all methods are no-ops in production builds
-- Local network only
+- MCP POST requests require a generated per-session token; unauthenticated `GET /health` is available for diagnostics
+- Discovery TXT records advertise `auth=session-token` where native service discovery is available
+- Local network / loopback only
 - Sensitive headers (Authorization, Cookie) redacted in network capture
 - No state mutation without explicit opt-in
 
@@ -276,6 +295,7 @@ Install it with `npm install -g @unlikeotherai/appreveal`.
 - [Android guide](docs/android.md) -- installation, setup, interfaces
 - [Flutter guide](Flutter/README.md) -- installation, setup, integration patterns
 - [React Native guide](ReactNative/README.md) -- installation, setup, integration patterns
+- [Windows guide](docs/windows.md) -- native C# and Tauri/Rust foundations
 - [Architecture](docs/architecture.md) -- module design, protocols, package structure
 - [Tools reference](docs/tools.md) -- tool parameters and response shapes
 - [Build Brief](docs/brief.md) -- phased implementation plan

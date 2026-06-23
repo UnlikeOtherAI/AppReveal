@@ -44,6 +44,9 @@ ReactNative/appreveal/node_modules/
 # Archives and distribution
 *.ipa
 *.xcarchive
+*.tgz
+*.nupkg
+*.crate
 
 # Android / Gradle
 *.apk
@@ -59,3 +62,10 @@ captures/
 .cxx/
 *.hprof
 .ninja/
+
+# Windows / .NET / Rust
+**/bin/
+**/obj/
+**/target/
+**/artifacts/
+Windows/appreveal-tauri/Cargo.lock

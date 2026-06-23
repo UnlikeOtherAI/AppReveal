@@ -2,6 +2,7 @@
 
 import Foundation
 import UIKit
+import WebKit
 
 @MainActor
 final class InteractionEngine {
@@ -56,9 +57,15 @@ final class InteractionEngine {
         return nil
     }
 
-    func tap(point: CGPoint) {
+    @discardableResult
+    func tap(point: CGPoint) -> Bool {
         for window in candidateWindows() {
             let hitView = window.hitTest(point, with: nil)
+
+            if let webView = findParent(of: hitView, type: WKWebView.self),
+               WebViewBridge.shared.clickElement(at: point, in: webView) {
+                return true
+            }
 
             if let tabBar = findParent(of: hitView, type: UITabBar.self),
                let tabBarController = findTabBarController() {
@@ -68,24 +75,25 @@ final class InteractionEngine {
                     let index = Int(localPoint.x / itemWidth)
                     if index >= 0 && index < items.count {
                         tabBarController.selectedIndex = index
-                        return
+                        return true
                     }
                 }
             }
 
             if let control = findParent(of: hitView, type: UIControl.self) {
                 control.sendActions(for: .touchUpInside)
-                return
+                return true
             }
 
             if activateAccessibility(on: hitView) {
-                return
+                return true
             }
 
             if fireTapGestureRecognizers(on: hitView, at: point) {
-                return
+                return true
             }
         }
+        return false
     }
 
     private func fireTapGestureRecognizers(on view: UIView?, at point: CGPoint) -> Bool {

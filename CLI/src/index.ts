@@ -30,7 +30,7 @@ import {
 
 const DEFAULT_DISCOVERY_TIMEOUT_MS = 5000;
 const DEFAULT_ELEMENT_LIMIT = 8;
-const CLI_VERSION = '0.8.0';
+const CLI_VERSION = '0.10.0';
 
 const program = new Command();
 

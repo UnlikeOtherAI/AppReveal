@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
 class AppRevealPackage : ReactPackage {
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun createNativeModules(context: ReactApplicationContext): List<NativeModule> =
         listOf(AppRevealModule(context))
 

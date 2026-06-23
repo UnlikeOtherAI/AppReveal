@@ -15,6 +15,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.ReadableType
 import com.facebook.react.module.annotations.ReactModule
 
 @ReactModule(name = AppRevealModule.NAME)
@@ -33,6 +34,11 @@ class AppRevealModule(private val reactContext: ReactApplicationContext)
 
     @ReactMethod
     fun start(port: Double) {
+        server?.let {
+            Log.i(TAG, "start ignored; already running at ${it.sessionUrl}")
+            return
+        }
+
         val portInt = port.toInt()
 
         val application = reactContext.applicationContext as? android.app.Application
@@ -47,6 +53,8 @@ class AppRevealModule(private val reactContext: ReactApplicationContext)
         srv.start()
         server = srv
         Log.i(TAG, "MCP server listening on port ${srv.actualPort}")
+        Log.i(TAG, "Session URL: ${srv.sessionUrl}")
+        Log.i(TAG, "Clients must include Authorization: Bearer <token> or X-AppReveal-Session.")
 
         advertiser = NsdAdvertiser(reactContext.applicationContext, srv.actualPort)
         advertiser?.register()
@@ -63,6 +71,11 @@ class AppRevealModule(private val reactContext: ReactApplicationContext)
     @ReactMethod
     fun setScreen(key: String, title: String, confidence: Double) {
         ScreenResolver.setJsScreen(key, title)
+    }
+
+    @ReactMethod
+    fun setState(state: ReadableMap) {
+        StateBridge.stateSnapshot = readableMapToMap(state)
     }
 
     @ReactMethod
@@ -87,13 +100,13 @@ class AppRevealModule(private val reactContext: ReactApplicationContext)
         while (iterator.hasNextKey()) {
             val key = iterator.nextKey()
             when (flags.getType(key)) {
-                com.facebook.react.bridge.ReadableType.Boolean -> map[key] = flags.getBoolean(key)
-                com.facebook.react.bridge.ReadableType.Number -> map[key] = flags.getDouble(key)
-                com.facebook.react.bridge.ReadableType.String -> map[key] = flags.getString(key) ?: ""
+                ReadableType.Boolean -> map[key] = flags.getBoolean(key)
+                ReadableType.Number -> map[key] = flags.getDouble(key)
+                ReadableType.String -> map[key] = flags.getString(key) ?: ""
                 else -> {} // Skip complex types
             }
         }
-        StateBridge.featureFlags = map
+        StateBridge.featureFlagSnapshot = map
     }
 
     @ReactMethod
@@ -125,5 +138,39 @@ class AppRevealModule(private val reactContext: ReactApplicationContext)
     @ReactMethod
     fun captureError(domain: String, message: String, stackTrace: String) {
         DiagnosticsBridge.captureError(domain, message, stackTrace.ifEmpty { null })
+    }
+
+    private fun readableMapToMap(source: ReadableMap): Map<String, Any?> {
+        val result = mutableMapOf<String, Any?>()
+        val iterator = source.keySetIterator()
+        while (iterator.hasNextKey()) {
+            val key = iterator.nextKey()
+            result[key] = readableValue(source, key)
+        }
+        return result
+    }
+
+    private fun readableValue(source: ReadableMap, key: String): Any? {
+        return when (source.getType(key)) {
+            ReadableType.Null -> null
+            ReadableType.Boolean -> source.getBoolean(key)
+            ReadableType.Number -> source.getDouble(key)
+            ReadableType.String -> source.getString(key)
+            ReadableType.Map -> source.getMap(key)?.let { readableMapToMap(it) }
+            ReadableType.Array -> source.getArray(key)?.let { readableArrayToList(it) }
+        }
+    }
+
+    private fun readableArrayToList(source: ReadableArray): List<Any?> {
+        return (0 until source.size()).map { index ->
+            when (source.getType(index)) {
+                ReadableType.Null -> null
+                ReadableType.Boolean -> source.getBoolean(index)
+                ReadableType.Number -> source.getDouble(index)
+                ReadableType.String -> source.getString(index)
+                ReadableType.Map -> source.getMap(index)?.let { readableMapToMap(it) }
+                ReadableType.Array -> source.getArray(index)?.let { readableArrayToList(it) }
+            }
+        }
     }
 }

@@ -14,15 +14,35 @@ public final class AppRevealRNBridge: NSObject {
 
     private override init() {}
 
+    @objc public var sessionToken: String? {
+        server?.sessionToken
+    }
+
+    @objc public var url: String? {
+        server?.url
+    }
+
+    @objc public var sessionURL: String? {
+        server?.sessionURL
+    }
+
     // MARK: - Lifecycle
 
     @objc public func start(port: Int) {
+        if let server {
+            let endpoint = server.sessionURL ?? server.url ?? "starting"
+            print("[AppReveal] start ignored; already running at \(endpoint)")
+            return
+        }
+
         registerBuiltInTools()
         registerWebViewTools()
         let portValue: UInt16? = port > 0 ? UInt16(port) : nil
         let server = MCPServer(port: portValue)
         self.server = server
-        server.start()
+        if !server.start() {
+            self.server = nil
+        }
     }
 
     @objc public func stop() {
@@ -34,6 +54,12 @@ public final class AppRevealRNBridge: NSObject {
 
     @objc public func setScreen(key: String, title: String, confidence: Double) {
         ScreenResolver.shared.setJSScreen(key: key, title: title, confidence: confidence)
+    }
+
+    // MARK: - State
+
+    @objc public func setState(_ state: [String: Any]) {
+        StateBridge.shared.state = state.mapValues { AnyCodable($0) }
     }
 
     // MARK: - Navigation

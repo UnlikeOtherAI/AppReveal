@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>AppReveal.Windows</AssemblyName>
+    <RootNamespace>AppReveal.Windows</RootNamespace>
+    <PackageId>AppReveal.Windows</PackageId>
+    <Version>0.10.0</Version>
+    <Authors>AppReveal Contributors</Authors>
+    <Company>AppReveal Contributors</Company>
+    <Title>AppReveal.Windows</Title>
+    <Description>Debug-only in-app MCP server foundation for native Windows .NET apps.</Description>
+    <PackageTags>appreveal;mcp;debug;testing;windows;uia;automation</PackageTags>
+    <PackageProjectUrl>https://github.com/UnlikeOtherAI/AppReveal</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/UnlikeOtherAI/AppReveal</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial Windows native .NET MCP foundation for the AppReveal 0.10.0 release.</PackageReleaseNotes>
+    <Copyright>Copyright (c) 2026 AppReveal Contributors</Copyright>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+</Project>

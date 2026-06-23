@@ -13,10 +13,6 @@ let package = Package(
             name: "AppReveal",
             targets: ["AppReveal"]
         ),
-        .library(
-            name: "AppRevealClient",
-            targets: ["AppRevealClient"]
-        ),
     ],
     targets: [
         .target(
@@ -29,10 +25,6 @@ let package = Package(
                 // entirely, even in debug builds.
                 .define("APPREVEAL_PRIVATE_API_TAPS", .when(configuration: .debug))
             ]
-        ),
-        .target(
-            name: "AppRevealClient",
-            path: "Sources/AppRevealClient"
         ),
         .testTarget(
             name: "AppRevealTests",

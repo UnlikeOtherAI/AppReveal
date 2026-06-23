@@ -33,12 +33,13 @@ final class ElementInventory {
                 seenAccessibilityElements: &seenAccessibilityElements
             )
         }
-        appendSwiftUIRegisteredElements(to: &elements, seenIds: &seenIds)
+        appendSwiftUIRegisteredElements(to: &elements, seenIds: &seenIds, windowIds: Set(windows.map(\.id)))
         return elements
     }
 
     func findElement(byId id: String, windowId: String? = nil) -> UIView? {
-        for ref in candidateWindows(windowId: windowId) {
+        let windows = candidateWindows(windowId: windowId)
+        for ref in windows {
             var seenIds: [String: Int] = [:]
             if let view = findView(byListedId: id, in: ref.nativeWindow, containerId: nil, seenIds: &seenIds) {
                 return view
@@ -104,7 +105,8 @@ final class ElementInventory {
     }
 
     func findTapTarget(byId id: String, windowId: String? = nil) -> TapTarget? {
-        for ref in candidateWindows(windowId: windowId) {
+        let windows = candidateWindows(windowId: windowId)
+        for ref in windows {
             var seenIds: [String: Int] = [:]
             if let view = findView(byListedId: id, in: ref.nativeWindow, containerId: nil, seenIds: &seenIds) {
                 return .view(view)
@@ -125,8 +127,8 @@ final class ElementInventory {
         }
 
         // Check elements registered via .appReveal() modifier (required for SwiftUI on iOS 26+).
-        if let entry = SwiftUIElementRegistry.shared.findElement(byId: id) {
-            return .point(entry.frame.center)
+        if let entry = SwiftUIElementRegistry.shared.findElement(byId: id, windowIds: Set(windows.map(\.id))) {
+            return .appReveal(id: entry.id, point: entry.frame.center)
         }
 
         return nil
@@ -146,6 +148,7 @@ final class ElementInventory {
         var candidates: [String] = []
         var resolvedTargets: [TapTarget] = []
 
+        let windowIds = Set(windows.map(\.id))
         for ref in windows {
             var viewMatches: [(view: UIView, text: String)] = []
             collectTextMatches(text, matchMode: matchMode, in: ref.nativeWindow, matches: &viewMatches)
@@ -165,6 +168,11 @@ final class ElementInventory {
                 resolvedTargets.append(.accessibility(match))
                 candidates.append(match.label ?? match.id)
             }
+        }
+
+        for entry in SwiftUIElementRegistry.shared.matchingElements(text: text, matchMode: matchMode, windowIds: windowIds) {
+            resolvedTargets.append(.appReveal(id: entry.id, point: entry.frame.center))
+            candidates.append(entry.label ?? entry.id)
         }
 
         if resolvedTargets.isEmpty {
@@ -437,6 +445,7 @@ final class ElementInventory {
                 )
             )
         }
+        appendSwiftUIRegisteredViewTreeNodes(to: &result, windowIds: Set(windows.map(\.id)))
         return result
     }
 
@@ -606,9 +615,10 @@ final class ElementInventory {
 
     private func appendSwiftUIRegisteredElements(
         to elements: inout [ElementInfo],
-        seenIds: inout [String: Int]
+        seenIds: inout [String: Int],
+        windowIds: Set<String>
     ) {
-        for entry in SwiftUIElementRegistry.shared.currentElements() {
+        for entry in SwiftUIElementRegistry.shared.currentElements(windowIds: windowIds) {
             let count = seenIds[entry.id, default: 0]
             seenIds[entry.id] = count + 1
             let finalId = count == 0 ? entry.id : "\(entry.id)_\(count)"
@@ -631,6 +641,27 @@ final class ElementInventory {
                     idSource: "appReveal"
                 )
             )
+        }
+    }
+
+    private func appendSwiftUIRegisteredViewTreeNodes(to result: inout [[String: Any]], windowIds: Set<String>) {
+        for entry in SwiftUIElementRegistry.shared.currentElements(windowIds: windowIds) {
+            let frame = entry.frame
+            var node: [String: Any] = [
+                "class": "SwiftUI.AppRevealElement",
+                "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))",
+                "hidden": frame.isEmpty,
+                "alpha": 1,
+                "userInteraction": true,
+                "depth": 0,
+                "accessibilityId": entry.id,
+                "idSource": "appReveal",
+                "actions": ["tap"]
+            ]
+            if let label = entry.label, !label.isEmpty {
+                node["accessibilityLabel"] = label
+            }
+            result.append(node)
         }
     }
 

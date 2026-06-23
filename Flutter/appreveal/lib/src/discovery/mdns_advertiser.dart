@@ -22,6 +22,7 @@ class MdnsAdvertiser {
     required int port,
     required String bundleId,
     required String version,
+    String auth = 'session-token',
   }) async {
     await unregister();
 
@@ -36,6 +37,7 @@ class MdnsAdvertiser {
           'bundleId': bundleId,
           'version': version,
           'transport': 'streamable-http',
+          'auth': auth,
         },
       );
 

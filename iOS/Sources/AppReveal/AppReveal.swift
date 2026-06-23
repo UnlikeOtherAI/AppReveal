@@ -16,6 +16,18 @@ public final class AppReveal {
 
     private init() {}
 
+    public static var sessionToken: String? {
+        shared.server?.sessionToken
+    }
+
+    public static var url: String? {
+        shared.server?.url
+    }
+
+    public static var sessionURL: String? {
+        shared.server?.sessionURL
+    }
+
     /// Start the AppReveal MCP server and Bonjour advertising.
     /// - Parameter port: Optional specific port. Uses a dynamic port if nil.
     public static func start(port: UInt16? = nil) {
@@ -36,8 +48,9 @@ public final class AppReveal {
     public static func registerScreen(_ screen: ScreenIdentifiable) {
         #if os(iOS)
         ScreenResolver.shared.register(screen)
+        #elseif os(macOS)
+        MacOSScreenResolver.shared.register(screen)
         #endif
-        // macOS ScreenResolver will be added in Task 10
     }
 
     /// Register an app state provider.
@@ -63,6 +76,12 @@ public final class AppReveal {
     // MARK: - Private
 
     private func launch(port: UInt16?) {
+        if let server {
+            let endpoint = server.sessionURL ?? server.url ?? "starting"
+            print("[AppReveal] start ignored; already running at \(endpoint)")
+            return
+        }
+
         #if os(iOS)
         URLSessionCapture.shared.install()
         #endif
@@ -70,7 +89,9 @@ public final class AppReveal {
         registerWebViewTools()
         let server = MCPServer(port: port)
         self.server = server
-        server.start()
+        if !server.start() {
+            self.server = nil
+        }
     }
 }
 

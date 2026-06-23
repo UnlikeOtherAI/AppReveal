@@ -1,7 +1,9 @@
 name: appreveal
 description: Debug-only MCP framework for Flutter — gives LLM agents native app control via standard MCP protocol.
-version: 0.8.0
-homepage: https://github.com/your-org/appreveal
+version: 0.10.0
+homepage: https://github.com/UnlikeOtherAI/AppReveal
+repository: https://github.com/UnlikeOtherAI/AppReveal/tree/main/Flutter/appreveal
+issue_tracker: https://github.com/UnlikeOtherAI/AppReveal/issues
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
