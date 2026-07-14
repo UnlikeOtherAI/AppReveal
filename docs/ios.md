@@ -63,11 +63,11 @@ If your team prefers zero private API usage even in debug builds, remove (or com
 
 Without the flag, `tap_point` still works for all UIKit views and SwiftUI views on iOS < 26. On iOS 26+ SwiftUI buttons will not respond to synthetic taps.
 
-### 2. Register SwiftUI elements (required on iOS 26+)
+### 2. Register SwiftUI elements when you need stable IDs or direct activation
 
-On iOS 26, SwiftUI defers building its accessibility tree until VoiceOver is actually running. AppReveal's in-process scan can't trigger that build, so SwiftUI buttons inside `UIHostingController` are invisible to `get_elements` by default.
+On iOS 26, SwiftUI can defer building its accessibility tree until an assistive technology is actually running. AppReveal first asks UIKit/SwiftUI for accessibility and automation elements. When those APIs still return an empty SwiftUI subtree, AppReveal falls back to Vision text recognition inside SwiftUI hosting views. This makes visible SwiftUI text appear in `get_elements` with `idSource: "ocr"` and lets `tap_text("Send")` tap the recognized text location.
 
-**Fix:** apply `.appReveal("id")` to SwiftUI views that agents need to interact with. For buttons in `ScrollView`, `LazyVGrid`, or other gesture-heavy containers, pass the optional `activate:` closure so AppReveal can invoke the debug action directly instead of depending on coordinate synthesis.
+For the most stable automation, apply `.appReveal("id")` to SwiftUI views that agents need to interact with. For buttons in `ScrollView`, `LazyVGrid`, or other gesture-heavy containers, pass the optional `activate:` closure so AppReveal can invoke the debug action directly instead of depending on coordinate synthesis.
 
 ```swift
 // Works on iOS 16+ — no-op in release (compiled only under #if DEBUG)
@@ -86,7 +86,7 @@ Button("Submit") { submit() }
 
 After this, `get_elements` returns the element with `idSource: "appReveal"` and `tap_element("chat.send_button")` or `tap_text("Send")` can find it. If an `activate:` closure is registered, AppReveal calls that closure directly; otherwise it falls back to the SwiftUI-aware coordinate path used by `tap_point`.
 
-**Elements without `.appReveal()`:** UIKit views (`UIButton`, `UITextField`, `UISwitch`, etc.) and SwiftUI elements with an `accessibilityIdentifier` set **on iOS < 26** continue to work automatically.
+**Elements without `.appReveal()`:** UIKit views (`UIButton`, `UITextField`, `UISwitch`, etc.) and SwiftUI elements that surface through accessibility or automation APIs continue to work automatically. On iOS 26+ SwiftUI views that stay hidden from those APIs can still be tapped by visible text through OCR. `tap_element` also tries OCR text candidates derived from the requested identifier, so IDs such as `device.chip.mouser` can fall back to visible text like `mouser`. OCR cannot recover an arbitrary hidden `accessibilityIdentifier`; use `.appReveal("stable.id")` when exact ID inventory matters.
 
 ### 3. Add Bonjour keys to `Info.plist`
 

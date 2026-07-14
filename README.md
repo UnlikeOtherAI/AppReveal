@@ -43,6 +43,8 @@ AppReveal.start()
 
 `tap_point` and `tap_element` on SwiftUI views require private UIKit APIs on iOS 26+. AppReveal compiles this code in automatically for **debug builds** and compiles it **out for release builds** — no private symbols reach your App Store binary. No setup needed.
 
+When SwiftUI renders visible text without exposing accessibility nodes, AppReveal falls back to iOS Vision text recognition inside SwiftUI hosting views. Those entries appear with `idSource: "ocr"` and work with `tap_text`; `tap_element` can also fall back from identifiers like `device.chip.mouser` to visible text such as `mouser`.
+
 To opt out of private APIs entirely (even in debug builds), remove the `swiftSettings` line from AppReveal's `Package.swift`. See [iOS guide](docs/ios.md) for details.
 
 ### macOS
