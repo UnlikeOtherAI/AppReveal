@@ -1,20 +1,58 @@
 use crate::error::{AppRevealError, Result};
 use crate::protocol::{handle_request, parse_json_rpc_request, JsonRpcResponse, RpcError};
 use crate::registry::ToolRegistry;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::net::IpAddr;
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[cfg(feature = "mdns")]
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 const DEFAULT_MAX_BODY_SIZE: usize = 1024 * 1024;
 const MAX_HTTP_LINE_SIZE: usize = 16 * 1024;
 const MAX_HTTP_HEADERS: usize = 100;
 const SESSION_TOKEN_HEADER_NAME: &str = "x-appreveal-session";
 const SESSION_TOKEN_QUERY_NAME: &str = "appreveal_session_token";
+const APPREVEAL_SERVICE_TYPE: &str = "_appreveal._tcp.local.";
+
+#[derive(Clone, Debug)]
+pub struct BonjourConfig {
+    pub service_name: String,
+    pub service_type: String,
+    pub host_name: Option<String>,
+    pub txt_records: BTreeMap<String, String>,
+}
+
+impl BonjourConfig {
+    pub fn appreveal(service_name: impl Into<String>) -> Self {
+        let mut txt_records = BTreeMap::new();
+        txt_records.insert("transport".to_string(), "streamable-http".to_string());
+        txt_records.insert("auth".to_string(), "session-token".to_string());
+        txt_records.insert("lan".to_string(), "available".to_string());
+
+        Self {
+            service_name: service_name.into(),
+            service_type: APPREVEAL_SERVICE_TYPE.to_string(),
+            host_name: None,
+            txt_records,
+        }
+    }
+
+    pub fn with_txt_record(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.txt_records.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn with_host_name(mut self, host_name: impl Into<String>) -> Self {
+        self.host_name = Some(host_name.into());
+        self
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
@@ -23,6 +61,7 @@ pub struct ServerConfig {
     pub accept_poll_interval: Duration,
     pub max_body_size: usize,
     pub session_token: Option<String>,
+    pub bonjour: Option<BonjourConfig>,
 }
 
 impl ServerConfig {
@@ -42,6 +81,21 @@ impl ServerConfig {
 
     pub fn with_session_token(mut self, token: impl Into<String>) -> Self {
         self.session_token = Some(token.into());
+        self
+    }
+
+    pub fn with_bonjour_service_name(mut self, service_name: impl Into<String>) -> Self {
+        self.bonjour = Some(BonjourConfig::appreveal(service_name));
+        self
+    }
+
+    pub fn with_bonjour(mut self, bonjour: BonjourConfig) -> Self {
+        self.bonjour = Some(bonjour);
+        self
+    }
+
+    pub fn without_bonjour(mut self) -> Self {
+        self.bonjour = None;
         self
     }
 
@@ -71,6 +125,7 @@ impl Default for ServerConfig {
             accept_poll_interval: Duration::from_millis(25),
             max_body_size: DEFAULT_MAX_BODY_SIZE,
             session_token: Some(create_session_token()),
+            bonjour: None,
         }
     }
 }
@@ -79,9 +134,19 @@ pub fn start_server(config: ServerConfig, registry: ToolRegistry) -> Result<Serv
     let listener = TcpListener::bind(config.bind_addr)?;
     listener.set_nonblocking(true)?;
     let local_addr = listener.local_addr()?;
+    let bonjour = start_bonjour(&config, local_addr);
+    let discovery = match (&config.bonjour, &bonjour) {
+        (Some(_), Some(_)) => "bonjour",
+        (Some(_), None) => "bonjour_unavailable",
+        (None, _) => "manual",
+    }
+    .to_string();
     let shutdown = Arc::new(AtomicBool::new(false));
     let thread_shutdown = Arc::clone(&shutdown);
-    let thread_config = config.clone();
+    let mut thread_config = config.clone();
+    if thread_config.bonjour.is_some() && bonjour.is_none() {
+        thread_config.bonjour = None;
+    }
     let session_token = config.session_token.clone();
 
     let thread = thread::spawn(move || {
@@ -91,6 +156,8 @@ pub fn start_server(config: ServerConfig, registry: ToolRegistry) -> Result<Serv
     Ok(ServerHandle {
         local_addr,
         session_token,
+        discovery,
+        _bonjour: bonjour,
         shutdown,
         thread: Some(thread),
     })
@@ -99,6 +166,8 @@ pub fn start_server(config: ServerConfig, registry: ToolRegistry) -> Result<Serv
 pub struct ServerHandle {
     local_addr: SocketAddr,
     session_token: Option<String>,
+    discovery: String,
+    _bonjour: Option<BonjourHandle>,
     shutdown: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -118,6 +187,10 @@ impl ServerHandle {
 
     pub fn session_token(&self) -> Option<&str> {
         self.session_token.as_deref()
+    }
+
+    pub fn discovery(&self) -> &str {
+        &self.discovery
     }
 
     pub fn session_url(&self) -> String {
@@ -146,6 +219,157 @@ impl ServerHandle {
 impl Drop for ServerHandle {
     fn drop(&mut self) {
         let _ = self.stop();
+    }
+}
+
+#[cfg(feature = "mdns")]
+struct BonjourHandle {
+    daemon: mdns_sd::ServiceDaemon,
+    fullname: String,
+}
+
+#[cfg(not(feature = "mdns"))]
+struct BonjourHandle;
+
+#[cfg(feature = "mdns")]
+impl Drop for BonjourHandle {
+    fn drop(&mut self) {
+        let _ = self.daemon.unregister(&self.fullname);
+        let _ = self.daemon.shutdown();
+    }
+}
+
+#[cfg(feature = "mdns")]
+fn start_bonjour(config: &ServerConfig, local_addr: SocketAddr) -> Option<BonjourHandle> {
+    let Some(bonjour) = config.bonjour.as_ref() else {
+        return None;
+    };
+
+    let daemon = match mdns_sd::ServiceDaemon::new() {
+        Ok(daemon) => daemon,
+        Err(error) => {
+            eprintln!("[AppReveal] Bonjour daemon unavailable: {error}");
+            return None;
+        }
+    };
+
+    let mut txt_records = bonjour.txt_records.clone();
+    txt_records.insert(
+        "auth".to_string(),
+        if config.session_token.is_some() {
+            "session-token".to_string()
+        } else {
+            "disabled".to_string()
+        },
+    );
+
+    let addresses = advertised_addresses(config.bind_addr, local_addr);
+    let host_name = bonjour
+        .host_name
+        .clone()
+        .unwrap_or_else(|| format!("{}.local.", service_host_label(&bonjour.service_name)));
+    let properties = txt_records.into_iter().collect::<Vec<_>>();
+    let service = match mdns_sd::ServiceInfo::new(
+        &bonjour.service_type,
+        &bonjour.service_name,
+        &host_name,
+        &addresses[..],
+        local_addr.port(),
+        &properties[..],
+    ) {
+        Ok(service) => service,
+        Err(error) => {
+            eprintln!("[AppReveal] Bonjour service description failed: {error}");
+            return None;
+        }
+    };
+    let fullname = service.get_fullname().to_string();
+
+    match daemon.register(service) {
+        Ok(()) => {
+            eprintln!(
+                "[AppReveal] Bonjour advertising as {} on port {}",
+                bonjour.service_type,
+                local_addr.port()
+            );
+            Some(BonjourHandle { daemon, fullname })
+        }
+        Err(error) => {
+            eprintln!("[AppReveal] Bonjour advertising failed: {error}");
+            None
+        }
+    }
+}
+
+#[cfg(not(feature = "mdns"))]
+fn start_bonjour(_config: &ServerConfig, _local_addr: SocketAddr) -> Option<BonjourHandle> {
+    None
+}
+
+#[cfg(feature = "mdns")]
+fn advertised_addresses(bind_addr: SocketAddr, local_addr: SocketAddr) -> Vec<IpAddr> {
+    let bound_ip = if bind_addr.ip().is_unspecified() {
+        local_addr.ip()
+    } else {
+        bind_addr.ip()
+    };
+
+    if is_advertisable_ip(bound_ip) {
+        return vec![bound_ip];
+    }
+
+    let mut addresses = if_addrs::get_if_addrs()
+        .map(|interfaces| {
+            interfaces
+                .into_iter()
+                .filter_map(|interface| match interface.addr {
+                    if_addrs::IfAddr::V4(addr) => Some(IpAddr::V4(addr.ip)),
+                    if_addrs::IfAddr::V6(addr) => Some(IpAddr::V6(addr.ip)),
+                })
+                .filter(|ip| is_advertisable_ip(*ip))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    addresses.sort();
+    addresses.dedup();
+
+    if addresses.is_empty() && !bound_ip.is_unspecified() {
+        addresses.push(bound_ip);
+    }
+
+    addresses
+}
+
+#[cfg(feature = "mdns")]
+fn is_advertisable_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            !ip.is_unspecified() && !ip.is_loopback() && ip != Ipv4Addr::new(255, 255, 255, 255)
+        }
+        IpAddr::V6(ip) => !ip.is_unspecified() && !ip.is_loopback() && ip != Ipv6Addr::LOCALHOST,
+    }
+}
+
+#[cfg(feature = "mdns")]
+fn service_host_label(service_name: &str) -> String {
+    let label = service_name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+
+    if label.is_empty() {
+        "AppReveal".to_string()
+    } else {
+        label
     }
 }
 
@@ -215,7 +439,7 @@ fn handle_connection(
             "status": "ok",
             "port": stream.local_addr().map(|addr| addr.port()).unwrap_or(config.bind_addr.port()),
             "auth": if config.session_token.is_some() { "session-token" } else { "disabled" },
-            "discovery": "manual"
+            "discovery": if config.bonjour.is_some() { "bonjour" } else { "manual" }
         });
         return write_json_response(&mut stream, 200, "OK", &body, cors_origin);
     }

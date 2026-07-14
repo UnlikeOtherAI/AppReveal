@@ -4,18 +4,19 @@ version = "0.10.0"
 edition = "2021"
 authors = ["AppReveal Contributors"]
 license = "MIT"
-description = "AppReveal Streamable HTTP JSON-RPC foundation for Rust/Tauri Windows apps"
+description = "AppReveal Streamable HTTP JSON-RPC foundation for Rust/Tauri desktop apps"
 repository = "https://github.com/UnlikeOtherAI/AppReveal"
 homepage = "https://github.com/UnlikeOtherAI/AppReveal"
 documentation = "https://docs.rs/appreveal-tauri"
 readme = "README.md"
-keywords = ["appreveal", "mcp", "tauri", "debug", "windows"]
+keywords = ["appreveal", "mcp", "tauri", "debug", "desktop"]
 categories = ["development-tools::debugging"]
 include = [
     "/Cargo.toml",
     "/README.md",
     "/LICENSE",
     "/PARITY.md",
+    "/examples/**",
     "/src/**",
 ]
 
@@ -25,10 +26,13 @@ path = "src/lib.rs"
 
 [features]
 default = []
-tauri = ["dep:tauri"]
+mdns = ["dep:if-addrs", "dep:mdns-sd"]
+tauri = ["dep:tauri", "mdns"]
 
 [dependencies]
 getrandom = "0.3"
+if-addrs = { version = "0.13", optional = true }
+mdns-sd = { version = "0.13", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", optional = true }
