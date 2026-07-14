@@ -3,6 +3,7 @@ package com.appreveal.mcpserver
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.core.content.pm.PackageInfoCompat
 import com.appreveal.diagnostics.DiagnosticsBridge
 import com.appreveal.elements.ElementInventory
 import com.appreveal.interaction.InteractionEngine
@@ -645,7 +646,7 @@ internal fun registerBuiltInTools() {
                 JsonObject().apply {
                     addProperty("applicationId", packageName)
                     addProperty("versionName", packageInfo?.versionName ?: "unknown")
-                    addProperty("versionCode", packageInfo?.longVersionCode ?: 0L)
+                    addProperty("versionCode", packageInfo?.let(PackageInfoCompat::getLongVersionCode) ?: 0L)
                     addProperty("platform", "Android")
                     addProperty("systemVersion", Build.VERSION.RELEASE)
                     addProperty("deviceModel", Build.MODEL)
@@ -759,7 +760,7 @@ internal fun registerBuiltInTools() {
                     addProperty("appName", appInfo?.loadLabel(pm)?.toString() ?: "unknown")
                     addProperty("versionName", pkgInfo?.versionName ?: "unknown")
                     @Suppress("DEPRECATION")
-                    addProperty("versionCode", pkgInfo?.longVersionCode ?: 0L)
+                    addProperty("versionCode", pkgInfo?.let(PackageInfoCompat::getLongVersionCode) ?: 0L)
                     addProperty("targetSdk", appInfo?.targetSdkVersion ?: -1)
                     addProperty("minSdk", appInfo?.minSdkVersion ?: -1)
                     addProperty("firstInstallTime", pkgInfo?.firstInstallTime ?: 0L)

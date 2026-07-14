@@ -18,6 +18,7 @@ Example Android app demonstrating all AppReveal framework features.
 | `settings.main` | SettingsFragment | dark_mode, push_enabled, tap_calibration, delete_account |
 | `tap.calibration` | TapCalibrationFragment | status_card, summary, result, metrics, frame, target_01-target_24 |
 | `webview.demo` | WebViewDemoFragment | webview with interactive HTML page |
+| `compose.test` | ComposeActivity | tagged text field, tagged/text buttons, status labels, duplicate IDs |
 
 ## Element types covered
 
@@ -33,6 +34,7 @@ Example Android app demonstrating all AppReveal framework features.
 - SearchView (orders.search, catalog.search)
 - ImageView (login.logo, profile.avatar)
 - BottomNavigationView (5 tabs)
+- Jetpack Compose Text, OutlinedTextField, and Button semantics
 
 ## Framework features exercised
 
@@ -54,19 +56,33 @@ Example Android app demonstrating all AppReveal framework features.
 cd example/Android
 ./gradlew :app:installDebug
 adb shell am start -n com.appreveal.example/.MainActivity
+
+# Launch the dedicated Compose semantics fixture
+adb shell am start -n com.appreveal.example/.screens.ComposeActivity
 ```
 
 ## Connecting
 
 ```bash
-# Check logcat for the port
+# Check logcat for the dynamic port and session token
 adb logcat -s AppReveal
 
 # Forward port (emulator)
 adb forward tcp:56209 tcp:56209
 
+TOKEN="<session-token-from-logcat>"
+
 # Test MCP
 curl -X POST http://localhost:56209/ \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+```
+
+On the Compose fixture, verify `get_elements` and `get_view_tree`, then exercise
+`type_text`/`clear_text` with `compose.message` and `tap_element` with `compose.send`.
+The complete protocol regression can be run against a booted emulator with:
+
+```bash
+ANDROID_SERIAL=emulator-5554 ./verify-compose-mcp.sh
 ```
