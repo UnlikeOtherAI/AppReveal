@@ -1,4 +1,4 @@
-//! AppReveal foundation for Rust/Tauri Windows applications.
+//! AppReveal foundation for Rust/Tauri desktop applications.
 //!
 //! This crate exposes AppReveal's Streamable HTTP-ish JSON-RPC contract over a
 //! tiny `std::net::TcpListener` server. It is intentionally small and reusable:
@@ -20,12 +20,12 @@ pub use error::{AppRevealError, Result};
 pub use protocol::{handle_request, JsonRpcRequest, JsonRpcResponse, RpcError};
 pub use providers::{LogQuery, NetworkQuery, ProviderRegistry, WindowInfo};
 pub use registry::{Tool, ToolMetadata, ToolRegistry, ToolResult};
-pub use server::{start_server, ServerConfig, ServerHandle};
+pub use server::{start_server, BonjourConfig, ServerConfig, ServerHandle};
 
 #[cfg(feature = "tauri")]
 pub use tauri_integration::{
-    configure_tauri_providers, providers_from_tauri, start_tauri_server,
-    start_tauri_server_managed, AppRevealTauriServer,
+    configure_tauri_providers, init, init_with_config, providers_from_tauri, start_tauri_server,
+    start_tauri_server_managed, AppRevealTauriServer, TauriPluginConfig,
 };
 
 pub const APPREVEAL_PROTOCOL_VERSION: &str = "2025-06-18";

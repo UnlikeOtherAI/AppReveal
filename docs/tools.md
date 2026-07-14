@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-AppReveal exposes a shared MCP tool surface for native UI, state, network, diagnostics, WebView DOM, and batch operations. Desktop targets add `list_windows` plus menu/window tools, and native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting where the platform supports it. Windows integrations use capability-aware registration: .NET advertises its functional UI Automation tools by default, while Tauri lists only implemented built-ins and host-registered extensions.
+AppReveal exposes a shared MCP tool surface for native UI, state, network, diagnostics, WebView DOM, and batch operations. Desktop targets add `list_windows` plus menu/window tools, and native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting where the platform supports it. Windows integrations use capability-aware registration: .NET advertises its functional UI Automation tools by default, while Tauri lists implemented built-ins, runtime-backed WebView/window/menu tools, and host-registered extensions.
 
 All current server implementations require a generated per-session token for MCP POST requests and expose `GET /health` as an unauthenticated liveness/diagnostics endpoint.
 
@@ -500,7 +500,7 @@ React Native response mirrors iOS or Android depending on the host platform.
 
 All WebView tools accept an optional `webview_id` parameter. If omitted, the first discovered WebView is used. Use `get_webviews` to list available WebViews and their IDs.
 
-On iOS and React Native iOS, `get_elements` includes visible interactive DOM controls inside discovered `WKWebView`s with `idSource: "dom"`, `source: "webview"`, `webviewId`, and `selector`. Those IDs work with `tap_element`, `tap_text`, `type_text`, and `clear_text`. For richer DOM-level work, use `get_webviews`, then `get_dom_interactive`, `get_dom_forms`, `find_dom_text`, `web_click`, and `web_type`.
+On iOS, React Native iOS, and Tauri desktop, `get_elements` includes visible interactive DOM controls inside discovered WebViews with DOM-backed IDs, selectors, labels, roles, actions, and frames. Those IDs work with `tap_element`, `tap_text`, `type_text`, and `clear_text`; Tauri also routes `tap_point` inside its WebView using `document.elementFromPoint(...)`. For richer DOM-level work, use `get_webviews`, then `get_dom_interactive`, `get_dom_forms`, `find_dom_text`, `web_click`, and `web_type` where the platform advertises those tools.
 
 ### `get_webviews`
 List all web views in the current screen.
@@ -743,7 +743,7 @@ batch's JSON results.
 
 ## Desktop Tools
 
-These tools are available on desktop targets such as macOS and Windows when the target implementation has a menu/window provider.
+These tools are available on desktop targets such as macOS, Windows, and Tauri when the target implementation has a menu/window provider. Generic Tauri can inspect menu trees but cannot synthesize arbitrary native menu activation without an app-specific command.
 
 ### `get_menu_bar`
 Read the app's main menu bar hierarchy recursively.

@@ -123,9 +123,10 @@ See [React Native guide](ReactNative/README.md) for full setup.
 
 ### Windows
 
-Native .NET and Tauri MCP foundations live under `Windows/`. The Tauri crate
-advertises only its functional foundation tools plus provider-backed tools after
-the host registers real providers. React Native Windows is not autolinked or
+Native .NET and the Rust/Tauri desktop bridge live under `Windows/`. The Tauri
+crate includes a debug-only Tauri v2 plugin, Bonjour/mDNS discovery, live
+WebView DOM inspection/interaction, window focus, menu inspection, and
+provider-backed extension hooks. React Native Windows is not autolinked or
 advertised until there is a real MCP server bridge for that runtime.
 
 ```csharp
@@ -187,7 +188,7 @@ All native UI tools and all web view tools accept an optional `window_id` parame
 
 iOS/macOS/Android: auto-discovers WebViews from the view hierarchy. Flutter: register via `AppReveal.registerWebView(id, controller)`.
 
-On iOS and React Native iOS, visible interactive DOM controls inside `WKWebView` also appear in `get_elements` with `idSource: "dom"` and work with `tap_element`, `tap_text`, `type_text`, and `clear_text`. `tap_point` over a WebView routes through DOM `elementFromPoint(...)` so full-screen WebView shells can still be driven when UIKit text-editing overlays are present.
+On iOS, React Native iOS, and Tauri desktop, visible interactive DOM controls inside WebViews also appear in `get_elements` and work with `tap_element`, `tap_text`, `type_text`, and `clear_text`. `tap_point` over a WebView routes through DOM `elementFromPoint(...)` where the platform can map coordinates into the WebView, so full-screen WebView shells can still be driven when native overlays are present.
 
 | Tool | Description |
 |------|-------------|
@@ -265,7 +266,7 @@ AppReveal gives agents structured data instead of pixels:
 | Flutter | Working | Shared native + web view tool surface |
 | React Native | Working | Shared native + web view tool surface |
 | Windows .NET | Working | Shared MCP contract, UI Automation native/desktop tools |
-| Windows Tauri | Foundation | Shared MCP contract, Tauri provider hooks |
+| Tauri desktop | Working | Shared MCP contract, Bonjour, WebView DOM tools, window/menu inspection |
 
 ## Example apps
 

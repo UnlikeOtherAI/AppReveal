@@ -41,36 +41,29 @@ header. Discovery advertisement stays disabled unless
 
 ## Tauri
 
-`Windows/appreveal-tauri` is a Rust crate for Tauri apps. It exposes the same
-HTTP MCP contract and an optional `tauri` feature that derives launch context,
-device info, and window metadata from a `tauri::AppHandle`.
+`Windows/appreveal-tauri` is a Rust crate for Tauri desktop apps, including
+macOS Tauri/wry apps. It exposes the same HTTP MCP contract and an optional
+`tauri` feature that adds a Tauri v2 plugin, Bonjour/mDNS discovery, launch
+context, device info, window metadata, WebView DOM tools, window focus, and menu
+inspection.
 
 ```rust
-#[cfg(debug_assertions)]
-appreveal_tauri::start_tauri_server_managed(
-    app.handle().clone(),
-    appreveal_tauri::ServerConfig::localhost(0),
-)?;
-
-#[cfg(debug_assertions)]
-if let Some(url) = app
-    .state::<appreveal_tauri::AppRevealTauriServer>()
-    .session_url()?
-{
-    println!("AppReveal listening at {url}");
-}
+tauri::Builder::default()
+    .plugin(appreveal_tauri::init())
+    .run(tauri::generate_context!())?;
 ```
 
 The Tauri crate always advertises the functional foundation tools
 `launch_context`, `device_info`, and `batch`. The optional `tauri` feature adds
-real launch context, device info, and window metadata from a `tauri::AppHandle`,
-so `list_windows` is advertised when that window provider is configured.
+real launch context, device info, and window metadata from a `tauri::AppHandle`;
+`list_windows`, `focus_window`, and `get_menu_bar`; and live WebView DOM tools:
+`get_elements`, `get_dom_interactive`, `tap_element`, `tap_text`, `tap_point`,
+`type_text`, and `clear_text`.
 
 Provider-backed tools for logs, state, navigation, feature flags, and network
 capture are listed only after the app registers the corresponding real provider.
-Native UI, DOM/WebView, screenshots, interaction, menu actions, and recent-error
-capture are not advertised until the app registers real tools/providers for
-those features.
+Screenshot capture, native non-WebView UI automation, recent-error capture, and
+app-specific menu activation remain provider-backed extension points.
 The HTTP server requires a generated session token by
 default; use `ServerHandle::session_url()` or
 `AppRevealTauriServer::session_url()` for manual testing, or pass an explicit
@@ -82,12 +75,11 @@ The native .NET package advertises functional Windows UI, state, diagnostics,
 network, batch, and desktop window/menu tools. WebView DOM tools are advertised
 only when a host WebView provider is registered.
 
-The Tauri crate advertises its implemented foundation tools, available
-provider-backed built-ins, and caller-registered extensions. It does not list
-state, diagnostics, native UI, menu, interaction, screenshot, DOM, or
-recent-error tools until the app supplies real implementations.
-
-The Tauri crate is a Windows/Tauri foundation. macOS Tauri/wry DOM and native UI providers remain a separate parity milestone tracked in `Windows/appreveal-tauri/PARITY.md`.
+The Tauri crate advertises its implemented foundation tools, runtime-backed
+Tauri tools, available provider-backed built-ins, and caller-registered
+extensions. Generic Tauri supports menu inspection, but not synthetic activation
+of arbitrary native menu items, so hosts should register an app-specific command
+when they need write-side menu control.
 
 For production release builds, keep AppReveal behind debug guards just like the
 other platforms.
