@@ -1,10 +1,200 @@
 // JavaScript strings for DOM operations, injected into WKWebView
 
+import CoreGraphics
 import Foundation
 
 #if DEBUG
 
 enum DOMSerializer {
+
+    // MARK: - Native element inventory projection
+
+    static func elementInventoryJS() -> String {
+        return """
+        (function() {
+            var selectors = 'a[href],button,input,textarea,select,label,[role="button"],[role="link"],[onclick],[tabindex]:not([tabindex="-1"])';
+            var nodes = Array.prototype.slice.call(document.querySelectorAll(selectors));
+            var viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+            var viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+            var results = [];
+            var seenIds = Object.create(null);
+
+            function normalizeId(value) {
+                var normalized = String(value || '').trim().toLowerCase()
+                    .replace(/\\s+/g, '_')
+                    .replace(/[^a-z0-9_.-]/g, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^[_\\.-]+|[_\\.-]+$/g, '');
+                return normalized.substring(0, 60);
+            }
+
+            function cssEscape(value) {
+                if (window.CSS && typeof window.CSS.escape === 'function') {
+                    return window.CSS.escape(value);
+                }
+                return String(value).replace(/([^a-zA-Z0-9_-])/g, '\\\\$1');
+            }
+
+            function attrValue(value) {
+                return String(value).replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
+            }
+
+            function selectorFor(node) {
+                var testId = node.getAttribute('data-testid');
+                if (testId) return '[data-testid="' + attrValue(testId) + '"]';
+                var dataTest = node.getAttribute('data-test');
+                if (dataTest) return '[data-test="' + attrValue(dataTest) + '"]';
+                var dataCy = node.getAttribute('data-cy');
+                if (dataCy) return '[data-cy="' + attrValue(dataCy) + '"]';
+                if (node.id) return '#' + cssEscape(node.id);
+                if (node.name) return node.tagName.toLowerCase() + '[name="' + attrValue(node.name) + '"]';
+                var path = [];
+                var current = node;
+                while (current && current !== document.body && current.nodeType === Node.ELEMENT_NODE) {
+                    var tag = current.tagName.toLowerCase();
+                    var parent = current.parentElement;
+                    if (parent) {
+                        var siblings = Array.prototype.slice.call(parent.children)
+                            .filter(function(child) { return child.tagName === current.tagName; });
+                        if (siblings.length > 1) {
+                            tag += ':nth-of-type(' + (siblings.indexOf(current) + 1) + ')';
+                        }
+                    }
+                    path.unshift(tag);
+                    current = parent;
+                }
+                return path.join(' > ');
+            }
+
+            function textFor(node) {
+                var labelText = labelTextFor(node);
+                if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {
+                    return node.getAttribute('aria-label') ||
+                        labelText ||
+                        node.getAttribute('placeholder') ||
+                        node.value ||
+                        node.name ||
+                        node.id ||
+                        '';
+                }
+                return node.getAttribute('aria-label') ||
+                    labelText ||
+                    (node.innerText || node.textContent || '').trim() ||
+                    node.value ||
+                    node.getAttribute('title') ||
+                    node.name ||
+                    node.id ||
+                    '';
+            }
+
+            function labelTextFor(node) {
+                if (node.labels && node.labels.length) {
+                    return Array.from(node.labels).map(function(label) {
+                        return (label.innerText || label.textContent || '').trim();
+                    }).filter(Boolean).join(' ');
+                }
+                if (node.id) {
+                    var explicit = document.querySelector('label[for="' + attrValue(node.id) + '"]');
+                    if (explicit) return (explicit.innerText || explicit.textContent || '').trim();
+                }
+                var parentLabel = node.closest('label');
+                return parentLabel ? (parentLabel.innerText || parentLabel.textContent || '').trim() : '';
+            }
+
+            function typeFor(node) {
+                var tag = node.tagName.toLowerCase();
+                var role = (node.getAttribute('role') || '').toLowerCase();
+                var inputType = (node.getAttribute('type') || '').toLowerCase();
+                if (tag === 'input' && (inputType === 'checkbox' || inputType === 'radio')) return 'toggle';
+                if (tag === 'input' || tag === 'textarea') return 'textField';
+                if (tag === 'select') return 'picker';
+                if (tag === 'button' || tag === 'a' || tag === 'label' || role === 'button' || role === 'link' || node.onclick) return 'button';
+                return 'other';
+            }
+
+            function actionsFor(type) {
+                var actions = ['tap'];
+                if (type === 'textField') {
+                    actions.push('type');
+                    actions.push('clear');
+                }
+                if (type === 'picker') actions.push('select');
+                if (type === 'toggle') actions.push('toggle');
+                return actions;
+            }
+
+            function stableRawId(node, index, label) {
+                var source = node.getAttribute('data-testid') ||
+                    node.getAttribute('data-test') ||
+                    node.getAttribute('data-cy') ||
+                    node.id ||
+                    node.name ||
+                    node.getAttribute('aria-label') ||
+                    node.getAttribute('placeholder') ||
+                    label ||
+                    (node.tagName.toLowerCase() + '_' + index);
+                var raw = normalizeId(source) || ('element_' + index);
+                var count = seenIds[raw] || 0;
+                seenIds[raw] = count + 1;
+                return count === 0 ? raw : raw + '_' + count;
+            }
+
+            for (var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
+                var rect = node.getBoundingClientRect();
+                var style = window.getComputedStyle(node);
+                var visible = rect.width > 0 &&
+                    rect.height > 0 &&
+                    rect.right > 0 &&
+                    rect.bottom > 0 &&
+                    rect.left < viewportWidth &&
+                    rect.top < viewportHeight &&
+                    style.display !== 'none' &&
+                    style.visibility !== 'hidden' &&
+                    style.opacity !== '0';
+                if (!visible) continue;
+
+                var type = typeFor(node);
+                var label = textFor(node);
+                var labelText = labelTextFor(node);
+                var rawId = stableRawId(node, i, label);
+                var disabled = !!node.disabled || node.getAttribute('aria-disabled') === 'true';
+                var value = '';
+                if ((node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' || node.tagName === 'SELECT') &&
+                    (node.getAttribute('type') || '').toLowerCase() !== 'password') {
+                    value = node.value || '';
+                }
+
+                results.push({
+                    rawId: rawId,
+                    selector: selectorFor(node),
+                    type: type,
+                    label: label.substring(0, 200),
+                    value: String(value).substring(0, 200),
+                    labelText: labelText.substring(0, 200),
+                    inputType: (node.getAttribute('type') || '').toLowerCase(),
+                    enabled: !disabled,
+                    visible: visible,
+                    tappable: true,
+                    actions: actionsFor(type),
+                    rect: {
+                        x: Math.round(rect.x),
+                        y: Math.round(rect.y),
+                        w: Math.round(rect.width),
+                        h: Math.round(rect.height)
+                    },
+                    tag: node.tagName.toLowerCase()
+                });
+            }
+
+            return JSON.stringify({
+                viewport: {width: viewportWidth, height: viewportHeight},
+                elements: results,
+                count: results.length
+            });
+        })()
+        """
+    }
 
     // MARK: - DOM Tree
 
@@ -73,30 +263,64 @@ enum DOMSerializer {
                 var node = nodes[i];
                 var rect = node.getBoundingClientRect();
                 if (rect.width === 0 && rect.height === 0) continue;
+                var style = window.getComputedStyle(node);
+                if (style.display === 'none' || style.visibility === 'hidden') continue;
+                var testId = node.getAttribute('data-testid') || node.getAttribute('data-test') || node.getAttribute('data-cy');
+                var ariaLabel = node.getAttribute('aria-label') || '';
+                var text = (node.innerText || node.textContent || '').trim();
+                var tag = node.tagName.toLowerCase();
+                var role = node.getAttribute('role') || '';
+                var inputType = (node.getAttribute('type') || '').toLowerCase();
+                var labelText = labelTextFor(node);
                 var el = {
-                    tag: node.tagName.toLowerCase(),
+                    index: i,
+                    tag: tag,
+                    role: role,
                     rect: {x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height)},
-                    selector: genSelector(node)
+                    selector: genSelector(node),
+                    label: (ariaLabel || labelText || text || node.placeholder || node.value || node.title || node.name || node.id || testId || '').substring(0, 200),
+                    enabled: !node.disabled,
+                    visible: true,
+                    tappable: isTappable(node, tag, role, inputType),
+                    actions: actionsFor(node, tag, role, inputType)
                 };
                 if (node.id) el.id = node.id;
                 if (node.name) el.name = node.name;
-                if (node.type) el.type = node.type;
+                if (node.type) el.inputType = node.type;
                 if (node.placeholder) el.placeholder = node.placeholder;
                 if (node.value) el.value = node.value.substring(0, 200);
-                var text = node.textContent.trim();
                 if (text) el.text = text.substring(0, 100);
-                var testId = node.getAttribute('data-testid') || node.getAttribute('data-test') || node.getAttribute('data-cy');
+                if (labelText) el.labelText = labelText.substring(0, 100);
                 if (testId) el.testId = testId;
-                if (node.getAttribute('aria-label')) el.ariaLabel = node.getAttribute('aria-label');
+                if (ariaLabel) el.ariaLabel = ariaLabel;
                 if (node.disabled) el.disabled = true;
                 if (node.checked !== undefined) el.checked = node.checked;
                 if (node.href) el.href = node.href;
                 results.push(el);
             }
+            function cssEscape(value) {
+                if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
+                return String(value).replace(/["\\\\]/g, '\\\\$&').replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
+            }
+            function labelTextFor(el) {
+                if (el.labels && el.labels.length) {
+                    return Array.from(el.labels).map(function(label) {
+                        return (label.innerText || label.textContent || '').trim();
+                    }).filter(Boolean).join(' ');
+                }
+                if (el.id) {
+                    var explicit = document.querySelector('label[for="' + cssEscape(el.id) + '"]');
+                    if (explicit) return (explicit.innerText || explicit.textContent || '').trim();
+                }
+                var parentLabel = el.closest('label');
+                return parentLabel ? (parentLabel.innerText || parentLabel.textContent || '').trim() : '';
+            }
             function genSelector(el) {
-                if (el.getAttribute('data-testid')) return '[data-testid=\"' + el.getAttribute('data-testid') + '\"]';
-                if (el.id) return '#' + el.id;
-                if (el.name) return el.tagName.toLowerCase() + '[name=\"' + el.name + '\"]';
+                if (el.getAttribute('data-testid')) return '[data-testid=\"' + cssEscape(el.getAttribute('data-testid')) + '\"]';
+                if (el.getAttribute('data-test')) return '[data-test=\"' + cssEscape(el.getAttribute('data-test')) + '\"]';
+                if (el.getAttribute('data-cy')) return '[data-cy=\"' + cssEscape(el.getAttribute('data-cy')) + '\"]';
+                if (el.id) return '#' + cssEscape(el.id);
+                if (el.name) return el.tagName.toLowerCase() + '[name=\"' + cssEscape(el.name) + '\"]';
                 var path = [];
                 while (el && el !== document.body) {
                     var tag = el.tagName.toLowerCase();
@@ -113,7 +337,34 @@ enum DOMSerializer {
                 }
                 return path.join(' > ');
             }
-            return JSON.stringify({elements: results, count: results.length});
+            function isTappable(node, tag, role, inputType) {
+                if (node.disabled) return false;
+                return tag === 'button' || tag === 'a' || tag === 'select' || tag === 'label' ||
+                    role === 'button' || role === 'link' || !!node.onclick ||
+                    inputType === 'button' || inputType === 'submit' || inputType === 'reset' ||
+                    inputType === 'checkbox' || inputType === 'radio' ||
+                    node.tabIndex >= 0;
+            }
+            function actionsFor(node, tag, role, inputType) {
+                var actions = [];
+                if (isTappable(node, tag, role, inputType)) actions.push('tap');
+                if (tag === 'textarea' || (tag === 'input' && !['button','submit','reset','checkbox','radio','hidden','file'].includes(inputType))) {
+                    actions.push('type');
+                    actions.push('clear');
+                }
+                if (tag === 'select') actions.push('select');
+                return actions;
+            }
+            return JSON.stringify({
+                elements: results,
+                count: results.length,
+                viewport: {
+                    width: Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1),
+                    height: Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1)
+                },
+                title: document.title || '',
+                url: location.href
+            });
         })()
         """
     }
@@ -209,8 +460,76 @@ enum DOMSerializer {
         (function() {
             var el = document.querySelector('\(escapeJS(selector))');
             if (!el) return JSON.stringify({error:'Element not found: \(escapeJS(selector))'});
+            var rect = el.getBoundingClientRect();
+            var x = rect.left + rect.width / 2;
+            var y = rect.top + rect.height / 2;
+            if (typeof el.focus === 'function') {
+                try { el.focus({preventScroll:true}); } catch (_) { el.focus(); }
+            }
+            var eventInit = {bubbles:true, cancelable:true, view:window, clientX:x, clientY:y};
+            if (typeof PointerEvent !== 'undefined') {
+                el.dispatchEvent(new PointerEvent('pointerdown', Object.assign({pointerId:1, pointerType:'mouse', isPrimary:true}, eventInit)));
+                el.dispatchEvent(new PointerEvent('pointerup', Object.assign({pointerId:1, pointerType:'mouse', isPrimary:true}, eventInit)));
+            }
+            el.dispatchEvent(new MouseEvent('mousedown', eventInit));
+            el.dispatchEvent(new MouseEvent('mouseup', eventInit));
             el.click();
-            return JSON.stringify({success:true, tag:el.tagName.toLowerCase(), text:el.textContent.trim().substring(0,100)});
+            if (el.checked !== undefined) {
+                el.dispatchEvent(new Event('input', {bubbles:true}));
+                el.dispatchEvent(new Event('change', {bubbles:true}));
+            }
+            return JSON.stringify({
+                success:true,
+                tag:el.tagName.toLowerCase(),
+                text:(el.innerText || el.textContent || el.value || '').trim().substring(0,100),
+                checked: el.checked,
+                value: el.value
+            });
+        })()
+        """
+    }
+
+    static func pointClickJS(localPoint: CGPoint, webViewSize: CGSize) -> String {
+        return """
+        (() => {
+          const viewWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || \(webViewSize.width));
+          const viewHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || \(webViewSize.height));
+          const x = \(localPoint.x) * viewWidth / Math.max(1, \(webViewSize.width));
+          const y = \(localPoint.y) * viewHeight / Math.max(1, \(webViewSize.height));
+          const element = document.elementFromPoint(x, y);
+          if (!element) {
+            return JSON.stringify({ success: false, error: "no_dom_element", x, y });
+          }
+          const target = element.closest('button,a,input,textarea,select,label,[role="button"],[role="link"],[onclick]') || element;
+          if (typeof target.focus === 'function') {
+            try { target.focus({ preventScroll: true }); } catch (_) { target.focus(); }
+          }
+          const eventInit = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+          if (typeof PointerEvent !== 'undefined') {
+            target.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, eventInit)));
+            target.dispatchEvent(new PointerEvent('pointerup', Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, eventInit)));
+          }
+          target.dispatchEvent(new MouseEvent('mousedown', eventInit));
+          target.dispatchEvent(new MouseEvent('mouseup', eventInit));
+          if (typeof target.click === 'function') {
+            target.click();
+          } else {
+            target.dispatchEvent(new MouseEvent('click', eventInit));
+          }
+          if (target.checked !== undefined) {
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+            target.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return JSON.stringify({
+            success: true,
+            tag: target.tagName.toLowerCase(),
+            id: target.id || null,
+            text: (target.innerText || target.textContent || target.value || '').trim().slice(0, 120),
+            checked: target.checked,
+            value: target.value,
+            x,
+            y
+          });
         })()
         """
     }

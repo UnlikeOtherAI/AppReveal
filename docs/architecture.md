@@ -116,7 +116,7 @@ Optional element-level cropping by accessibility identifier.
 
 ### WebViewBridge / MacOSWebViewBridge
 
-Discovers `WKWebView` instances inside the selected window and powers the DOM tools. Native `get_elements` reports the WebView as a native view; DOM content is intentionally exposed through the WebView tools. On iOS, `tap_point` can route a coordinate inside a `WKWebView` to `document.elementFromPoint(...).click()` for mixed native/web flows.
+Discovers `WKWebView` instances inside the selected window and powers the DOM tools. On iOS and React Native iOS, `get_elements` also projects visible interactive DOM controls as DOM-backed AppReveal elements (`idSource: "dom"`) so `tap_element`, `tap_text`, `type_text`, and `clear_text` can drive WebView forms without a separate selector lookup. On iOS, `tap_point` routes coordinates inside a `WKWebView` to `document.elementFromPoint(...).click()` using WebView geometry, which avoids UIKit text-editing overlays swallowing WebView taps.
 
 - Auto-discovers web views from the native view hierarchy
 - Evaluates JavaScript for DOM inspection and interaction

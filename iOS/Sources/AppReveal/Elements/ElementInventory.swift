@@ -38,6 +38,13 @@ final class ElementInventory {
         return elements
     }
 
+    func listElementsIncludingWebContent(windowId: String? = nil) async -> [ElementInfo] {
+        var elements = listElements(windowId: windowId)
+        let domTargets = await WebViewBridge.shared.domElementTargets(windowId: windowId)
+        elements.append(contentsOf: domTargets.map(\.elementInfo))
+        return elements
+    }
+
     func findElement(byId id: String, windowId: String? = nil) -> UIView? {
         let windows = candidateWindows(windowId: windowId)
         for ref in windows {

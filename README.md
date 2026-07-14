@@ -187,6 +187,8 @@ All native UI tools and all web view tools accept an optional `window_id` parame
 
 iOS/macOS/Android: auto-discovers WebViews from the view hierarchy. Flutter: register via `AppReveal.registerWebView(id, controller)`.
 
+On iOS and React Native iOS, visible interactive DOM controls inside `WKWebView` also appear in `get_elements` with `idSource: "dom"` and work with `tap_element`, `tap_text`, `type_text`, and `clear_text`. `tap_point` over a WebView routes through DOM `elementFromPoint(...)` so full-screen WebView shells can still be driven when UIKit text-editing overlays are present.
+
 | Tool | Description |
 |------|-------------|
 | `get_webviews` | List all web views with URL, title, loading state |

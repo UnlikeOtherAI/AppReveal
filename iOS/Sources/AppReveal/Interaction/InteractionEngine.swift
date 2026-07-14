@@ -83,10 +83,23 @@ final class InteractionEngine {
 
         for ref in candidateWindows(windowId: windowId) {
             let window = ref.nativeWindow
+
+            // Full-screen WebView shells can be covered by UIKit text/editing overlay
+            // windows while an HTML input is focused. If the point is inside any known
+            // WKWebView, let DOM elementFromPoint handle it before native hit-testing.
+            if WebViewBridge.shared.clickElement(at: point, windowId: ref.id) {
+                return true
+            }
+
             let hitView = window.hitTest(point, with: nil)
 
-            if hitView.map({ findParent(of: $0, type: WKWebView.self) != nil }) == true,
-               WebViewBridge.shared.clickElement(at: point, windowId: ref.id) {
+            if isTextEditingOverlay(window: window, hitView: hitView),
+               WebViewBridge.shared.clickElement(at: point, windowId: windowId) {
+                return true
+            }
+
+            if let webView = findParent(of: hitView, type: WKWebView.self),
+               WebViewBridge.shared.clickElement(at: point, in: webView) {
                 return true
             }
 
@@ -183,6 +196,23 @@ final class InteractionEngine {
             current = v.superview
         }
         return nil
+    }
+
+    private func isTextEditingOverlay(window: UIWindow, hitView: UIView?) -> Bool {
+        var names = [String(describing: Swift.type(of: window)).lowercased()]
+        var current = hitView
+        var depth = 0
+        while let view = current, depth < 12 {
+            names.append(String(describing: Swift.type(of: view)).lowercased())
+            current = view.superview
+            depth += 1
+        }
+        return names.contains { name in
+            name.contains("texteffects") ||
+            name.contains("editingoverlay") ||
+            name.contains("inputset") ||
+            name.contains("keyboard")
+        }
     }
 
     private static func isSwiftUIHostingView(_ view: UIView) -> Bool {
