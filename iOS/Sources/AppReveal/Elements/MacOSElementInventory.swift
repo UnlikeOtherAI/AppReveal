@@ -452,17 +452,17 @@ final class ElementInventory {
             elements.append(
                 ElementInfo(
                     id: finalId,
-                    type: .button,
+                    type: entry.type,
                     label: entry.label,
                     value: nil,
                     enabled: true,
                     visible: !frame.isEmpty,
-                    tappable: true,
+                    tappable: entry.isTappable,
                     frame: Self.makeFrame(frame),
                     safeAreaInsets: safeAreaInsets,
                     safeAreaLayoutGuideFrame: Self.makeFrame(frame),
                     containerId: nil,
-                    actions: ["tap"],
+                    actions: entry.actions,
                     idSource: "appReveal"
                 )
             )
@@ -479,8 +479,9 @@ final class ElementInventory {
                 "alphaValue": 1,
                 "depth": 0,
                 "accessibilityId": entry.id,
+                "elementType": entry.type.rawValue,
                 "idSource": "appReveal",
-                "actions": ["tap"]
+                "actions": entry.actions
             ]
             if let label = entry.label, !label.isEmpty {
                 node["accessibilityLabel"] = label
