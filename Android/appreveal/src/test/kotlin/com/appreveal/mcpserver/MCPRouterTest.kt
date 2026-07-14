@@ -1,5 +1,8 @@
 package com.appreveal.mcpserver
 
+import com.appreveal.network.CapturedRequest
+import com.appreveal.network.CapturedSSEEvent
+import com.appreveal.network.NetworkObserverService
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import org.junit.After
@@ -13,11 +16,13 @@ class MCPRouterTest {
     @Before
     fun setUp() {
         MCPRouter.clearAll()
+        NetworkObserverService.clear()
     }
 
     @After
     fun tearDown() {
         MCPRouter.clearAll()
+        NetworkObserverService.clear()
     }
 
     @Test
@@ -99,6 +104,48 @@ class MCPRouterTest {
             "screenshot must be called directly to return MCP image content",
             batchResult.getAsJsonArray("results")[0].asJsonObject.get("error").asString,
         )
+    }
+
+    @Test
+    fun `network call detail exposes headers bodies and sse frames`() {
+        registerBuiltInTools()
+        NetworkObserverService.addCall(
+            CapturedRequest(
+                id = "call-1",
+                method = "GET",
+                url = "https://api.example.com/converse/stream",
+                statusCode = 200,
+                requestHeaders = mapOf("Authorization" to "Bearer secret"),
+                responseHeaders = mapOf("Content-Type" to "text/event-stream", "Set-Cookie" to "session=secret"),
+                responseBody = "data: hello\n\n",
+                responseBodySize = 13,
+                sseEvents = listOf(CapturedSSEEvent(event = "message", data = "hello")),
+                isStreaming = true,
+            ),
+        )
+
+        val summary = callTool("get_network_calls")
+        val summaryText = summary.getAsJsonArray("content")[0].asJsonObject.get("text").asString
+        val summaryJson = MCPGson.gson.fromJson(summaryText, JsonObject::class.java)
+        val listedCall = summaryJson.getAsJsonArray("calls")[0].asJsonObject
+        assertEquals("call-1", listedCall.get("id").asString)
+        assertEquals(1, listedCall.get("sseEventCount").asInt)
+
+        val detailArgs = JsonObject().apply { addProperty("id", "call-1") }
+        val detail = callTool("get_network_call_detail", detailArgs)
+        val detailText = detail.getAsJsonArray("content")[0].asJsonObject.get("text").asString
+        val detailJson = MCPGson.gson.fromJson(detailText, JsonObject::class.java)
+
+        assertEquals(
+            "[REDACTED]",
+            detailJson.getAsJsonObject("request").getAsJsonObject("headers").get("Authorization").asString,
+        )
+        assertEquals(
+            "[REDACTED]",
+            detailJson.getAsJsonObject("response").getAsJsonObject("headers").get("Set-Cookie").asString,
+        )
+        assertEquals("data: hello\n\n", detailJson.getAsJsonObject("response").get("body").asString)
+        assertEquals("hello", detailJson.getAsJsonArray("sseEvents")[0].asJsonObject.get("data").asString)
     }
 
     private fun registerTool(

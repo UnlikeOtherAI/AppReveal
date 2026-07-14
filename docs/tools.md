@@ -331,6 +331,41 @@ Sensitive headers (`Authorization`, `Cookie`, `Set-Cookie`, `x-api-key`, `x-auth
 
 ---
 
+### `get_network_call_detail`
+One captured HTTP call with request/response headers, captured text bodies, truncation flags, and parsed Server-Sent Event frames where available.
+
+**Parameters:**
+- `id` (string, required) — call id returned by `get_network_calls`
+
+**Response:**
+```json
+{
+  "id": "abc123",
+  "method": "GET",
+  "url": "https://api.example.com/converse/session/123",
+  "statusCode": 200,
+  "request": {
+    "headers": { "Authorization": "[REDACTED]" },
+    "body": null,
+    "bodySize": null,
+    "bodyTruncated": false
+  },
+  "response": {
+    "headers": { "Content-Type": "text/event-stream" },
+    "body": "data: hello\n\n",
+    "bodySize": 13,
+    "bodyTruncated": false
+  },
+  "sseEvents": [
+    { "event": "message", "data": "hello" }
+  ]
+}
+```
+
+Platform note: Android's OkHttp integration captures request/response bodies and parsed SSE frames. iOS URLSession capture records text body previews and exposes the same detail tool; other platforms currently expose their existing network summaries unless the app-fed integration provides body fields.
+
+---
+
 ### `get_logs`
 Recent app log output.
 

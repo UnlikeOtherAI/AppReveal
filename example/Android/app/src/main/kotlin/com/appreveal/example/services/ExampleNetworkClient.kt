@@ -2,16 +2,46 @@ package com.appreveal.example.services
 
 import android.os.Handler
 import android.os.Looper
+import com.appreveal.AppRevealOkHttp
 import com.appreveal.example.models.ExampleOrder
 import com.appreveal.example.models.ExampleProduct
 import com.appreveal.network.CapturedRequest
+import com.appreveal.network.NetworkCaptureConfig
 import com.appreveal.network.NetworkObservable
 import com.appreveal.network.NetworkTrafficObserver
+import okhttp3.Callback
+import okhttp3.Call
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import java.io.IOException
 
 object ExampleNetworkClient : NetworkObservable {
 
     private val handler = Handler(Looper.getMainLooper())
     private val observers = mutableListOf<NetworkTrafficObserver>()
+    private val jsonMediaType = "application/json".toMediaType()
+    private val client =
+        AppRevealOkHttp
+            .install(
+                OkHttpClient.Builder(),
+                NetworkCaptureConfig(maxBodyBytes = 64L * 1024L),
+            ).addInterceptor { chain ->
+                val request = chain.request()
+                Response
+                    .Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .header("Content-Type", "application/json")
+                    .body(fakeResponseBody(request.url.encodedPath).toResponseBody(jsonMediaType))
+                    .build()
+            }.build()
 
     override val recentRequests: List<CapturedRequest> = emptyList()
 
@@ -20,7 +50,7 @@ object ExampleNetworkClient : NetworkObservable {
     }
 
     fun login(email: String, password: String, callback: (Result<Unit>) -> Unit) {
-        simulateRequest("POST", "/api/auth/login") {
+        simulateRequest("POST", "/api/auth/login", """{"email":"$email","password":"$password"}""") {
             if (email.contains("@") && password.isNotEmpty()) {
                 callback(Result.success(Unit))
             } else {
@@ -58,31 +88,49 @@ object ExampleNetworkClient : NetworkObservable {
     private fun simulateRequest(
         method: String,
         path: String,
+        requestJson: String? = null,
         delayMs: Long = 300,
         work: () -> Unit
     ) {
         val url = "https://api.example.com$path"
-        val startTime = System.currentTimeMillis()
-
         handler.postDelayed({
-            val captured = CapturedRequest(
-                method = method,
-                url = url,
-                statusCode = 200,
-                startTime = startTime,
-                endTime = System.currentTimeMillis(),
-                duration = delayMs.toDouble() / 1000.0,
-                requestHeaders = mapOf(
-                    "Content-Type" to "application/json",
-                    "Authorization" to "Bearer token123"
-                ),
-                responseHeaders = mapOf("Content-Type" to "application/json"),
-                requestBodySize = if (method == "POST") 128 else null,
-                responseBodySize = 2048,
-                redirectCount = 0
+            val body = requestJson?.toRequestBody(jsonMediaType)
+            val request =
+                Request
+                    .Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .header("Authorization", "Bearer token123")
+                    .method(method, body)
+                    .build()
+            client.newCall(request).enqueue(
+                object : Callback {
+                    override fun onFailure(
+                        call: Call,
+                        e: IOException,
+                    ) {
+                        handler.post(work)
+                    }
+
+                    override fun onResponse(
+                        call: Call,
+                        response: Response,
+                    ) {
+                        response.use { it.body?.string() }
+                        handler.post(work)
+                    }
+                },
             )
-            observers.forEach { it.didCapture(captured) }
-            work()
         }, delayMs)
     }
+
+    private fun fakeResponseBody(path: String): String =
+        when {
+            path.endsWith("/auth/login") -> """{"ok":true,"token":"debug-token"}"""
+            path.endsWith("/orders") -> """{"items":${ExampleOrder.samples.size}}"""
+            path.contains("/orders/") -> """{"id":"${path.substringAfterLast("/")}"}"""
+            path.endsWith("/products") -> """{"items":${ExampleProduct.samples.size}}"""
+            path.endsWith("/profile") -> """{"name":"Test User","email":"test@example.com"}"""
+            else -> """{"ok":true}"""
+        }
 }

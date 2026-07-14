@@ -24,5 +24,7 @@ android {
 }
 
 dependencies {
-    // Intentionally empty: release builds expose no diagnostics server.
+    // Release builds expose no diagnostics server. OkHttp is compile-only so apps can share
+    // debug/release networking setup without pulling AppReveal into release artifacts.
+    compileOnly("com.squareup.okhttp3:okhttp:4.12.0")
 }

@@ -22,12 +22,15 @@ final class URLSessionCapture {
 private final class AppRevealCaptureProtocol: URLProtocol, URLSessionDataDelegate {
 
     private static let handledKey = "AppRevealCaptureHandled"
+    private static let maxBodyBytes = 256 * 1024
 
     private var session: URLSession?
     private var dataTask: URLSessionDataTask?
     private var startTime = Date()
     private var response: HTTPURLResponse?
     private var responseBodySize = 0
+    private var responseBody = Data()
+    private var responseBodyTruncated = false
     private var redirectCount = 0
 
     override static func canInit(with request: URLRequest) -> Bool {
@@ -78,6 +81,15 @@ private final class AppRevealCaptureProtocol: URLProtocol, URLSessionDataDelegat
         let responseHeaders = response?.allHeaderFields.reduce(into: [String: String]()) { partial, item in
             partial[String(describing: item.key)] = String(describing: item.value)
         }
+        let requestContentType = request.value(forHTTPHeaderField: "Content-Type")
+        let responseContentType = response?.value(forHTTPHeaderField: "Content-Type")
+        let requestBody = request.httpBody.flatMap { body in
+            Self.isTextLike(requestContentType) ? String(data: body, encoding: .utf8) : nil
+        }
+        let responseBodyPreview =
+            Self.isTextLike(responseContentType)
+                ? String(data: responseBody, encoding: .utf8)
+                : nil
 
         let captured = CapturedRequest(
             method: request.httpMethod ?? "GET",
@@ -90,6 +102,11 @@ private final class AppRevealCaptureProtocol: URLProtocol, URLSessionDataDelegat
             responseHeaders: responseHeaders,
             requestBodySize: request.httpBody?.count,
             responseBodySize: responseBodySize,
+            requestBody: requestBody,
+            responseBody: responseBodyPreview,
+            requestBodyTruncated: false,
+            responseBodyTruncated: responseBodyTruncated,
+            isStreaming: Self.isEventStream(responseContentType),
             error: error?.localizedDescription,
             redirectCount: redirectCount
         )
@@ -101,6 +118,13 @@ private final class AppRevealCaptureProtocol: URLProtocol, URLSessionDataDelegat
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         responseBodySize += data.count
+        let remaining = Self.maxBodyBytes - responseBody.count
+        if remaining > 0 {
+            responseBody.append(contentsOf: data.prefix(remaining))
+        }
+        if data.count > max(remaining, 0) {
+            responseBodyTruncated = true
+        }
         client?.urlProtocol(self, didLoad: data)
     }
 
@@ -136,6 +160,20 @@ private final class AppRevealCaptureProtocol: URLProtocol, URLSessionDataDelegat
 
         captureCompletedRequest(error: error)
         session.finishTasksAndInvalidate()
+    }
+
+    private static func isTextLike(_ contentType: String?) -> Bool {
+        guard let contentType = contentType?.lowercased() else { return false }
+        return contentType.hasPrefix("text/")
+            || contentType.contains("json")
+            || contentType.contains("xml")
+            || contentType.contains("x-www-form-urlencoded")
+            || contentType.contains("graphql")
+            || contentType.contains("event-stream")
+    }
+
+    private static func isEventStream(_ contentType: String?) -> Bool {
+        contentType?.lowercased().contains("text/event-stream") == true
     }
 }
 
