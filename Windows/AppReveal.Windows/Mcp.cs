@@ -129,18 +129,68 @@ internal sealed class McpRouter
 
         var arguments = parameters?["arguments"] as JsonObject;
         var result = await CallToolAsync(toolName, arguments, cancellationToken);
-        var text = JsonSerializer.Serialize(result, Json.Options);
+        return ToolCallResult(toolName, result);
+    }
+
+    private static JsonObject ToolCallResult(string toolName, JsonNode result)
+    {
+        if (!string.Equals(toolName, "screenshot", StringComparison.Ordinal)
+            || result is not JsonObject screenshot)
+        {
+            return TextToolResult(result);
+        }
+
+        var imageData = Json.ReadString(screenshot, "image");
+        if (string.IsNullOrWhiteSpace(imageData))
+        {
+            return TextToolResult(result, isError: true);
+        }
+
+        var format = Json.ReadString(screenshot, "format")?.Trim().ToLowerInvariant() ?? "png";
+        var mimeType = format is "jpeg" or "jpg" ? "image/jpeg" : "image/png";
+        var metadata = (JsonObject)screenshot.DeepClone();
+        metadata.Remove("image");
+
         return new JsonObject
         {
             ["content"] = new JsonArray
             {
                 new JsonObject
                 {
+                    ["type"] = "image",
+                    ["data"] = imageData,
+                    ["mimeType"] = mimeType
+                },
+                new JsonObject
+                {
                     ["type"] = "text",
-                    ["text"] = text
+                    ["text"] = metadata.ToJsonString(Json.Options)
+                }
+            },
+            ["structuredContent"] = metadata.DeepClone()
+        };
+    }
+
+    private static JsonObject TextToolResult(JsonNode result, bool isError = false)
+    {
+        var response = new JsonObject
+        {
+            ["content"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = JsonSerializer.Serialize(result, Json.Options)
                 }
             }
         };
+
+        if (isError)
+        {
+            response["isError"] = true;
+        }
+
+        return response;
     }
 
     private static JsonObject ToToolJson(McpTool tool)

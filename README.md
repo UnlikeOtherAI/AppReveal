@@ -151,7 +151,7 @@ See [Windows guide](docs/windows.md) for the native C# and Tauri/Rust setup note
 | `clear_text` | Clear a text field |
 | `scroll` | Scroll a container (up/down/left/right) |
 | `scroll_to_element` | Scroll until an element is visible |
-| `screenshot` | Capture screen or element as base64 PNG/JPEG |
+| `screenshot` | Capture a screen or element as an MCP image content block |
 | `select_tab` | Switch tab bar tabs by index |
 | `navigate_back` | Pop the navigation stack |
 | `dismiss_modal` | Dismiss the topmost modal |

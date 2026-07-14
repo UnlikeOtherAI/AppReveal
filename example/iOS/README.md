@@ -65,3 +65,15 @@ open AppRevealExample.xcodeproj
 3. Drag all source folders into the project
 4. Set deployment target to iOS 16.0
 5. Build and run on simulator
+
+## Verify screenshot output
+
+Pass the session URL printed by the running example to the shared protocol check. It verifies the
+MCP image content block, structured metadata, and decoded image signature for both formats.
+
+```bash
+../../scripts/verify-screenshot-mcp.sh \
+  'http://127.0.0.1:<port>/?appreveal_session_token=<token>'
+../../scripts/verify-screenshot-mcp.sh \
+  'http://127.0.0.1:<port>/?appreveal_session_token=<token>' jpeg
+```

@@ -75,11 +75,12 @@ func registerMacOSBuiltInToolsImpl() {
 
     router.register(MCPToolDefinition(
         name: "screenshot",
-        description: "Capture a screenshot of the current screen. Returns base64-encoded image.",
+        description: "Capture a screenshot of the current screen. Returns a standard MCP image content block with dimensions and format metadata.",
         inputSchema: macOSInputSchema([
             "element_id": ["type": "string", "description": "Optional element ID to crop to"],
             "format": ["type": "string", "enum": ["png", "jpeg"], "description": "Image format (default: png)"]
         ]),
+        outputKind: .image,
         handler: { params in
             let format: ImageFormat = params?["format"]?.stringValue == "jpeg" ? .jpeg : .png
             let windowId = params?["window_id"]?.stringValue
@@ -99,7 +100,7 @@ func registerMacOSBuiltInToolsImpl() {
                 "image": capture.imageData.base64EncodedString(),
                 "width": capture.width,
                 "height": capture.height,
-                "scale": capture.scale,
+                "scale": Double(capture.scale),
                 "format": capture.format
             ] as [String: Any])
         }

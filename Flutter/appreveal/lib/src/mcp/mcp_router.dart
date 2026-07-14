@@ -4,16 +4,20 @@ import 'dart:convert';
 
 typedef MCPToolHandler = Future<dynamic> Function(Map<String, dynamic>? params);
 
+enum MCPToolOutputKind { jsonText, image }
+
 class MCPToolDefinition {
   final String name;
   final String description;
   final Map<String, dynamic> inputSchema;
+  final MCPToolOutputKind outputKind;
   final MCPToolHandler handler;
 
   const MCPToolDefinition({
     required this.name,
     required this.description,
     required this.inputSchema,
+    this.outputKind = MCPToolOutputKind.jsonText,
     required this.handler,
   });
 }
@@ -43,11 +47,13 @@ class MCPRouter {
         });
 
       case 'tools/list':
-        final toolList = _tools.values.map((t) => {
-          'name': t.name,
-          'description': t.description,
-          'inputSchema': t.inputSchema,
-        }).toList();
+        final toolList = _tools.values
+            .map((t) => {
+                  'name': t.name,
+                  'description': t.description,
+                  'inputSchema': t.inputSchema,
+                })
+            .toList();
         return _response(id, {'tools': toolList});
 
       case 'tools/call':
@@ -63,10 +69,7 @@ class MCPRouter {
         try {
           final args = params?['arguments'] as Map<String, dynamic>?;
           final result = await definition.handler(args);
-          final resultJson = jsonEncode(result);
-          return _response(id, {
-            'content': [{'type': 'text', 'text': resultJson}],
-          });
+          return _response(id, _toolCallResult(result, definition.outputKind));
         } catch (e) {
           return _error(id, -32603, e.toString());
         }
@@ -77,14 +80,71 @@ class MCPRouter {
   }
 
   static Map<String, dynamic> _response(dynamic id, dynamic result) => {
-    'jsonrpc': '2.0',
-    'id': id,
-    'result': result,
-  };
+        'jsonrpc': '2.0',
+        'id': id,
+        'result': result,
+      };
 
   static Map<String, dynamic> _error(dynamic id, int code, String message) => {
-    'jsonrpc': '2.0',
-    'id': id,
-    'error': {'code': code, 'message': message},
-  };
+        'jsonrpc': '2.0',
+        'id': id,
+        'error': {'code': code, 'message': message},
+      };
+
+  static Map<String, dynamic> _toolCallResult(
+    dynamic result,
+    MCPToolOutputKind outputKind,
+  ) {
+    return switch (outputKind) {
+      MCPToolOutputKind.jsonText => _textToolCallResult(result),
+      MCPToolOutputKind.image => _imageToolCallResult(result),
+    };
+  }
+
+  static Map<String, dynamic> _textToolCallResult(
+    dynamic result, {
+    bool isError = false,
+  }) {
+    final response = <String, dynamic>{
+      'content': [
+        {'type': 'text', 'text': jsonEncode(result)},
+      ],
+    };
+    if (isError) response['isError'] = true;
+    return response;
+  }
+
+  static Map<String, dynamic> _imageToolCallResult(dynamic result) {
+    if (result is! Map<String, dynamic>) {
+      return _textToolCallResult(
+        {'error': 'Screenshot returned an invalid result'},
+        isError: true,
+      );
+    }
+
+    if (result.containsKey('error')) {
+      return _textToolCallResult(result, isError: true);
+    }
+
+    final imageData = result['image'];
+    final format = result['format'];
+    if (imageData is! String ||
+        imageData.isEmpty ||
+        (format != 'png' && format != 'jpeg')) {
+      return _textToolCallResult(
+        {'error': 'Screenshot returned invalid image data or format'},
+        isError: true,
+      );
+    }
+
+    final metadata = Map<String, dynamic>.from(result)..remove('image');
+    final mimeType = format == 'jpeg' ? 'image/jpeg' : 'image/png';
+    return {
+      'content': [
+        {'type': 'image', 'data': imageData, 'mimeType': mimeType},
+        {'type': 'text', 'text': jsonEncode(metadata)},
+      ],
+      'structuredContent': metadata,
+    };
+  }
 }

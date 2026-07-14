@@ -2,8 +2,10 @@
 
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:image/image.dart' as img;
 
 import '../elements/element_inventory.dart';
 
@@ -13,6 +15,34 @@ class ScreenshotCapture {
 
   /// Optional explicit repaint boundary key, set via [AppReveal.wrap].
   static final screenshotKey = GlobalKey();
+
+  @visibleForTesting
+  static Uint8List encodeImageBytes({
+    required ByteData byteData,
+    required int width,
+    required int height,
+    required String format,
+  }) {
+    if (format != 'jpeg') {
+      return byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      );
+    }
+
+    return img.encodeJpg(
+      img.Image.fromBytes(
+        width: width,
+        height: height,
+        bytes: byteData.buffer,
+        bytesOffset: byteData.offsetInBytes,
+        numChannels: 4,
+        rowStride: width * 4,
+        order: img.ChannelOrder.rgba,
+      ),
+      quality: 85,
+    );
+  }
 
   Future<Map<String, dynamic>> captureScreen({String format = 'png'}) async {
     // Try the explicit key first
@@ -83,22 +113,34 @@ class ScreenshotCapture {
     RenderRepaintBoundary boundary, {
     required String format,
   }) async {
+    final normalizedFormat = format == 'jpeg' ? 'jpeg' : 'png';
     try {
       final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(
-        format: format == 'jpeg'
-            ? ui.ImageByteFormat.rawRgba
-            : ui.ImageByteFormat.png,
-      );
-      if (byteData == null) return {'error': 'Failed to encode image'};
-      final base64Image = base64Encode(byteData.buffer.asUint8List());
-      return {
-        'image': base64Image,
-        'width': image.width,
-        'height': image.height,
-        'scale': 2.0,
-        'format': format,
-      };
+      try {
+        final byteData = await image.toByteData(
+          format: normalizedFormat == 'jpeg'
+              ? ui.ImageByteFormat.rawRgba
+              : ui.ImageByteFormat.png,
+        );
+        if (byteData == null) return {'error': 'Failed to encode image'};
+
+        final encodedBytes = encodeImageBytes(
+          byteData: byteData,
+          width: image.width,
+          height: image.height,
+          format: normalizedFormat,
+        );
+
+        return {
+          'image': base64Encode(encodedBytes),
+          'width': image.width,
+          'height': image.height,
+          'scale': 2.0,
+          'format': normalizedFormat,
+        };
+      } finally {
+        image.dispose();
+      }
     } catch (e) {
       return {'error': e.toString()};
     }

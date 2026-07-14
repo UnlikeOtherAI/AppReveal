@@ -261,6 +261,19 @@ fn register_batch(registry: &ToolRegistry) -> Result<()> {
                     }
                 };
 
+                if tool_name == "screenshot" {
+                    push_batch_error(
+                        &mut results,
+                        index,
+                        Some(tool_name),
+                        "screenshot must be called directly to return MCP image content",
+                    );
+                    if stop_on_error {
+                        break;
+                    }
+                    continue;
+                }
+
                 let delay_ms = match parse_batch_delay_ms(action.get("delay_ms")) {
                     Ok(delay_ms) => delay_ms,
                     Err(error) => {
@@ -487,6 +500,26 @@ mod tests {
         assert_eq!(
             result["results"][0]["error"],
             json!("delay_ms must be a non-negative integer")
+        );
+    }
+
+    #[test]
+    fn batch_rejects_screenshot_with_direct_call_instruction() {
+        let registry = registry_with_builtins(ProviderRegistry::new());
+        let batch = registry.tool("batch").unwrap().unwrap();
+
+        let result = batch
+            .call(Some(&json!({
+                "actions": [
+                    { "tool": "screenshot" }
+                ]
+            })))
+            .unwrap();
+
+        assert_eq!(result["results"][0]["success"], false);
+        assert_eq!(
+            result["results"][0]["error"],
+            json!("screenshot must be called directly to return MCP image content")
         );
     }
 

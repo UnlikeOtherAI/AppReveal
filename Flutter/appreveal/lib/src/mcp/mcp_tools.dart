@@ -80,7 +80,7 @@ void registerBuiltInTools() {
     MCPToolDefinition(
       name: 'screenshot',
       description:
-          'Capture a screenshot of the current screen. Returns base64-encoded image.',
+          'Capture a screenshot of the current screen. Returns a standard MCP image content block with dimensions and format metadata.',
       inputSchema: {
         'type': 'object',
         'properties': {
@@ -95,8 +95,9 @@ void registerBuiltInTools() {
           },
         },
       },
+      outputKind: MCPToolOutputKind.image,
       handler: (params) async {
-        final format = params?['format'] as String? ?? 'png';
+        final format = params?['format'] == 'jpeg' ? 'jpeg' : 'png';
         final elementId = params?['element_id'] as String?;
         if (elementId != null) {
           return ScreenshotCapture.shared.captureElement(
@@ -555,8 +556,8 @@ void registerBuiltInTools() {
             'platform': Platform.isIOS
                 ? 'iOS'
                 : Platform.isAndroid
-                ? 'Android'
-                : Platform.operatingSystem,
+                    ? 'Android'
+                    : Platform.operatingSystem,
             'frameworkType': 'flutter',
             'debugMode': kDebugMode,
           };
@@ -605,8 +606,8 @@ void registerBuiltInTools() {
             'platform': Platform.isIOS
                 ? 'iOS'
                 : Platform.isAndroid
-                ? 'Android'
-                : Platform.operatingSystem,
+                    ? 'Android'
+                    : Platform.operatingSystem,
             'frameworkType': 'flutter',
             'debugMode': kDebugMode,
 
@@ -644,12 +645,12 @@ void registerBuiltInTools() {
             // Environment (non-secret keys only)
             'environment': Platform.environment.entries
                 .where(
-                  (e) =>
-                      !e.key.toLowerCase().contains('secret') &&
-                      !e.key.toLowerCase().contains('token') &&
-                      !e.key.toLowerCase().contains('password') &&
-                      !e.key.toLowerCase().contains('key'),
-                )
+              (e) =>
+                  !e.key.toLowerCase().contains('secret') &&
+                  !e.key.toLowerCase().contains('token') &&
+                  !e.key.toLowerCase().contains('password') &&
+                  !e.key.toLowerCase().contains('key'),
+            )
                 .fold(<String, String>{}, (map, e) => map..[e.key] = e.value),
           };
         } catch (e) {
@@ -724,6 +725,17 @@ void registerBuiltInTools() {
               'index': i,
               'tool': toolName,
               'error': 'Tool not found',
+            });
+            if (stopOnError) break;
+            continue;
+          }
+
+          if (definition.outputKind == MCPToolOutputKind.image) {
+            results.add({
+              'index': i,
+              'tool': toolName,
+              'error':
+                  'Image tools cannot run inside batch. Call screenshot directly to receive an MCP image block.',
             });
             if (stopOnError) break;
             continue;

@@ -39,6 +39,9 @@ token="$(printf '%s' "$session_url" | sed -E 's#.*appreveal_session_token=([^[:s
 base_url="http://127.0.0.1:$port/"
 "$ADB" -s "$SERIAL" forward "tcp:$port" "tcp:$port" >/dev/null
 
+"$SCRIPT_DIR/../../scripts/verify-screenshot-mcp.sh" "$session_url" png
+"$SCRIPT_DIR/../../scripts/verify-screenshot-mcp.sh" "$session_url" jpeg
+
 call_tool() {
     local name="$1"
     local arguments="$2"

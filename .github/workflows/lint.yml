@@ -7,12 +7,13 @@ on:
 
 jobs:
   swift:
-    name: SwiftLint (iOS/macOS)
+    name: Build, test, and lint (iOS/macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: brew install swiftlint
       - run: cd iOS && swiftlint lint --strict
+      - run: cd iOS && swift test
 
   android:
     name: Build and lint (Android)
@@ -24,18 +25,36 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
-      - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck :appreveal:assembleDebug :appreveal:lintDebug
+      - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck :appreveal:testDebugUnitTest :appreveal:assembleDebug :appreveal:lintDebug
       - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug
 
   flutter:
-    name: dart analyze (Flutter)
+    name: Analyze and test (Flutter)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - run: cd Flutter/appreveal && flutter pub get && dart analyze --fatal-warnings
+      - run: cd Flutter/appreveal && flutter pub get && flutter analyze --fatal-warnings
+      - run: cd Flutter/appreveal && flutter test
+
+  windows:
+    name: Build (.NET Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj
+
+  tauri:
+    name: Test (Tauri/Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml -- --test-threads=1
 
   reactnative:
     name: ESLint (React Native)

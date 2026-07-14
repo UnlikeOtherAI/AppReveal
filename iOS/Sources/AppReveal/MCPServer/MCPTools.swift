@@ -418,6 +418,16 @@ func registerBuiltInTools() {
                     continue
                 }
 
+                if case .image = tool.outputKind {
+                    results.append([
+                        "index": index,
+                        "tool": toolName,
+                        "error": "Image tools cannot run inside batch. Call screenshot directly to receive an MCP image block."
+                    ])
+                    if stopOnError { break }
+                    continue
+                }
+
                 let arguments: [String: AnyCodable]?
                 if let args = action["arguments"] as? [String: Any] {
                     arguments = args.mapValues { AnyCodable($0) }
@@ -535,7 +545,7 @@ private func registerIOSBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "screenshot",
-        description: "Capture a screenshot of the current screen. Returns base64-encoded image.",
+        description: "Capture a screenshot of the current screen. Returns a standard MCP image content block with dimensions and format metadata.",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
@@ -544,6 +554,7 @@ private func registerIOSBuiltInTools() {
                 "window_id": ["type": "string", "description": "Target window ID from list_windows (default: key window)"]
             ] as [String: Any])
         ],
+        outputKind: .image,
         handler: { params in
             let format: ImageFormat = params?["format"]?.stringValue == "jpeg" ? .jpeg : .png
             let windowId = params?["window_id"]?.stringValue
@@ -563,7 +574,7 @@ private func registerIOSBuiltInTools() {
                 "image": capture.imageData.base64EncodedString(),
                 "width": capture.width,
                 "height": capture.height,
-                "scale": capture.scale,
+                "scale": Double(capture.scale),
                 "format": capture.format
             ] as [String: Any])
         }
