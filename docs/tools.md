@@ -109,22 +109,38 @@ Each node includes `safeAreaInsets` and `safeAreaLayoutGuideFrame` alongside the
 ---
 
 ### `screenshot`
-Capture the screen or a single element as base64-encoded image.
+Capture the screen or a single element. The image is returned as a standard MCP image content block,
+so multimodal clients can display or inspect it without decoding JSON first.
 
 **Parameters:**
 - `element_id` (string, optional) — capture just this element
 - `format` (string, optional) — `"png"` (default) or `"jpeg"`
 
-**Response:**
+**Tool result:**
 ```json
 {
-  "image": "<base64>",
-  "width": 1206,
-  "height": 2622,
-  "scale": 3.0,
-  "format": "png"
+  "content": [
+    {
+      "type": "image",
+      "data": "<base64>",
+      "mimeType": "image/png"
+    },
+    {
+      "type": "text",
+      "text": "{\"width\":1206,\"height\":2622,\"scale\":3.0,\"format\":\"png\"}"
+    }
+  ],
+  "structuredContent": {
+    "width": 1206,
+    "height": 2622,
+    "scale": 3.0,
+    "format": "png"
+  }
 }
 ```
+
+The base64 data appears only in the image block. Metadata is repeated as text for clients that do
+not yet read `structuredContent`, following the MCP tool-result compatibility convention.
 
 ---
 
@@ -657,6 +673,9 @@ Execute multiple tool calls in a single request. Actions run sequentially.
 - `actions` (array, required) — each item: `{ "tool": "tool_name", "arguments": { ... }, "delay_ms": 500 }`
   - `delay_ms` — milliseconds to wait **before** this action (for animations, transitions, loading states)
 - `stop_on_error` (boolean, optional) — default false
+
+Call `screenshot` directly rather than inside `batch`; image content blocks cannot be embedded in a
+batch's JSON results.
 
 **Response:**
 ```json

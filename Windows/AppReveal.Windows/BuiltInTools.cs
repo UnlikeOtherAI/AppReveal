@@ -44,7 +44,7 @@ internal static class BuiltInTools
         Register(router, "get_screen", "Get the currently active screen identity and metadata.", NoArgs(), (_, cancellationToken) => runtime.GetScreen(cancellationToken));
         Register(router, "get_elements", "List all visible interactive elements on the current screen.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" })), (args, cancellationToken) => runtime.GetElements(args, cancellationToken));
         Register(router, "get_view_tree", "Dump the view hierarchy with class, frame, properties, and accessibility info.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" }), ("max_depth", new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 200 })), (args, cancellationToken) => runtime.GetViewTree(args, cancellationToken));
-        Register(router, "screenshot", "Capture the screen or a single element as a base64 image.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" }), ("element_id", new JsonObject { ["type"] = "string" }), ("format", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("png", "jpeg") })), runtime.Screenshot);
+        Register(router, "screenshot", "Capture the screen or a single element as an MCP image content block.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" }), ("element_id", new JsonObject { ["type"] = "string" }), ("format", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("png", "jpeg") })), runtime.Screenshot);
 
         if (runtime.HasInteractionProvider)
         {
@@ -112,6 +112,11 @@ internal static class BuiltInTools
                     if (string.Equals(name, "batch", StringComparison.Ordinal))
                     {
                         throw new McpInvalidParamsException("batch cannot call batch");
+                    }
+
+                    if (string.Equals(name, "screenshot", StringComparison.Ordinal))
+                    {
+                        throw new McpInvalidParamsException("screenshot must be called directly to return MCP image content");
                     }
 
                     if (action.TryGetPropertyValue("arguments", out var argumentNode)

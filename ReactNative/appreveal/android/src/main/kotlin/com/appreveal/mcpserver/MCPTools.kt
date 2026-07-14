@@ -303,7 +303,7 @@ internal fun registerBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name = "screenshot",
-        description = "Capture a screenshot of the current screen. Returns base64-encoded image.",
+        description = "Capture a screenshot of the current screen. Returns an MCP image content block.",
         inputSchema = jsonSchema(
             "element_id" to jsonProp("string", "Optional element ID to crop to"),
             "format" to JsonObject().apply {
@@ -684,6 +684,16 @@ internal fun registerBuiltInTools() {
                     results.add(JsonObject().apply {
                         addProperty("index", index)
                         addProperty("error", "Invalid action format")
+                    })
+                    if (stopOnError) break
+                    continue
+                }
+
+                if (toolName == "screenshot") {
+                    results.add(JsonObject().apply {
+                        addProperty("index", index)
+                        addProperty("tool", toolName)
+                        addProperty("error", "screenshot must be called directly to return MCP image content")
                     })
                     if (stopOnError) break
                     continue

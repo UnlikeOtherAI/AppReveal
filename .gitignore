@@ -41,6 +41,11 @@ CLI/node_modules/
 CLI/dist/
 ReactNative/appreveal/node_modules/
 
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+Flutter/appreveal/pubspec.lock
+
 # Archives and distribution
 *.ipa
 *.xcarchive

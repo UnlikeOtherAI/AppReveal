@@ -86,21 +86,7 @@ internal object MCPRouter {
                 try {
                     val arguments = params.getAsJsonObject("arguments")
                     val handlerResult = tool.handler(arguments)
-                    val resultJson = MCPGson.gson.toJson(handlerResult)
-
-                    val content =
-                        JsonArray().apply {
-                            add(
-                                JsonObject().apply {
-                                    addProperty("type", "text")
-                                    addProperty("text", resultJson)
-                                },
-                            )
-                        }
-                    val result =
-                        JsonObject().apply {
-                            add("content", content)
-                        }
+                    val result = toolCallResult(toolName, handlerResult)
                     MCPResponse.success(request.id, result)
                 } catch (e: Exception) {
                     MCPResponse.error(request.id, MCPError.internalError(e.message ?: "Unknown error"))
@@ -112,4 +98,64 @@ internal object MCPRouter {
             }
         }
     }
+
+    private fun toolCallResult(
+        toolName: String,
+        handlerResult: JsonElement,
+    ): JsonObject {
+        if (toolName != "screenshot" || !handlerResult.isJsonObject) {
+            return textToolResult(handlerResult)
+        }
+
+        val screenshot = handlerResult.asJsonObject
+        val imageData = screenshot.get("image")?.asStringOrNull()
+        if (imageData.isNullOrBlank()) {
+            return textToolResult(handlerResult, isError = true)
+        }
+
+        val format = screenshot.get("format")?.asStringOrNull()?.lowercase() ?: "png"
+        val mimeType = if (format == "jpeg" || format == "jpg") "image/jpeg" else "image/png"
+        val metadata = screenshot.deepCopy().apply { remove("image") }
+
+        return JsonObject().apply {
+            add(
+                "content",
+                JsonArray().apply {
+                    add(
+                        JsonObject().apply {
+                            addProperty("type", "image")
+                            addProperty("data", imageData)
+                            addProperty("mimeType", mimeType)
+                        },
+                    )
+                    add(
+                        JsonObject().apply {
+                            addProperty("type", "text")
+                            addProperty("text", MCPGson.gson.toJson(metadata))
+                        },
+                    )
+                },
+            )
+            add("structuredContent", metadata.deepCopy())
+        }
+    }
+
+    private fun textToolResult(
+        handlerResult: JsonElement,
+        isError: Boolean = false,
+    ): JsonObject =
+        JsonObject().apply {
+            add(
+                "content",
+                JsonArray().apply {
+                    add(
+                        JsonObject().apply {
+                            addProperty("type", "text")
+                            addProperty("text", MCPGson.gson.toJson(handlerResult))
+                        },
+                    )
+                },
+            )
+            if (isError) addProperty("isError", true)
+        }
 }
