@@ -117,6 +117,17 @@ final class InteractionEngine {
                 }
             }
 
+            // SwiftUI controls inside ScrollView/Lazy containers can swallow a synthetic
+            // point tap before their Button action runs. If the app opted this view into
+            // AppReveal with a direct debug activation closure, prefer that deterministic
+            // path for point taps whose coordinates land inside the registered frame.
+            if let registeredElement = SwiftUIElementRegistry.shared.findTappableElement(
+                at: point,
+                windowIds: [ref.id]
+            ), SwiftUIElementRegistry.shared.activate(id: registeredElement.id) {
+                return true
+            }
+
             // SwiftUI hosting views need a dedicated tap path. On iOS 26+ SwiftUI moved all
             // touch handling into UIKit's window-level event dispatch, so direct touchesBegan
             // calls are ignored. We try accessibilityActivate() first (SwiftUI Button

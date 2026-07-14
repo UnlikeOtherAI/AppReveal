@@ -72,7 +72,8 @@ final class TapCalibrationViewController: UIViewController {
         let swiftUIVC = UIHostingController(rootView: SwiftUITapTestView(
             onTap: { [weak self] in self?.swiftUIButtonTapped() },
             onIdentifierOnlyTap: { [weak self] in self?.swiftUIIdentifierOnlyButtonTapped() },
-            onImageTap: { [weak self] in self?.swiftUIImageButtonTapped() }
+            onImageTap: { [weak self] in self?.swiftUIImageButtonTapped() },
+            onLazyGridTap: { [weak self] in self?.swiftUILazyGridButtonTapped() }
         ))
         addChild(swiftUIVC)
         swiftUIVC.view.translatesAutoresizingMaskIntoConstraints = false
@@ -83,7 +84,7 @@ final class TapCalibrationViewController: UIViewController {
             swiftUIVC.view.topAnchor.constraint(equalTo: imageButtonResultLabel.bottomAnchor, constant: 16),
             swiftUIVC.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             swiftUIVC.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            swiftUIVC.view.heightAnchor.constraint(equalToConstant: 180)
+            swiftUIVC.view.heightAnchor.constraint(equalToConstant: 320)
         ])
     }
 
@@ -115,14 +116,26 @@ final class TapCalibrationViewController: UIViewController {
         resultLabel.text = "Identifier-only SwiftUI button tapped!"
         resultLabel.textColor = .systemPurple
     }
+
+    private func swiftUILazyGridButtonTapped() {
+        resultLabel.text = "Lazy grid SwiftUI button tapped!"
+        resultLabel.textColor = .systemMint
+    }
 }
 
 private struct SwiftUITapTestView: View {
     let onTap: () -> Void
     let onIdentifierOnlyTap: () -> Void
     let onImageTap: () -> Void
+    let onLazyGridTap: () -> Void
 
     @State private var textFieldValue = ""
+
+    private let columns = [
+        GridItem(.flexible()),
+        GridItem(.flexible()),
+        GridItem(.flexible())
+    ]
 
     var body: some View {
         VStack(spacing: 8) {
@@ -167,6 +180,43 @@ private struct SwiftUITapTestView: View {
                 #if DEBUG
                 .appReveal("calibration.swiftui_field", label: "Type here (SwiftUI)", type: .textField)
                 #endif
+
+            Text("Lazy Grid Button Test")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVGrid(columns: columns, spacing: 8) {
+                    lazyGridButton(action: onLazyGridTap, color: .green)
+                        #if DEBUG
+                        .appReveal("calibration.lazy_grid_card", activate: onLazyGridTap)
+                        #endif
+
+                    ForEach(1..<12) { index in
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(index.isMultiple(of: 2) ? Color.blue.opacity(0.25) : Color.orange.opacity(0.25))
+                            .frame(height: 56)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8)
+            }
+            .frame(height: 96)
         }
+    }
+
+    private func lazyGridButton(action: @escaping () -> Void, color: Color) -> some View {
+        Button(action: action) {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(color.opacity(0.85))
+                .frame(height: 56)
+                .overlay {
+                    Circle()
+                        .fill(Color.white.opacity(0.35))
+                        .frame(width: 22, height: 22)
+                        .accessibilityHidden(true)
+                }
+        }
+        .buttonStyle(.plain)
     }
 }

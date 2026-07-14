@@ -105,6 +105,18 @@ final class SwiftUIElementRegistry {
         return entry
     }
 
+    func findTappableElement(at point: CGPoint, windowIds: Set<String>) -> RegisteredElement? {
+        entries.values
+            .filter { entry in
+                entry.isTappable &&
+                    entry.frame.contains(point) &&
+                    Self.entry(entry, matchesAnyOf: windowIds)
+            }
+            .min { lhs, rhs in
+                lhs.frame.area < rhs.frame.area
+            }
+    }
+
     func matchingElements(text: String, matchMode: String, windowIds: Set<String>) -> [RegisteredElement] {
         entries.compactMap { id, entry in
             guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
@@ -157,6 +169,7 @@ final class SwiftUIElementRegistry {
 
 extension CGRect {
     var center: CGPoint { CGPoint(x: midX, y: midY) }
+    var area: CGFloat { width * height }
 }
 
 // MARK: - SwiftUI PreferenceKey
