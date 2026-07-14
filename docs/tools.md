@@ -185,7 +185,7 @@ Tap at specific screen coordinates.
 
 **Response:** `{ "success": true }`
 
-On iOS, when the point lands inside a `WKWebView`, AppReveal routes the coordinate to a DOM click through `document.elementFromPoint(...)`. Use `web_click` with a selector when you need deterministic DOM-level confirmation.
+On iOS, when the point lands inside a `WKWebView`, AppReveal routes the coordinate to a DOM click through `document.elementFromPoint(...)` and returns `target: "webview_dom"` plus the DOM click result. This route uses WebView geometry instead of native hit-testing so text editing overlays do not swallow WebView taps.
 
 ---
 
@@ -500,7 +500,7 @@ React Native response mirrors iOS or Android depending on the host platform.
 
 All WebView tools accept an optional `webview_id` parameter. If omitted, the first discovered WebView is used. Use `get_webviews` to list available WebViews and their IDs.
 
-`get_elements` is a native UI inventory and treats embedded web content as an opaque WebView. For DOM-level work, use `get_webviews`, then `get_dom_interactive`, `get_dom_forms`, `find_dom_text`, `web_click`, and `web_type`.
+On iOS and React Native iOS, `get_elements` includes visible interactive DOM controls inside discovered `WKWebView`s with `idSource: "dom"`, `source: "webview"`, `webviewId`, and `selector`. Those IDs work with `tap_element`, `tap_text`, `type_text`, and `clear_text`. For richer DOM-level work, use `get_webviews`, then `get_dom_interactive`, `get_dom_forms`, `find_dom_text`, `web_click`, and `web_type`.
 
 ### `get_webviews`
 List all web views in the current screen.

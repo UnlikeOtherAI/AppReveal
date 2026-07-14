@@ -5,6 +5,53 @@ import UIKit
 import WebKit
 
 @MainActor
+struct DOMElementTarget {
+    let id: String
+    let webViewId: String
+    let selector: String
+    let type: ElementType
+    let label: String?
+    let value: String?
+    let enabled: Bool
+    let frame: CGRect
+    let actions: [String]
+    let textCandidates: [String]
+
+    var centerPoint: CGPoint {
+        CGPoint(x: frame.midX, y: frame.midY)
+    }
+
+    var elementInfo: ElementInfo {
+        ElementInfo(
+            id: id,
+            type: type,
+            label: label,
+            value: value,
+            enabled: enabled,
+            visible: frame.width > 0 && frame.height > 0,
+            tappable: actions.contains("tap"),
+            frame: ElementInventory.makeFrame(frame),
+            safeAreaInsets: ElementInfo.ElementInsets(top: 0, leading: 0, bottom: 0, trailing: 0),
+            safeAreaLayoutGuideFrame: ElementInventory.makeFrame(frame),
+            containerId: webViewId,
+            actions: actions,
+            idSource: "dom"
+        )
+    }
+
+    func matches(text query: String, matchMode: String) -> Bool {
+        textCandidates.contains { candidate in
+            switch matchMode {
+            case "contains":
+                return candidate.localizedCaseInsensitiveContains(query)
+            default:
+                return candidate == query
+            }
+        }
+    }
+}
+
+@MainActor
 final class WebViewBridge {
 
     static let shared = WebViewBridge()
@@ -99,6 +146,151 @@ final class WebViewBridge {
         return true
     }
 
+    @discardableResult
+    func clickElement(selector: String, webViewId: String?) -> Bool {
+        guard let webView = resolveWebView(id: webViewId) else {
+            return false
+        }
+        webView.evaluateJavaScript(DOMSerializer.clickJS(selector: selector)) { _, error in
+            if let error {
+                print("[AppReveal] WebView DOM click failed: \(error.localizedDescription)")
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    func clickElement(_ target: DOMElementTarget) -> Bool {
+        clickElement(selector: target.selector, webViewId: target.webViewId)
+    }
+
+    @discardableResult
+    func typeText(_ text: String, in target: DOMElementTarget, clear: Bool) -> Bool {
+        guard target.actions.contains("type"),
+              let webView = resolveWebView(id: target.webViewId) else {
+            return false
+        }
+        webView.evaluateJavaScript(DOMSerializer.typeJS(selector: target.selector, text: text, clear: clear)) { _, error in
+            if let error {
+                print("[AppReveal] WebView DOM type failed: \(error.localizedDescription)")
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    func clearText(in target: DOMElementTarget) -> Bool {
+        typeText("", in: target, clear: true)
+    }
+
+    func domElementTargets() async -> [DOMElementTarget] {
+        var targets: [DOMElementTarget] = []
+        var seenIds: [String: Int] = [:]
+
+        for item in findWebViews() {
+            guard let payload = try? await interactivePayload(for: item.webView),
+                  let rawElements = payload["elements"] as? [[String: Any]] else {
+                continue
+            }
+
+            let viewport = payload["viewport"] as? [String: Any]
+            let viewportWidth = Self.cgFloat(viewport?["w"])
+                ?? Self.cgFloat(viewport?["width"])
+                ?? max(item.webView.bounds.width, 1)
+            let viewportHeight = Self.cgFloat(viewport?["h"])
+                ?? Self.cgFloat(viewport?["height"])
+                ?? max(item.webView.bounds.height, 1)
+            let scaleX = item.webView.bounds.width / max(viewportWidth, 1)
+            let scaleY = item.webView.bounds.height / max(viewportHeight, 1)
+            let webViewFrame = item.webView.convert(item.webView.bounds, to: nil)
+
+            for (index, raw) in rawElements.enumerated() {
+                guard let selector = Self.string(raw["selector"]),
+                      let rect = raw["rect"] as? [String: Any],
+                      let x = Self.cgFloat(rect["x"]),
+                      let y = Self.cgFloat(rect["y"]),
+                      let width = Self.cgFloat(rect["w"]),
+                      let height = Self.cgFloat(rect["h"]) else {
+                    continue
+                }
+
+                let frame = CGRect(
+                    x: webViewFrame.origin.x + (x * scaleX),
+                    y: webViewFrame.origin.y + (y * scaleY),
+                    width: width * scaleX,
+                    height: height * scaleY
+                )
+                guard frame.width > 0 || frame.height > 0 else { continue }
+
+                let tag = Self.string(raw["tag"])?.lowercased() ?? "element"
+                let inputType = (
+                    Self.string(raw["inputType"]) ?? Self.string(raw["type"])
+                )?.lowercased()
+                let label = Self.firstNonEmpty([
+                    Self.string(raw["label"]),
+                    Self.string(raw["ariaLabel"]),
+                    Self.string(raw["text"]),
+                    Self.string(raw["placeholder"]),
+                    Self.string(raw["name"]),
+                    Self.string(raw["id"]),
+                    Self.string(raw["testId"])
+                ])
+                let value = Self.string(raw["value"])
+                let enabledValue = raw["enabled"] as? Bool
+                let disabled = (raw["disabled"] as? Bool) == true || enabledValue == false
+                let type = Self.elementType(tag: tag, inputType: inputType)
+                let actions = Self.actions(for: type, enabled: !disabled)
+                let rawId = Self.firstNonEmpty([
+                    Self.string(raw["testId"]),
+                    Self.string(raw["id"]),
+                    Self.string(raw["name"]).map { "\(tag)_\($0)" },
+                    Self.string(raw["ariaLabel"]),
+                    Self.string(raw["placeholder"]),
+                    Self.string(raw["text"]),
+                    "\(tag)_\(index)"
+                ]) ?? "\(tag)_\(index)"
+                let id = Self.deduplicatedId(
+                    "web.\(Self.normalizeIdComponent(item.id)).\(Self.normalizeIdComponent(rawId))",
+                    seenIds: &seenIds
+                )
+                let textCandidates = [
+                    Self.string(raw["text"]),
+                    Self.string(raw["ariaLabel"]),
+                    Self.string(raw["placeholder"]),
+                    Self.string(raw["value"]),
+                    Self.string(raw["name"]),
+                    Self.string(raw["id"]),
+                    Self.string(raw["testId"])
+                ].compactMap { $0 }.filter { !$0.isEmpty }
+
+                targets.append(
+                    DOMElementTarget(
+                        id: id,
+                        webViewId: item.id,
+                        selector: selector,
+                        type: type,
+                        label: label,
+                        value: value,
+                        enabled: !disabled,
+                        frame: frame,
+                        actions: actions,
+                        textCandidates: textCandidates
+                    )
+                )
+            }
+        }
+
+        return targets
+    }
+
+    func findDOMElementTarget(id: String) async -> DOMElementTarget? {
+        await domElementTargets().first { $0.id == id }
+    }
+
+    func matchingDOMElementTargets(text: String, matchMode: String = "exact") async -> [DOMElementTarget] {
+        await domElementTargets().filter { $0.matches(text: text, matchMode: matchMode) }
+    }
+
     // MARK: - Metadata
 
     func webViewInfo() -> [[String: Any]] {
@@ -130,6 +322,94 @@ final class WebViewBridge {
         // For non-string results, convert to JSON
         let data = try JSONSerialization.data(withJSONObject: result, options: [])
         return String(data: data, encoding: .utf8) ?? "null"
+    }
+
+    private func interactivePayload(for webView: WKWebView) async throws -> [String: Any] {
+        let result = try await webView.evaluateJavaScript(DOMSerializer.interactiveJS())
+        let json: String
+        if let string = result as? String {
+            json = string
+        } else {
+            let data = try JSONSerialization.data(withJSONObject: result, options: [])
+            json = String(data: data, encoding: .utf8) ?? "{}"
+        }
+        guard let data = json.data(using: .utf8),
+              let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+        return payload
+    }
+
+    private static func elementType(tag: String, inputType: String?) -> ElementType {
+        switch tag {
+        case "button", "a":
+            return .button
+        case "textarea":
+            return .textField
+        case "select":
+            return .picker
+        case "input":
+            switch inputType {
+            case "checkbox", "radio":
+                return .toggle
+            case "button", "submit", "reset":
+                return .button
+            default:
+                return .textField
+            }
+        default:
+            return .other
+        }
+    }
+
+    private static func actions(for type: ElementType, enabled: Bool) -> [String] {
+        guard enabled else { return [] }
+        switch type {
+        case .textField:
+            return ["tap", "type", "clear"]
+        case .picker:
+            return ["tap", "select"]
+        default:
+            return ["tap"]
+        }
+    }
+
+    private static func firstNonEmpty(_ values: [String?]) -> String? {
+        values.compactMap { value in
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed?.isEmpty == false ? trimmed : nil
+        }.first
+    }
+
+    private static func string(_ value: Any?) -> String? {
+        if let string = value as? String { return string }
+        if let number = value as? NSNumber { return number.stringValue }
+        return nil
+    }
+
+    private static func cgFloat(_ value: Any?) -> CGFloat? {
+        if let number = value as? NSNumber { return CGFloat(truncating: number) }
+        if let double = value as? Double { return CGFloat(double) }
+        if let string = value as? String, let double = Double(string) { return CGFloat(double) }
+        return nil
+    }
+
+    private static func normalizeIdComponent(_ value: String) -> String {
+        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        normalized = normalized.replacingOccurrences(
+            of: "\\s+", with: "_", options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(
+            of: "[^a-z0-9_.-]", with: "", options: .regularExpression
+        )
+        normalized = normalized.trimmingCharacters(in: CharacterSet(charactersIn: "._-"))
+        return normalized.isEmpty ? "element" : String(normalized.prefix(80))
+    }
+
+    private static func deduplicatedId(_ id: String, seenIds: inout [String: Int]) -> String {
+        let count = seenIds[id, default: 0]
+        seenIds[id] = count + 1
+        return count == 0 ? id : "\(id)_\(count)"
     }
 
     private func candidateWindows() -> [UIWindow] {

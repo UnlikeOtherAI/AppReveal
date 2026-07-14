@@ -4,7 +4,7 @@ Playwright-style DOM access for web views embedded in native iOS apps. Covers hy
 
 ## Problem
 
-`get_elements` and `get_view_tree` see WKWebView as a single opaque box. The agent knows a web view exists and its frame, but has zero visibility into what's rendered inside — no DOM nodes, no text content, no form fields, no links, no buttons. For apps that mix native and web content, the agent is blind on web screens.
+Historically, `get_elements` and `get_view_tree` saw WKWebView as a single opaque box. AppReveal now keeps the detailed DOM tools and also projects visible interactive DOM controls into `get_elements` on iOS and React Native iOS with `idSource: "dom"`. Agents can therefore discover common WebView form fields and buttons without a prior selector lookup, while still using the explicit `get_dom_*` and `web_*` tools for richer DOM inspection and interaction.
 
 ## How it works
 

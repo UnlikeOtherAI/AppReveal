@@ -14,7 +14,7 @@ if (__DEV__) {
 }
 ```
 
-The package exposes native iOS and Android MCP servers in debug builds, including native UI inspection, screenshots, interactions, state/navigation snapshots, network capture, and WKWebView/Android WebView DOM tools. React Native Windows is intentionally not autolinked until a real Windows MCP bridge is available.
+The package exposes native iOS and Android MCP servers in debug builds, including native UI inspection, screenshots, interactions, state/navigation snapshots, network capture, and WKWebView/Android WebView DOM tools. On iOS, visible interactive DOM controls inside `react-native-webview` appear in `get_elements` with DOM-backed IDs, and those IDs work with `tap_element`, `tap_text`, `type_text`, and `clear_text`. React Native Windows is intentionally not autolinked until a real Windows MCP bridge is available.
 
 See the React Native guide in the repository for setup notes:
 https://github.com/UnlikeOtherAI/AppReveal/blob/main/ReactNative/README.md

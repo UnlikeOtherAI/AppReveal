@@ -581,7 +581,8 @@ private func registerIOSBuiltInTools() {
         handler: { params in
             let windowId = params?["window_id"]?.stringValue
             let elements = ElementInventory.shared.listElements(windowId: windowId)
-            let list = elements.map { el in
+            let domTargets = await WebViewBridge.shared.domElementTargets(windowId: windowId)
+            var list = elements.map { el in
                 [
                     "id": el.id,
                     "type": el.type.rawValue,
@@ -607,6 +608,35 @@ private func registerIOSBuiltInTools() {
                     "idSource": el.idSource
                 ] as [String: Any]
             }
+            list.append(contentsOf: domTargets.map { target in
+                [
+                    "id": target.id,
+                    "type": target.type.rawValue,
+                    "label": target.label ?? "",
+                    "value": target.value ?? "",
+                    "enabled": target.enabled ? "true" : "false",
+                    "visible": target.frame.isEmpty ? "false" : "true",
+                    "tappable": target.actions.contains("tap") ? "true" : "false",
+                    "frame": "\(Int(target.frame.origin.x)),\(Int(target.frame.origin.y)),\(Int(target.frame.width)),\(Int(target.frame.height))",
+                    "safeAreaInsets": [
+                        "top": 0,
+                        "leading": 0,
+                        "bottom": 0,
+                        "trailing": 0
+                    ],
+                    "safeAreaLayoutGuideFrame": [
+                        "x": target.frame.origin.x,
+                        "y": target.frame.origin.y,
+                        "width": target.frame.width,
+                        "height": target.frame.height
+                    ],
+                    "actions": target.actions.joined(separator: ","),
+                    "idSource": "dom",
+                    "source": "webview",
+                    "webviewId": target.webViewId,
+                    "selector": target.selector
+                ] as [String: Any]
+            })
             return AnyCodable(["screenKey": ScreenResolver.shared.resolve().screenKey, "elements": list] as [String: Any])
         }
     ))
@@ -673,6 +703,16 @@ private func registerIOSBuiltInTools() {
                 try InteractionEngine.shared.tap(elementId: elementId, windowId: windowId)
                 return AnyCodable(["success": true, "element_id": elementId] as [String: Any])
             } catch {
+                if let target = await WebViewBridge.shared.findDOMElementTarget(id: elementId, windowId: windowId),
+                   let domResult = await WebViewBridge.shared.clickElementResult(target, windowId: windowId) {
+                    let success = (domResult["success"] as? Bool) ?? (domResult["error"] == nil)
+                    return AnyCodable([
+                        "success": success,
+                        "element_id": elementId,
+                        "target": "webview_dom",
+                        "dom": domResult
+                    ] as [String: Any])
+                }
                 return AnyCodable(["error": "\(error.localizedDescription). Try tap_text for visible text targeting, or get_elements to list available IDs."])
             }
         }
@@ -706,6 +746,38 @@ private func registerIOSBuiltInTools() {
             )
 
             guard result.isSuccess, let target = result.target else {
+                let domMatches = await WebViewBridge.shared.matchingDOMElementTargets(
+                    text: text,
+                    matchMode: matchMode,
+                    windowId: windowId
+                )
+                if !domMatches.isEmpty {
+                    if domMatches.count > 1 && occurrence >= domMatches.count {
+                        return AnyCodable([
+                            "error": "occurrence \(occurrence) out of range (found \(domMatches.count) DOM matches)",
+                            "candidates": domMatches.map { $0.label ?? $0.id },
+                            "hint": "Use occurrence parameter (0-based) to select a specific match"
+                        ] as [String: Any])
+                    }
+                    if domMatches.count > 1 && occurrence < 0 {
+                        return AnyCodable([
+                            "error": "Ambiguous: \(domMatches.count) DOM matches found. Use occurrence (0-based) to disambiguate.",
+                            "candidates": domMatches.map { $0.label ?? $0.id },
+                            "hint": "Use occurrence parameter (0-based) to select a specific match"
+                        ] as [String: Any])
+                    }
+                    let index = domMatches.count == 1 ? 0 : occurrence
+                    if let domResult = await WebViewBridge.shared.clickElementResult(domMatches[index], windowId: windowId) {
+                        let success = (domResult["success"] as? Bool) ?? (domResult["error"] == nil)
+                        return AnyCodable([
+                            "success": success,
+                            "text": text,
+                            "target": "webview_dom",
+                            "dom": domResult
+                        ] as [String: Any])
+                    }
+                }
+
                 var response: [String: Any] = ["error": result.error ?? "Unknown error"]
                 if let candidates = result.candidates {
                     response["candidates"] = candidates
@@ -753,6 +825,16 @@ private func registerIOSBuiltInTools() {
             }
             let windowId = params?["window_id"]?.stringValue
             let point = CGPoint(x: x, y: y)
+            if let domResult = await WebViewBridge.shared.clickElementResult(at: point, windowId: windowId) {
+                let success = (domResult["success"] as? Bool) ?? (domResult["error"] == nil)
+                return AnyCodable([
+                    "x": x,
+                    "y": y,
+                    "success": success,
+                    "target": "webview_dom",
+                    "dom": domResult
+                ] as [String: Any])
+            }
             let activated = InteractionEngine.shared.tap(point: point, windowId: windowId)
             var result: [String: Any] = ["x": x, "y": y, "success": activated]
             if !activated {
@@ -798,6 +880,15 @@ private func registerIOSBuiltInTools() {
                 try InteractionEngine.shared.type(text: text, elementId: params?["element_id"]?.stringValue, windowId: windowId)
                 return AnyCodable(["success": true, "text": text] as [String: Any])
             } catch {
+                if let elementId = params?["element_id"]?.stringValue,
+                   let target = await WebViewBridge.shared.findDOMElementTarget(id: elementId, windowId: windowId),
+                   WebViewBridge.shared.typeText(text, in: target, clear: false, windowId: windowId) {
+                    return AnyCodable([
+                        "success": true,
+                        "text": text,
+                        "target": "webview_dom"
+                    ] as [String: Any])
+                }
                 return AnyCodable(["error": error.localizedDescription])
             }
         }
@@ -825,6 +916,13 @@ private func registerIOSBuiltInTools() {
                 try InteractionEngine.shared.clear(elementId: elementId, windowId: windowId)
                 return AnyCodable(["success": true] as [String: Any])
             } catch {
+                if let target = await WebViewBridge.shared.findDOMElementTarget(id: elementId, windowId: windowId),
+                   WebViewBridge.shared.clearText(in: target, windowId: windowId) {
+                    return AnyCodable([
+                        "success": true,
+                        "target": "webview_dom"
+                    ] as [String: Any])
+                }
                 return AnyCodable(["error": error.localizedDescription])
             }
         }
@@ -972,7 +1070,26 @@ private func registerIOSBuiltInTools() {
         handler: { params in
             let maxDepth = params?["max_depth"]?.intValue ?? 50
             let windowId = params?["window_id"]?.stringValue
-            let tree = ElementInventory.shared.dumpViewTree(maxDepth: maxDepth, windowId: windowId)
+            var tree = ElementInventory.shared.dumpViewTree(maxDepth: maxDepth, windowId: windowId)
+            let domTargets = await WebViewBridge.shared.domElementTargets(windowId: windowId)
+            tree.append(contentsOf: domTargets.map { target in
+                [
+                    "class": "DOMElement",
+                    "framework": "webview",
+                    "accessibilityId": target.id,
+                    "accessibilityLabel": target.label ?? "",
+                    "accessibilityValue": target.value ?? "",
+                    "webviewId": target.webViewId,
+                    "selector": target.selector,
+                    "elementType": target.type.rawValue,
+                    "actions": target.actions,
+                    "frame": "\(Int(target.frame.origin.x)),\(Int(target.frame.origin.y)),\(Int(target.frame.width)),\(Int(target.frame.height))",
+                    "hidden": target.frame.isEmpty,
+                    "alpha": 1,
+                    "userInteraction": target.enabled,
+                    "depth": 1
+                ] as [String: Any]
+            })
             return AnyCodable(["views": tree, "count": tree.count] as [String: Any])
         }
     ))
