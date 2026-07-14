@@ -83,13 +83,13 @@ Enumerates visible interactive elements. Each element exposes:
 - `enabled`, `visible`, `tappable`
 - `frame` (CGRect in screen coordinates)
 - `actions` (available interaction types)
-- `idSource` — how the ID was derived: `"explicit"`, `"appReveal"`, `"text"`, `"semantics"`, `"tooltip"`, `"derived"`
+- `idSource` — how the ID was derived: `"explicit"`, `"appReveal"`, `"ocr"`, `"text"`, `"semantics"`, `"tooltip"`, `"derived"`
 
 ID resolution cascade: explicit accessibility identifier → semantics (accessibility label / content description) → visible text (normalized to snake_case) → auto-generated derived ID. Duplicate IDs are disambiguated with `_1`, `_2`, etc.
 
-Text-based element lookup via `tap_text` walks the view hierarchy for matching visible text, then resolves the nearest tappable ancestor (UIControl, NSControl, gesture-recognizer-bearing view, table/collection cell).
+Text-based element lookup via `tap_text` walks the view hierarchy for matching visible text, then resolves the nearest tappable ancestor (UIControl, NSControl, gesture-recognizer-bearing view, table/collection cell). On iOS it can also target Vision-recognized text inside SwiftUI hosting views when SwiftUI does not expose native accessibility nodes.
 
-Walks the UIKit or AppKit view hierarchy for the selected window. SwiftUI elements are accessed through their hosting layer and accessibility identifiers.
+Walks the UIKit or AppKit view hierarchy for the selected window. SwiftUI elements are accessed through their hosting layer, accessibility/automation elements, `.appReveal(...)` registration, and iOS OCR fallback for visible text that SwiftUI keeps out of the accessibility tree.
 
 ### InteractionEngine / MacOSInteractionEngine
 
@@ -105,6 +105,8 @@ Executes UI actions on the main thread:
 Uses platform-native event dispatch and direct view/control method calls. Scroll uses `UIScrollView.setContentOffset` on iOS and `NSScrollView` APIs on macOS.
 
 **iOS 26+ SwiftUI tap delivery (`APPREVEAL_PRIVATE_API_TAPS`):** On iOS 26+ SwiftUI's gesture engine runs entirely inside UIKit's window-level event dispatch; direct `touchesBegan`/`touchesEnded` calls on `_UIHostingView` are ignored. When the `APPREVEAL_PRIVATE_API_TAPS` compiler flag is defined, `tap_point` and `tap_element` on SwiftUI targets synthesise an `IOHIDDigitizerEvent` (hand + finger sub-event), bind it to the target window via `BKSHIDEventSetDigitizerInfo`, and inject via `UIApplication._enqueueHIDEvent:`. The entire implementation is inside `#if APPREVEAL_PRIVATE_API_TAPS` — no private API symbols appear in binaries built without the flag, making it safe for App Store review.
+
+**iOS SwiftUI text discovery fallback:** SwiftUI can render visible controls without exposing accessibility children to in-process scanners. On iOS, `OCRTextInventory` captures the current window, runs Vision text recognition, and keeps only text whose center falls inside a SwiftUI hosting view. These entries appear with `idSource: "ocr"` in `get_elements`/`get_view_tree`; `tap_text` can target them directly, and `tap_element` can derive text candidates from identifiers such as `device.chip.mouser` before tapping through the same SwiftUI-aware coordinate path.
 
 ### ScreenshotCapture / MacOSScreenshotCapture
 
@@ -323,7 +325,7 @@ iOS/                                   (single Swift package for iOS + macOS)
 ## Design principles
 
 1. **Convention over configuration** -- works with minimal setup if naming conventions are followed
-2. **Explicit over magic** -- no SwiftUI internal tree walking; private API gated behind `APPREVEAL_PRIVATE_API_TAPS` compile flag and compiled out by default
+2. **Explicit over magic** -- no SwiftUI internal tree walking; private tap delivery is gated behind `APPREVEAL_PRIVATE_API_TAPS`, and OCR fallback is labeled with `idSource: "ocr"` instead of pretending to recover hidden identifiers
 3. **Read-first** -- observation tools before mutation tools
 4. **Debug-only** -- zero production impact, compile-time guarantee
 5. **Standard transport** -- MCP Streamable HTTP for maximum client compatibility

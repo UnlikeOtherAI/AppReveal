@@ -71,6 +71,7 @@ final class TapCalibrationViewController: UIViewController {
     private func embedSwiftUIView() {
         let swiftUIVC = UIHostingController(rootView: SwiftUITapTestView(
             onTap: { [weak self] in self?.swiftUIButtonTapped() },
+            onIdentifierOnlyTap: { [weak self] in self?.swiftUIIdentifierOnlyButtonTapped() },
             onImageTap: { [weak self] in self?.swiftUIImageButtonTapped() }
         ))
         addChild(swiftUIVC)
@@ -109,10 +110,16 @@ final class TapCalibrationViewController: UIViewController {
         imageButtonResultLabel.text = "SwiftUI image button tapped!"
         imageButtonResultLabel.textColor = .systemOrange
     }
+
+    private func swiftUIIdentifierOnlyButtonTapped() {
+        resultLabel.text = "Identifier-only SwiftUI button tapped!"
+        resultLabel.textColor = .systemPurple
+    }
 }
 
 private struct SwiftUITapTestView: View {
     let onTap: () -> Void
+    let onIdentifierOnlyTap: () -> Void
     let onImageTap: () -> Void
 
     @State private var textFieldValue = ""
@@ -135,6 +142,9 @@ private struct SwiftUITapTestView: View {
                 #if DEBUG
                 .appReveal("calibration.swiftui_button", label: "Tap Me (SwiftUI)")
                 #endif
+                Button("Identifier Only", action: onIdentifierOnlyTap)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("calibration.swiftui_identifier_only")
                 // Image-only button — no label/identifier. Use .appReveal() for discovery on iOS 26+.
                 Button(action: onImageTap) {
                     Image(systemName: "arrow.up.circle.fill")

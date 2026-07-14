@@ -81,7 +81,7 @@ List all visible interactive elements on the current screen.
 }
 ```
 
-- `idSource` — how the element's `id` was derived: `"explicit"` (accessibility identifier / tag / resource ID), `"appReveal"` (SwiftUI `.appReveal(...)` registration), `"text"` (from visible text), `"semantics"` (accessibility label / content description), `"tooltip"`, or `"derived"` (auto-generated fallback)
+- `idSource` — how the element's `id` was derived: `"explicit"` (accessibility identifier / tag / resource ID), `"appReveal"` (SwiftUI `.appReveal(...)` registration), `"ocr"` (Vision-recognized SwiftUI text fallback on iOS), `"text"` (from visible text), `"semantics"` (accessibility label / content description), `"tooltip"`, or `"derived"` (auto-generated fallback)
 - `safeAreaInsets` — per-view safe area insets using `leading` / `trailing` instead of physical `left` / `right`
 - `safeAreaLayoutGuideFrame` — the view's safe area layout guide frame in screen coordinates
 - Platform mapping: iOS/macOS use native safe areas, Android uses system bar/display-cutout insets, Flutter uses the nearest `MediaQuery.padding`
@@ -152,10 +152,12 @@ Tap an element by its identifier.
 
 **Response:** `{ "success": true, "element_id": "login.submit" }`
 
+On iOS, if SwiftUI does not expose a visible control through accessibility or automation APIs, `tap_element` falls back to OCR text candidates derived from the identifier. For example, `device.chip.mouser` can resolve to recognized text `mouser`.
+
 ---
 
 ### `tap_text`
-Tap an element by its visible text content. Finds text in the view hierarchy and walks up to the nearest tappable ancestor. Useful when elements lack accessibility identifiers.
+Tap an element by its visible text content. Finds text in the view hierarchy and walks up to the nearest tappable ancestor. On iOS, it also recognizes visible SwiftUI text inside hosting views when SwiftUI does not expose accessibility nodes. Useful when elements lack accessibility identifiers.
 
 **Parameters:**
 - `text` (string, required) — text to find

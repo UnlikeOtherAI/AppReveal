@@ -34,6 +34,7 @@ final class ElementInventory {
             )
         }
         appendSwiftUIRegisteredElements(to: &elements, seenIds: &seenIds, windowIds: Set(windows.map(\.id)))
+        appendOCRTextElements(to: &elements, seenIds: &seenIds, windowId: windowId)
         return elements
     }
 
@@ -131,6 +132,10 @@ final class ElementInventory {
             return .appReveal(id: entry.id, point: entry.frame.center)
         }
 
+        if let ocrTarget = OCRTextInventory.shared.findElementIdFallback(id, windowId: windowId) {
+            return .point(ocrTarget.centerPoint)
+        }
+
         return nil
     }
 
@@ -173,6 +178,11 @@ final class ElementInventory {
         for entry in SwiftUIElementRegistry.shared.matchingElements(text: text, matchMode: matchMode, windowIds: windowIds) {
             resolvedTargets.append(.appReveal(id: entry.id, point: entry.frame.center))
             candidates.append(entry.label ?? entry.id)
+        }
+
+        for ocrTarget in OCRTextInventory.shared.matchingTextTargets(text, matchMode: matchMode, windowId: windowId) {
+            resolvedTargets.append(.point(ocrTarget.centerPoint))
+            candidates.append(ocrTarget.text)
         }
 
         if resolvedTargets.isEmpty {
@@ -446,6 +456,7 @@ final class ElementInventory {
             )
         }
         appendSwiftUIRegisteredViewTreeNodes(to: &result, windowIds: Set(windows.map(\.id)))
+        appendOCRTextViewTreeNodes(to: &result, windowId: windowId)
         return result
     }
 
@@ -662,6 +673,74 @@ final class ElementInventory {
                 node["accessibilityLabel"] = label
             }
             result.append(node)
+        }
+    }
+
+    private func appendOCRTextElements(to elements: inout [ElementInfo], seenIds: inout [String: Int], windowId: String?) {
+        var existingText = Set(
+            elements
+                .flatMap { [$0.id, $0.label ?? ""] }
+                .map { OCRTextInventory.normalized($0) }
+                .filter { !$0.isEmpty }
+        )
+
+        for target in OCRTextInventory.shared.textTargets(windowId: windowId) {
+            let normalizedText = OCRTextInventory.normalized(target.text)
+            guard !existingText.contains(normalizedText) else { continue }
+            existingText.insert(normalizedText)
+
+            let baseId = Self.normalizeToId(target.text)
+            let count = seenIds[baseId, default: 0]
+            seenIds[baseId] = count + 1
+            let finalId = count == 0 ? baseId : "\(baseId)_\(count)"
+            let frame = target.frame
+
+            elements.append(
+                ElementInfo(
+                    id: finalId,
+                    type: .button,
+                    label: target.text,
+                    value: nil,
+                    enabled: true,
+                    visible: !frame.isEmpty,
+                    tappable: true,
+                    frame: Self.makeFrame(frame),
+                    safeAreaInsets: ElementInfo.ElementInsets(top: 0, leading: 0, bottom: 0, trailing: 0),
+                    safeAreaLayoutGuideFrame: Self.makeFrame(frame),
+                    containerId: nil,
+                    actions: ["tap"],
+                    idSource: "ocr"
+                )
+            )
+        }
+    }
+
+    private func appendOCRTextViewTreeNodes(to result: inout [[String: Any]], windowId: String?) {
+        var existingText = Set(
+            result
+                .flatMap { [($0["accessibilityId"] as? String) ?? "", ($0["accessibilityLabel"] as? String) ?? ""] }
+                .map { OCRTextInventory.normalized($0) }
+                .filter { !$0.isEmpty }
+        )
+
+        for target in OCRTextInventory.shared.textTargets(windowId: windowId) {
+            let normalizedText = OCRTextInventory.normalized(target.text)
+            guard !existingText.contains(normalizedText) else { continue }
+            existingText.insert(normalizedText)
+
+            let frame = target.frame
+            result.append([
+                "class": "SwiftUI.OCRText",
+                "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))",
+                "hidden": frame.isEmpty,
+                "alpha": 1,
+                "userInteraction": true,
+                "depth": 0,
+                "accessibilityId": Self.normalizeToId(target.text),
+                "accessibilityLabel": target.text,
+                "idSource": "ocr",
+                "actions": ["tap"]
+            ] as [String: Any])
         }
     }
 

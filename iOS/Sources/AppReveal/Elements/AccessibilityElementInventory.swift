@@ -266,17 +266,7 @@ final class AccessibilityElementInventory {
     ) {
         let resolvedContainerId = view.accessibilityIdentifier ?? containerId
 
-        // Prefer the modern accessibilityElements array — SwiftUI hosting views use this exclusively.
-        // Fall back to the deprecated count/index API for older UIKit patterns.
-        let rawElements: [Any]
-        if let arr = view.accessibilityElements, !arr.isEmpty {
-            rawElements = arr
-        } else {
-            let count = view.accessibilityElementCount()
-            // Guard against NSNotFound (Int.max) and empty containers.
-            guard count > 0, count < 100_000 else { return }
-            rawElements = (0..<count).compactMap { view.accessibilityElement(at: $0) }
-        }
+        guard let rawElements = rawContainerElements(for: view) else { return }
 
         for element in rawElements {
             guard let rawElement = element as? NSObject else { continue }
@@ -312,18 +302,7 @@ final class AccessibilityElementInventory {
         visited: inout Set<ObjectIdentifier>,
         visitor: (AccessibilityResolvedTarget) -> Void
     ) {
-        // SwiftUI virtual accessibility proxy nodes expose children via accessibilityElementCount /
-        // accessibilityElement(at:) rather than a KVC-accessible "accessibilityElements" key.
-        // Try the array property first; fall back to count/index for SwiftUI nodes.
-        let rawArr: [Any]
-        if let arr = element.value(forKey: "accessibilityElements") as? [Any], !arr.isEmpty {
-            rawArr = arr
-        } else {
-            let count = element.accessibilityElementCount()
-            guard count > 0, count < 100_000 else { return }
-            rawArr = (0..<count).compactMap { element.accessibilityElement(at: $0) }
-        }
-        guard !rawArr.isEmpty else { return }
+        guard let rawArr = rawContainerElements(for: element), !rawArr.isEmpty else { return }
 
         let subContainerId = accessibilityIdentifier(for: element) ?? containerId
         for sub in rawArr {
@@ -364,6 +343,22 @@ final class AccessibilityElementInventory {
             element: element,
             containerView: containerView
         )
+    }
+
+    private func rawContainerElements(for element: NSObject) -> [Any]? {
+        if #available(iOS 17.0, *), let automationElements = element.automationElements, !automationElements.isEmpty {
+            return automationElements
+        }
+        if let accessibilityElements = element.accessibilityElements, !accessibilityElements.isEmpty {
+            return accessibilityElements
+        }
+
+        // SwiftUI virtual accessibility proxy nodes expose children via accessibilityElementCount /
+        // accessibilityElement(at:) rather than a KVC-accessible "accessibilityElements" key.
+        // Guard against NSNotFound (Int.max) and empty containers.
+        let count = element.accessibilityElementCount()
+        guard count > 0, count < 100_000 else { return nil }
+        return (0..<count).compactMap { element.accessibilityElement(at: $0) }
     }
 
     private func resolveId(for element: NSObject) -> (String?, String) {
