@@ -11,6 +11,7 @@ final class MCPServer {
     private static let sessionTokenHeaderName = "x-appreveal-session"
     private static let sessionTokenQueryName = "appreveal_session_token"
     private static let maxBonjourRetryAttempts = 5
+    private static let maxHTTPRequestBytes = 1_048_576
 
     private var listener: NWListener?
     private var bonjourService: NetService?
@@ -131,18 +132,37 @@ final class MCPServer {
         receiveHTTPRequest(on: connection)
     }
 
-    private func receiveHTTPRequest(on connection: NWConnection) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, _ in
+    private func receiveHTTPRequest(on connection: NWConnection, bufferedData: Data = Data()) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             Task { @MainActor in
-                guard let data = data, !data.isEmpty else {
+                guard let self else {
                     connection.cancel()
                     return
                 }
 
-                await self?.processHTTPData(data, on: connection)
+                if data == nil, error != nil {
+                    connection.cancel()
+                    return
+                }
 
-                if !isComplete {
-                    self?.receiveHTTPRequest(on: connection)
+                var requestData = bufferedData
+                if let data {
+                    requestData.append(data)
+                }
+
+                switch Self.httpRequestReadState(for: requestData) {
+                case .complete(let length):
+                    await self.processHTTPData(Data(requestData.prefix(length)), on: connection)
+                case .incomplete:
+                    if isComplete {
+                        self.sendHTTPResponse(connection: connection, status: 400, body: Data())
+                    } else {
+                        self.receiveHTTPRequest(on: connection, bufferedData: requestData)
+                    }
+                case .invalid:
+                    self.sendHTTPResponse(connection: connection, status: 400, body: Data())
+                case .tooLarge:
+                    self.sendHTTPResponse(connection: connection, status: 413, body: Data())
                 }
             }
         }
@@ -267,6 +287,7 @@ final class MCPServer {
         case 401: statusText = "Unauthorized"
         case 403: statusText = "Forbidden"
         case 405: statusText = "Method Not Allowed"
+        case 413: statusText = "Payload Too Large"
         case 500: statusText = "Internal Server Error"
         default: statusText = "Unknown"
         }
@@ -298,6 +319,52 @@ final class MCPServer {
         case absent
         case allowed(String)
         case forbidden
+    }
+
+    private enum HTTPRequestReadState {
+        case incomplete
+        case complete(Int)
+        case invalid
+        case tooLarge
+    }
+
+    private static func httpRequestReadState(for data: Data) -> HTTPRequestReadState {
+        guard data.count <= maxHTTPRequestBytes else { return .tooLarge }
+        let separator = Data("\r\n\r\n".utf8)
+        guard let headerRange = data.range(of: separator) else {
+            return data.count == maxHTTPRequestBytes ? .tooLarge : .incomplete
+        }
+
+        guard let headerText = String(data: data[..<headerRange.lowerBound], encoding: .utf8) else {
+            return .invalid
+        }
+
+        var contentLength: Int?
+        let lines = headerText.components(separatedBy: "\r\n")
+        for line in lines.dropFirst() where !line.isEmpty {
+            guard let separatorIndex = line.firstIndex(of: ":") else { return .invalid }
+            let name = line[..<separatorIndex]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            let value = line[line.index(after: separatorIndex)...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if name == "transfer-encoding", value.lowercased() != "identity" {
+                return .invalid
+            }
+
+            if name == "content-length" {
+                guard let parsedLength = Int(value), parsedLength >= 0 else { return .invalid }
+                if let contentLength, contentLength != parsedLength {
+                    return .invalid
+                }
+                contentLength = parsedLength
+            }
+        }
+
+        let totalLength = headerRange.upperBound + (contentLength ?? 0)
+        guard totalLength <= maxHTTPRequestBytes else { return .tooLarge }
+        return data.count >= totalLength ? .complete(totalLength) : .incomplete
     }
 
     private static func parseHTTPRequest(_ data: Data) -> HTTPRequest? {

@@ -119,6 +119,18 @@ curl -X POST http://localhost:<port>/ \
 
 For LAN clients, resolve the Bonjour service host/port and include the same token via `Authorization: Bearer <token>` or `X-AppReveal-Session`. If `localhost` works but LAN discovery or reachability does not, check Local Network permission, firewall/VPN state, and `com.apple.security.network.server` for sandboxed apps.
 
+The repository includes a repeatable check for listener health, authentication, and MCP initialization.
+Pass the printed session URL; optionally pass the Mac's LAN hostname or IP to verify the same listener
+from a non-loopback address:
+
+```bash
+scripts/verify-macos-lan-mcp.sh '<AppReveal.sessionURL>' [<lan-host-or-ip>]
+```
+
+For the strongest acceptance check, run that command from a second machine or use the Mac's LAN IP
+from an Android Emulator shell. A valid run gets health `200`, unauthenticated MCP `401`, and
+authenticated initialization `200` through the LAN address.
+
 `GET /health` returns `bonjourDiagnostics` and `lan` objects. Use them when loopback works but remote LAN clients fail:
 
 - `bonjour: "advertising"` means mDNS published successfully.
