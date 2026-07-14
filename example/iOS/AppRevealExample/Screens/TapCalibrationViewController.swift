@@ -165,7 +165,7 @@ private struct SwiftUITapTestView: View {
                 .padding(.horizontal, 24)
                 .accessibilityIdentifier("calibration.swiftui_field")
                 #if DEBUG
-                .appReveal("calibration.swiftui_field", label: "Type here (SwiftUI)")
+                .appReveal("calibration.swiftui_field", label: "Type here (SwiftUI)", type: .textField)
                 #endif
         }
     }

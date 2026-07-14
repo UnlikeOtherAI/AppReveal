@@ -27,44 +27,85 @@ final class SwiftUIElementRegistry {
 
     static let shared = SwiftUIElementRegistry()
 
-    private struct Entry {
+    struct RegisteredElement {
+        let id: String
         let frame: CGRect
         let label: String?
+        let type: ElementType
         let windowId: String?
         let activate: (() -> Void)?
+
+        var actions: [String] {
+            switch type {
+            case .textField:
+                return ["tap", "type", "clear"]
+            case .label, .image, .other:
+                return []
+            default:
+                return ["tap"]
+            }
+        }
+
+        var isTappable: Bool {
+            actions.contains("tap")
+        }
     }
 
-    private var entries: [String: Entry] = [:]
+    private var entries: [String: RegisteredElement] = [:]
+    private var pendingUnregisterTokens: [String: UUID] = [:]
 
     private init() {}
 
-    func register(id: String, frame: CGRect, label: String?, activate: (() -> Void)? = nil) {
-        entries[id] = Entry(
+    func register(
+        id: String,
+        frame: CGRect,
+        label: String?,
+        type: ElementType = .button,
+        activate: (() -> Void)? = nil
+    ) {
+        pendingUnregisterTokens[id] = nil
+        entries[id] = RegisteredElement(
+            id: id,
             frame: frame,
             label: label,
+            type: type,
             windowId: Self.windowId(containing: frame),
             activate: activate
         )
     }
 
     func unregister(id: String) {
-        entries.removeValue(forKey: id)
-    }
-
-    func currentElements(windowIds: Set<String>) -> [(id: String, frame: CGRect, label: String?)] {
-        entries.compactMap { id, entry in
-            guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
-            return (id: id, frame: entry.frame, label: entry.label)
+        let token = UUID()
+        pendingUnregisterTokens[id] = token
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard pendingUnregisterTokens[id] == token else { return }
+            entries.removeValue(forKey: id)
+            pendingUnregisterTokens[id] = nil
         }
     }
 
-    func findElement(byId id: String, windowIds: Set<String>) -> (id: String, frame: CGRect, label: String?)? {
-        guard let entry = entries[id] else { return nil }
-        guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
-        return (id: id, frame: entry.frame, label: entry.label)
+    func currentElements(windowIds: Set<String>) -> [RegisteredElement] {
+        entries.compactMap { id, entry in
+            guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
+            return RegisteredElement(
+                id: id,
+                frame: entry.frame,
+                label: entry.label,
+                type: entry.type,
+                windowId: entry.windowId,
+                activate: entry.activate
+            )
+        }
     }
 
-    func matchingElements(text: String, matchMode: String, windowIds: Set<String>) -> [(id: String, frame: CGRect, label: String?)] {
+    func findElement(byId id: String, windowIds: Set<String>) -> RegisteredElement? {
+        guard let entry = entries[id] else { return nil }
+        guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
+        return entry
+    }
+
+    func matchingElements(text: String, matchMode: String, windowIds: Set<String>) -> [RegisteredElement] {
         entries.compactMap { id, entry in
             guard Self.entry(entry, matchesAnyOf: windowIds) else { return nil }
             let candidates = [entry.label, id].compactMap { $0 }
@@ -76,7 +117,7 @@ final class SwiftUIElementRegistry {
                     return candidate.caseInsensitiveCompare(text) == .orderedSame
                 }
             }
-            return matches ? (id: id, frame: entry.frame, label: entry.label) : nil
+            return matches ? entry : nil
         }
     }
 
@@ -89,7 +130,7 @@ final class SwiftUIElementRegistry {
         return true
     }
 
-    private static func entry(_ entry: Entry, matchesAnyOf windowIds: Set<String>) -> Bool {
+    private static func entry(_ entry: RegisteredElement, matchesAnyOf windowIds: Set<String>) -> Bool {
         guard !windowIds.isEmpty else { return true }
         guard let windowId = entry.windowId ?? windowId(containing: entry.frame) else { return true }
         return windowIds.contains(windowId)
@@ -132,13 +173,15 @@ private struct AppRevealFramePreference: PreferenceKey {
 struct AppRevealModifier: ViewModifier {
     let id: String
     let label: String?
+    let type: ElementType
     let activate: (() -> Void)?
 
     func body(content: Content) -> some View {
         content
-            .background(
+            .overlay(
                 GeometryReader { geo in
                     Color.clear
+                        .allowsHitTesting(false)
                         .preference(
                             key: AppRevealFramePreference.self,
                             value: geo.frame(in: .global)
@@ -154,6 +197,7 @@ struct AppRevealModifier: ViewModifier {
                         id: registeredId,
                         frame: frame,
                         label: registeredLabel,
+                        type: type,
                         activate: activate
                     )
                 }
@@ -191,10 +235,16 @@ public extension View {
     /// - Parameters:
     ///   - id: Stable dot-namespaced identifier (e.g. `"chat.send_button"`).
     ///   - label: Optional human-readable label for the element.
+    ///   - type: Element type AppReveal should advertise for this view.
     ///   - activate: Optional direct debug activation closure. Use this for SwiftUI
     ///     controls whose gestures are intercepted by ScrollView/Lazy containers.
-    func appReveal(_ id: String, label: String? = nil, activate: (() -> Void)? = nil) -> some View {
-        modifier(AppRevealModifier(id: id, label: label, activate: activate))
+    func appReveal(
+        _ id: String,
+        label: String? = nil,
+        type: ElementType = .button,
+        activate: (() -> Void)? = nil
+    ) -> some View {
+        modifier(AppRevealModifier(id: id, label: label, type: type, activate: activate))
     }
 }
 

@@ -709,12 +709,43 @@ final class InteractionEngine {
                 return editableAncestor(for: hitView)
             }
             return nil
-        case .appReveal(_, let point):
+        case .appReveal(let id, let point):
+            if let entry = SwiftUIElementRegistry.shared.findElement(
+                byId: id,
+                windowIds: Set(candidateWindows(windowId: windowId).map(\.id))
+            ), entry.type == .textField {
+                if let editable = focusSwiftUIRegisteredTextField(at: point, windowId: windowId) {
+                    return editable
+                }
+            }
             if let hitView = hitView(at: point, windowId: windowId, preferredWindow: nil) {
                 return editableAncestor(for: hitView)
             }
             return nil
         }
+    }
+
+    private func focusSwiftUIRegisteredTextField(at point: CGPoint, windowId: String?) -> UIView? {
+        if let hitView = hitView(at: point, windowId: windowId, preferredWindow: nil),
+           let editable = editableAncestor(for: hitView) {
+            editable.becomeFirstResponder()
+            return editable
+        }
+
+        _ = tap(point: point, windowId: windowId)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+        if let responder = currentEditableResponder(windowId: windowId) {
+            return responder
+        }
+
+        if let hitView = hitView(at: point, windowId: windowId, preferredWindow: nil),
+           let editable = editableAncestor(for: hitView) {
+            editable.becomeFirstResponder()
+            return editable
+        }
+
+        return nil
     }
 
     private func currentEditableResponder(windowId: String?) -> UIView? {
