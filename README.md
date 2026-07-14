@@ -175,6 +175,7 @@ All native UI tools and all web view tools accept an optional `window_id` parame
 | `get_navigation_stack` | Current route, nav stack, modal stack |
 | `get_feature_flags` | All active feature flags |
 | `get_network_calls` | Recent HTTP traffic with method, URL, status, duration |
+| `get_network_call_detail` | Captured request/response headers, bodies, and SSE frames where supported |
 | `get_logs` | Recent app logs |
 | `get_recent_errors` | Recent captured errors when an error-capture provider is available |
 | `launch_context` | App ID, version, device model, OS version |

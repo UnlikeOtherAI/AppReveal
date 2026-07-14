@@ -7,6 +7,8 @@ import androidx.core.content.pm.PackageInfoCompat
 import com.appreveal.diagnostics.DiagnosticsBridge
 import com.appreveal.elements.ElementInventory
 import com.appreveal.interaction.InteractionEngine
+import com.appreveal.network.CapturedRequest
+import com.appreveal.network.CapturedSSEEvent
 import com.appreveal.network.NetworkObserverService
 import com.appreveal.screen.ScreenResolver
 import com.appreveal.screenshot.ScreenshotCapture
@@ -537,28 +539,42 @@ internal fun registerBuiltInTools() {
     router.register(
         MCPToolDefinition(
             name = "get_network_calls",
-            description = "Get recent network calls",
+            description = "List recent network calls captured by AppReveal",
             inputSchema = jsonSchema("limit" to jsonProp("integer", "Max results (default 50)")),
             handler = { params ->
                 val limit = params?.get("limit")?.asIntOrNull() ?: 50
                 val calls = NetworkObserverService.recentCalls(limit)
                 val list = JsonArray()
                 for (call in calls) {
-                    list.add(
-                        JsonObject().apply {
-                            addProperty("id", call.id)
-                            addProperty("method", call.method)
-                            addProperty("url", call.url)
-                            addProperty("statusCode", call.statusCode?.toString() ?: "nil")
-                            addProperty("duration", call.duration?.let { String.format("%.3fs", it) } ?: "nil")
-                            addProperty("error", call.error ?: "")
-                        },
-                    )
+                    list.add(call.toNetworkSummaryJson())
                 }
                 JsonObject().apply {
                     add("calls", list)
                     addProperty("count", list.size())
                 }
+            },
+        ),
+    )
+
+    // -- get_network_call_detail --
+
+    router.register(
+        MCPToolDefinition(
+            name = "get_network_call_detail",
+            description = "Get headers, body previews, and SSE frames for one captured network call",
+            inputSchema =
+                jsonSchema(
+                    "id" to jsonProp("string", "Network call id from get_network_calls"),
+                    required = listOf("id"),
+                ),
+            handler = { params ->
+                val id =
+                    params?.get("id")?.asStringOrNull()
+                        ?: return@MCPToolDefinition errorResult("id required")
+                val call =
+                    NetworkObserverService.callDetail(id)
+                        ?: return@MCPToolDefinition errorResult("Network call not found: $id")
+                call.toNetworkDetailJson()
             },
         ),
     )
@@ -1027,6 +1043,95 @@ internal fun registerBuiltInTools() {
 // -- Helper functions --
 
 private fun errorResult(message: String): JsonElement = JsonObject().apply { addProperty("error", message) }
+
+private fun CapturedRequest.toNetworkSummaryJson(): JsonObject =
+    JsonObject().apply {
+        addProperty("id", id)
+        addProperty("method", method)
+        addProperty("url", url)
+        addNullableNumber("statusCode", statusCode)
+        addProperty("startTime", startTime)
+        addNullableNumber("endTime", endTime)
+        addNullableNumber("durationMs", duration?.let { (it * 1000).toLong() })
+        addProperty("duration", duration?.let { String.format("%.3fs", it) } ?: "nil")
+        addNullableNumber("requestBodySize", requestBodySize)
+        addNullableNumber("responseBodySize", responseBodySize)
+        addProperty("requestBodyTruncated", requestBodyTruncated)
+        addProperty("responseBodyTruncated", responseBodyTruncated)
+        addProperty("isStreaming", isStreaming)
+        addProperty("sseEventCount", sseEvents.size)
+        addProperty("complete", endTime != null)
+        addProperty("error", error ?: "")
+    }
+
+private fun CapturedRequest.toNetworkDetailJson(): JsonObject =
+    toNetworkSummaryJson().apply {
+        addProperty("redirectCount", redirectCount)
+        add(
+            "request",
+            JsonObject().apply {
+                add("headers", requestHeaders.toStringJsonObject())
+                addNullableString("body", requestBody)
+                addNullableNumber("bodySize", requestBodySize)
+                addProperty("bodyTruncated", requestBodyTruncated)
+            },
+        )
+        add(
+            "response",
+            JsonObject().apply {
+                add("headers", responseHeaders?.toStringJsonObject() ?: JsonObject())
+                addNullableString("body", responseBody)
+                addNullableNumber("bodySize", responseBodySize)
+                addProperty("bodyTruncated", responseBodyTruncated)
+            },
+        )
+        add("sseEvents", sseEvents.toSSEJsonArray())
+    }
+
+private fun List<CapturedSSEEvent>.toSSEJsonArray(): JsonArray {
+    val arr = JsonArray()
+    for (event in this) {
+        arr.add(
+            JsonObject().apply {
+                addNullableString("id", event.id)
+                addNullableString("event", event.event)
+                addProperty("data", event.data)
+                addNullableNumber("retry", event.retry)
+                addProperty("timestamp", event.timestamp)
+            },
+        )
+    }
+    return arr
+}
+
+private fun Map<String, String>.toStringJsonObject(): JsonObject =
+    JsonObject().apply {
+        for ((key, value) in this@toStringJsonObject) {
+            addProperty(key, value)
+        }
+    }
+
+private fun JsonObject.addNullableString(
+    property: String,
+    value: String?,
+) {
+    if (value == null) {
+        add(property, com.google.gson.JsonNull.INSTANCE)
+    } else {
+        addProperty(property, value)
+    }
+}
+
+private fun JsonObject.addNullableNumber(
+    property: String,
+    value: Number?,
+) {
+    if (value == null) {
+        add(property, com.google.gson.JsonNull.INSTANCE)
+    } else {
+        addProperty(property, value)
+    }
+}
 
 private fun jsonProp(
     type: String,

@@ -70,7 +70,7 @@ func registerBuiltInTools() {
 
     router.register(MCPToolDefinition(
         name: "get_network_calls",
-        description: "Get recent network calls",
+        description: "List recent network calls captured by AppReveal",
         inputSchema: [
             "type": AnyCodable("object"),
             "properties": AnyCodable(["limit": ["type": "integer", "description": "Max results (default 50)"]] as [String: Any])
@@ -78,17 +78,29 @@ func registerBuiltInTools() {
         handler: { params in
             let limit = params?["limit"]?.intValue ?? 50
             let calls = NetworkObserverService.shared.recentCalls(limit: limit)
-            let list = calls.map { call in
-                [
-                    "id": call.id,
-                    "method": call.method,
-                    "url": call.url,
-                    "statusCode": call.statusCode.map { String($0) } ?? "nil",
-                    "duration": call.duration.map { String(format: "%.3fs", $0) } ?? "nil",
-                    "error": call.error ?? ""
-                ]
-            }
+            let list = calls.map { $0.networkSummary }
             return AnyCodable(["calls": list, "count": list.count] as [String: Any])
+        }
+    ))
+
+    // MARK: - get_network_call_detail (cross-platform)
+
+    router.register(MCPToolDefinition(
+        name: "get_network_call_detail",
+        description: "Get headers, body previews, and SSE frames for one captured network call",
+        inputSchema: [
+            "type": AnyCodable("object"),
+            "properties": AnyCodable(["id": ["type": "string", "description": "Network call id from get_network_calls"]] as [String: Any]),
+            "required": AnyCodable(["id"])
+        ],
+        handler: { params in
+            guard let id = params?["id"]?.stringValue else {
+                return AnyCodable(["error": "id required"])
+            }
+            guard let call = NetworkObserverService.shared.callDetail(id: id) else {
+                return AnyCodable(["error": "Network call not found: \(id)"])
+            }
+            return AnyCodable(call.networkDetail)
         }
     ))
 
@@ -456,6 +468,64 @@ func registerBuiltInTools() {
     #elseif os(macOS)
     registerMacOSBuiltInTools()
     #endif
+}
+
+private extension CapturedRequest {
+    var networkSummary: [String: Any] {
+        [
+            "id": id,
+            "method": method,
+            "url": url,
+            "statusCode": jsonNullable(statusCode),
+            "startTime": Int(startTime.timeIntervalSince1970 * 1000),
+            "endTime": jsonNullable(endTime.map { Int($0.timeIntervalSince1970 * 1000) }),
+            "durationMs": jsonNullable(duration.map { Int($0 * 1000) }),
+            "duration": duration.map { String(format: "%.3fs", $0) } ?? "nil",
+            "requestBodySize": jsonNullable(requestBodySize),
+            "responseBodySize": jsonNullable(responseBodySize),
+            "requestBodyTruncated": requestBodyTruncated,
+            "responseBodyTruncated": responseBodyTruncated,
+            "isStreaming": isStreaming,
+            "sseEventCount": sseEvents.count,
+            "complete": endTime != nil,
+            "error": error ?? ""
+        ]
+    }
+
+    var networkDetail: [String: Any] {
+        var detail = networkSummary
+        detail["redirectCount"] = redirectCount
+        detail["request"] = [
+            "headers": requestHeaders,
+            "body": jsonNullable(requestBody),
+            "bodySize": jsonNullable(requestBodySize),
+            "bodyTruncated": requestBodyTruncated
+        ] as [String: Any]
+        detail["response"] = [
+            "headers": responseHeaders ?? [:],
+            "body": jsonNullable(responseBody),
+            "bodySize": jsonNullable(responseBodySize),
+            "bodyTruncated": responseBodyTruncated
+        ] as [String: Any]
+        detail["sseEvents"] = sseEvents.map { $0.dictionaryValue }
+        return detail
+    }
+}
+
+private extension CapturedSSEEvent {
+    var dictionaryValue: [String: Any] {
+        [
+            "id": jsonNullable(id),
+            "event": jsonNullable(event),
+            "data": data,
+            "retry": jsonNullable(retry),
+            "timestamp": Int(timestamp.timeIntervalSince1970 * 1000)
+        ]
+    }
+}
+
+private func jsonNullable<T>(_ value: T?) -> Any {
+    value.map { $0 as Any } ?? NSNull()
 }
 
 // MARK: - iOS-specific tools

@@ -4,6 +4,28 @@ import Foundation
 
 #if DEBUG
 
+public struct CapturedSSEEvent: Codable {
+    public let id: String?
+    public let event: String?
+    public let data: String
+    public let retry: Int?
+    public let timestamp: Date
+
+    public init(
+        id: String? = nil,
+        event: String? = nil,
+        data: String,
+        retry: Int? = nil,
+        timestamp: Date = Date()
+    ) {
+        self.id = id
+        self.event = event
+        self.data = data
+        self.retry = retry
+        self.timestamp = timestamp
+    }
+}
+
 public struct CapturedRequest: Codable {
     public let id: String
     public let method: String
@@ -16,6 +38,12 @@ public struct CapturedRequest: Codable {
     public let responseHeaders: [String: String]?
     public let requestBodySize: Int?
     public let responseBodySize: Int?
+    public let requestBody: String?
+    public let responseBody: String?
+    public let requestBodyTruncated: Bool
+    public let responseBodyTruncated: Bool
+    public let sseEvents: [CapturedSSEEvent]
+    public let isStreaming: Bool
     public let error: String?
     public let redirectCount: Int
 
@@ -31,6 +59,12 @@ public struct CapturedRequest: Codable {
         responseHeaders: [String: String]? = nil,
         requestBodySize: Int? = nil,
         responseBodySize: Int? = nil,
+        requestBody: String? = nil,
+        responseBody: String? = nil,
+        requestBodyTruncated: Bool = false,
+        responseBodyTruncated: Bool = false,
+        sseEvents: [CapturedSSEEvent] = [],
+        isStreaming: Bool = false,
         error: String? = nil,
         redirectCount: Int = 0
     ) {
@@ -42,9 +76,15 @@ public struct CapturedRequest: Codable {
         self.endTime = endTime
         self.duration = duration
         self.requestHeaders = CapturedRequest.redactSensitiveHeaders(requestHeaders)
-        self.responseHeaders = responseHeaders
+        self.responseHeaders = responseHeaders.map(CapturedRequest.redactSensitiveHeaders)
         self.requestBodySize = requestBodySize
         self.responseBodySize = responseBodySize
+        self.requestBody = requestBody
+        self.responseBody = responseBody
+        self.requestBodyTruncated = requestBodyTruncated
+        self.responseBodyTruncated = responseBodyTruncated
+        self.sseEvents = sseEvents
+        self.isStreaming = isStreaming
         self.error = error
         self.redirectCount = redirectCount
     }

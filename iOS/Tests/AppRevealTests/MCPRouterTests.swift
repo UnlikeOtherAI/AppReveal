@@ -5,6 +5,10 @@ import XCTest
 
 @MainActor
 final class MCPRouterTests: XCTestCase {
+    override func tearDown() {
+        NetworkObserverService.shared.clear()
+        super.tearDown()
+    }
 
     func testImageToolReturnsMCPImageBlockAndMetadata() async throws {
         let imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
@@ -121,6 +125,37 @@ final class MCPRouterTests: XCTestCase {
         XCTAssertNil(result["structuredContent"])
     }
 
+    func testNetworkCallDetailExposesHeadersBodiesAndSSEFrames() async throws {
+        registerBuiltInTools()
+        NetworkObserverService.shared.addCall(CapturedRequest(
+            id: "call-1",
+            method: "GET",
+            url: "https://api.example.com/converse/stream",
+            statusCode: 200,
+            responseHeaders: ["Content-Type": "text/event-stream"],
+            responseBodySize: 13,
+            responseBody: "data: hello\n\n",
+            sseEvents: [CapturedSSEEvent(event: "message", data: "hello")],
+            isStreaming: true
+        ))
+
+        let response = await MCPRouter.shared.handle(toolRequest(
+            name: "get_network_call_detail",
+            arguments: ["id": "call-1"]
+        ))
+        let result = try resultObject(from: response)
+        let content = try XCTUnwrap(result["content"] as? [[String: Any]])
+        let text = try XCTUnwrap(content[0]["text"] as? String)
+        let data = try XCTUnwrap(text.data(using: .utf8))
+        let detail = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        let responseDetail = try XCTUnwrap(detail["response"] as? [String: Any])
+        XCTAssertEqual(responseDetail["body"] as? String, "data: hello\n\n")
+        let sseEvents = try XCTUnwrap(detail["sseEvents"] as? [[String: Any]])
+        XCTAssertEqual(sseEvents.first?["data"] as? String, "hello")
+        XCTAssertEqual(detail["sseEventCount"] as? Int, 1)
+    }
+
     private var emptySchema: [String: AnyCodable] {
         [
             "type": AnyCodable("object"),
@@ -128,14 +163,17 @@ final class MCPRouterTests: XCTestCase {
         ]
     }
 
-    private func toolRequest(name: String) -> MCPRequest {
+    private func toolRequest(
+        name: String,
+        arguments: [String: Any] = [:]
+    ) -> MCPRequest {
         MCPRequest(
             jsonrpc: "2.0",
             id: .int(1),
             method: "tools/call",
             params: [
                 "name": AnyCodable(name),
-                "arguments": AnyCodable([String: Any]())
+                "arguments": AnyCodable(arguments)
             ]
         )
     }

@@ -241,7 +241,7 @@ protocol FeatureFlagProviding {
 | `launch_context` | App launch environment info |
 | `open_deeplink` | Navigate via deep link URL |
 
-Network call detail, network mocking, MetricKit summaries, and reset-state commands are planned extension tools. They are not part of the current cross-platform parity set until every target can advertise and implement them consistently.
+Android OkHttp builds expose `get_network_call_detail` for captured request/response headers, text bodies, and SSE frames. iOS URLSession capture uses the same tool for text body previews. Network mocking, MetricKit summaries, reset-state commands, and matching automatic body-detail capture for the remaining platforms are planned extension work.
 
 All UI and WKWebView tools accept an optional `window_id` parameter from `list_windows`. If omitted, AppReveal targets the current key window.
 

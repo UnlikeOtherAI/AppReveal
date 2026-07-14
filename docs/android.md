@@ -181,6 +181,38 @@ interface NetworkObservable {
 }
 ```
 
+### OkHttp request/response capture
+
+Android apps that use OkHttp can capture real HTTP traffic, including response bodies and
+`text/event-stream` / Server-Sent Event frames, by installing the debug interceptor on the
+app's OkHttp client:
+
+```kotlin
+val client = AppRevealOkHttp.install(OkHttpClient.Builder()).build()
+```
+
+For explicit limits or extra header redaction:
+
+```kotlin
+val client = AppRevealOkHttp.install(
+    OkHttpClient.Builder(),
+    NetworkCaptureConfig(
+        maxBodyBytes = 64L * 1024L,
+        redactedHeaders = CapturedRequest.defaultSensitiveHeaders + "x-session-token",
+    ),
+).build()
+```
+
+`get_network_calls` lists captured calls; `get_network_call_detail` returns one call's request
+and response headers, captured text bodies, truncation flags, and parsed SSE frames. Release
+builds use the `appreveal-noop` helper, so shared debug/release networking setup can keep the
+same calls while the release interceptor simply passes through.
+
+Parity note: Android has OkHttp body/SSE detail capture. iOS exposes the same
+`get_network_call_detail` tool and captures URLSession text body previews; app-fed integrations
+can also provide body fields. macOS/Flutter/React Native keep their existing app-fed or fetch
+summary capture until matching automatic body-detail hooks are implemented there.
+
 ## Security
 
 - Library added as `debugImplementation` -- not included in release APK
@@ -188,7 +220,7 @@ interface NetworkObservable {
 - Health diagnostics available at `GET /health`
 - Loopback CORS only
 - NsdManager advertises `_appreveal._tcp` with `auth=session-token`
-- Sensitive headers (Authorization, Cookie) redacted in network capture
+- Sensitive headers (Authorization, Cookie, Set-Cookie, x-api-key, x-auth-token) redacted in network capture
 
 ## Platform details
 
