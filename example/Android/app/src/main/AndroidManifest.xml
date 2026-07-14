@@ -26,5 +26,9 @@
         <activity
             android:name=".screens.LoginActivity"
             android:theme="@style/Theme.AppRevealExample" />
+        <activity
+            android:name=".screens.ComposeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.AppRevealExample" />
     </application>
 </manifest>

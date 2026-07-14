@@ -23,6 +23,13 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import kotlin.math.max
 import kotlin.math.min
 
+internal enum class ElementTextActionResult {
+    SUCCESS,
+    NOT_FOUND,
+    NOT_EDITABLE,
+    ACTION_FAILED,
+}
+
 /**
  * Enumerates visible interactive elements from the Android view hierarchy.
  */
@@ -34,7 +41,7 @@ internal object ElementInventory {
             val seenIds = mutableMapOf<String, Int>()
             walkView(decorView, elements, null, seenIds)
             // Append Compose semantics nodes for any AndroidComposeView in the hierarchy.
-            elements.addAll(ComposeElementInventory.listElements(decorView))
+            elements.addAll(ComposeElementInventory.listElements(decorView, seenIds))
             elements
         }
     }
@@ -49,22 +56,21 @@ internal object ElementInventory {
             if (view != null) {
                 if (view.isClickable || view.hasOnClickListeners()) {
                     view.performClick()
+                    return@runBlocking true
                 } else {
                     var parent: View? = view.parent as? View
                     while (parent != null) {
                         if (parent.isClickable || parent.hasOnClickListeners()) {
                             parent.performClick()
-                            break
+                            return@runBlocking true
                         }
                         parent = parent.parent as? View
                     }
                 }
-                return@runBlocking true
             }
             // Fall back to Compose accessibility node
             val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking false
-            val node = ComposeElementInventory.findElementById(decorView, id) ?: return@runBlocking false
-            node.clickCompose()
+            ComposeElementInventory.tapElementById(decorView, id, composeSeenIds(decorView)) ?: false
         }
     }
 
@@ -85,36 +91,121 @@ internal object ElementInventory {
             val viewMatches = mutableListOf<Pair<View, String>>()
             collectTextMatches(decorView, text, matchMode, viewMatches)
 
-            // Compose match
-            val composeNode = ComposeElementInventory.findNodeByText(decorView, text, matchMode, occurrence)
+            // Compose matches share the same occurrence space and candidate list as Views.
+            val composeMatches =
+                ComposeElementInventory.findTextMatches(
+                    decorView,
+                    text,
+                    matchMode,
+                    composeSeenIds(decorView),
+                )
+            val candidates = viewMatches.map { it.second } + composeMatches.map { it.matchedText }
 
-            if (viewMatches.isEmpty() && composeNode == null) {
-                return@runBlocking mapOf("success" to false, "error" to "No element found with text: $text")
+            if (candidates.isEmpty()) {
+                return@runBlocking mapOf(
+                    "success" to false,
+                    "error" to "No element found with text: $text",
+                    "candidates" to candidates,
+                )
             }
 
-            if (composeNode != null && viewMatches.size <= occurrence) {
-                val clicked = composeNode.clickCompose()
-                return@runBlocking if (clicked) {
-                    mapOf("success" to true, "text" to text)
-                } else {
-                    mapOf("success" to false, "error" to "Compose action click failed for: $text")
-                }
-            }
-
-            if (occurrence >= viewMatches.size) {
+            if (occurrence !in candidates.indices) {
                 return@runBlocking mapOf(
                     "success" to false,
                     "error" to "occurrence $occurrence out of range",
-                    "candidates" to viewMatches.map { it.second },
+                    "candidates" to candidates,
                 )
+            }
+
+            if (occurrence >= viewMatches.size) {
+                val composeMatch = composeMatches[occurrence - viewMatches.size]
+                val clicked = ComposeElementInventory.tapTextMatch(composeMatch)
+                return@runBlocking if (clicked) {
+                    mapOf("success" to true, "text" to text, "candidates" to candidates)
+                } else {
+                    mapOf(
+                        "success" to false,
+                        "error" to "Compose action click failed for: $text",
+                        "candidates" to candidates,
+                    )
+                }
             }
 
             val (matchedView, _) = viewMatches[occurrence]
             val tappable = findTappableAncestor(matchedView) ?: matchedView
-            if (tappable.isClickable || tappable.hasOnClickListeners()) {
-                tappable.performClick()
+            if (!tappable.isClickable && !tappable.hasOnClickListeners()) {
+                return@runBlocking mapOf(
+                    "success" to false,
+                    "error" to "No tappable ancestor found for: $text",
+                    "candidates" to candidates,
+                )
             }
-            mapOf("success" to true, "text" to text)
+            tappable.performClick()
+            mapOf("success" to true, "text" to text, "candidates" to candidates)
+        }
+    }
+
+    fun typeText(
+        text: String,
+        elementId: String?,
+    ): ElementTextActionResult {
+        return MainThreadExecutor.runBlocking {
+            val decorView =
+                ScreenResolver.currentActivity?.window?.decorView
+                    ?: return@runBlocking ElementTextActionResult.NOT_FOUND
+
+            if (elementId != null) {
+                val view = findElement(elementId)
+                if (view is EditText) {
+                    view.requestFocus()
+                    view.append(text)
+                    return@runBlocking ElementTextActionResult.SUCCESS
+                }
+                if (view != null) return@runBlocking ElementTextActionResult.NOT_EDITABLE
+
+                return@runBlocking ComposeElementInventory.typeTextById(
+                    decorView,
+                    elementId,
+                    text,
+                    append = true,
+                    seenIds = composeSeenIds(decorView),
+                ).toElementResult()
+            }
+
+            val focusedView = ScreenResolver.currentActivity?.currentFocus
+            if (focusedView is EditText) {
+                focusedView.append(text)
+                return@runBlocking ElementTextActionResult.SUCCESS
+            }
+
+            ComposeElementInventory.typeTextInFocusedElement(
+                decorView,
+                text,
+                append = true,
+                seenIds = composeSeenIds(decorView),
+            ).toElementResult()
+        }
+    }
+
+    fun clearText(elementId: String): ElementTextActionResult {
+        return MainThreadExecutor.runBlocking {
+            val decorView =
+                ScreenResolver.currentActivity?.window?.decorView
+                    ?: return@runBlocking ElementTextActionResult.NOT_FOUND
+            val view = findElement(elementId)
+            if (view is EditText) {
+                view.setText("")
+                return@runBlocking ElementTextActionResult.SUCCESS
+            }
+            if (view != null) return@runBlocking ElementTextActionResult.NOT_EDITABLE
+
+            ComposeElementInventory.typeTextById(
+                decorView,
+                elementId,
+                text = "",
+                append = false,
+                seenIds = composeSeenIds(decorView),
+            ).toElementResult()
         }
     }
 
@@ -601,6 +692,9 @@ internal object ElementInventory {
         }
 
         val result = mutableListOf<Map<String, Any>>(node)
+        if (ComposeElementInventory.isComposeView(view)) {
+            result.addAll(ComposeElementInventory.dumpTreeForComposeView(view, depth + 1, maxDepth))
+        }
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 result.addAll(dumpNode(view.getChildAt(i), depth + 1, maxDepth))
@@ -698,4 +792,18 @@ internal object ElementInventory {
         }
         return null
     }
+
+    private fun composeSeenIds(decorView: View): MutableMap<String, Int> {
+        val seenIds = mutableMapOf<String, Int>()
+        walkView(decorView, mutableListOf(), null, seenIds)
+        return seenIds
+    }
+
+    private fun ComposeTextActionResult.toElementResult(): ElementTextActionResult =
+        when (this) {
+            ComposeTextActionResult.SUCCESS -> ElementTextActionResult.SUCCESS
+            ComposeTextActionResult.NOT_FOUND -> ElementTextActionResult.NOT_FOUND
+            ComposeTextActionResult.NOT_EDITABLE -> ElementTextActionResult.NOT_EDITABLE
+            ComposeTextActionResult.ACTION_FAILED -> ElementTextActionResult.ACTION_FAILED
+        }
 }

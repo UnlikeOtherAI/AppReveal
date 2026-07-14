@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.core.widget.NestedScrollView
 import androidx.recyclerview.widget.RecyclerView
 import com.appreveal.elements.ElementInventory
+import com.appreveal.elements.ElementTextActionResult
 import com.appreveal.screen.ScreenResolver
 import com.appreveal.shared.MainThreadExecutor
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -71,43 +72,30 @@ internal object InteractionEngine {
         text: String,
         elementId: String?,
     ) {
-        MainThreadExecutor.runBlocking {
-            val target: View? =
+        when (ElementInventory.typeText(text, elementId)) {
+            ElementTextActionResult.SUCCESS -> Unit
+            ElementTextActionResult.NOT_FOUND -> {
                 if (elementId != null) {
-                    ElementInventory.findElement(elementId)
-                        ?: throw InteractionError.ElementNotFound(elementId)
+                    throw InteractionError.ElementNotFound(elementId)
                 } else {
-                    ScreenResolver.currentActivity?.currentFocus
+                    throw InteractionError.NotEditable("current focus")
                 }
-
-            when (target) {
-                is EditText -> {
-                    target.requestFocus()
-                    target.append(text)
-                }
-
-                else -> {
-                    throw InteractionError.NotEditable(elementId ?: "current focus")
-                }
+            }
+            ElementTextActionResult.NOT_EDITABLE -> {
+                throw InteractionError.NotEditable(elementId ?: "current focus")
+            }
+            ElementTextActionResult.ACTION_FAILED -> {
+                throw InteractionError.ActionFailed("type_text", elementId ?: "current focus")
             }
         }
     }
 
     fun clear(elementId: String) {
-        MainThreadExecutor.runBlocking {
-            val view =
-                ElementInventory.findElement(elementId)
-                    ?: throw InteractionError.ElementNotFound(elementId)
-
-            when (view) {
-                is EditText -> {
-                    view.setText("")
-                }
-
-                else -> {
-                    throw InteractionError.NotEditable(elementId)
-                }
-            }
+        when (ElementInventory.clearText(elementId)) {
+            ElementTextActionResult.SUCCESS -> Unit
+            ElementTextActionResult.NOT_FOUND -> throw InteractionError.ElementNotFound(elementId)
+            ElementTextActionResult.NOT_EDITABLE -> throw InteractionError.NotEditable(elementId)
+            ElementTextActionResult.ACTION_FAILED -> throw InteractionError.ActionFailed("clear_text", elementId)
         }
     }
 
@@ -294,6 +282,11 @@ sealed class InteractionError(
     class NotEditable(
         id: String,
     ) : InteractionError("Element not editable: $id")
+
+    class ActionFailed(
+        action: String,
+        id: String,
+    ) : InteractionError("$action action failed for: $id")
 
     class NotScrollable(
         id: String,

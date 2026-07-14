@@ -15,7 +15,7 @@ jobs:
       - run: cd iOS && swiftlint lint --strict
 
   android:
-    name: ktlint (Android)
+    name: Build and lint (Android)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,8 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
-      - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck
+      - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck :appreveal:assembleDebug :appreveal:lintDebug
+      - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug
 
   flutter:
     name: dart analyze (Flutter)

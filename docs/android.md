@@ -96,6 +96,33 @@ Element IDs are resolved in this order:
 3. View tag: `view.tag` as String
 4. Content description: `view.contentDescription`
 
+#### Jetpack Compose
+
+Compose requires no additional AppReveal dependency or accessibility-service setup. AppReveal reads
+the merged semantics tree exposed by `AndroidComposeView`, so `get_elements`, `get_view_tree`,
+`tap_element`, `tap_text`, `type_text`, and `clear_text` work with Compose controls on API 26+.
+
+Use `Modifier.testTag` for stable IDs:
+
+```kotlin
+OutlinedTextField(
+    value = email,
+    onValueChange = { email = it },
+    modifier = Modifier.testTag("login.email"),
+)
+
+Button(
+    onClick = ::submit,
+    modifier = Modifier.testTag("login.submit"),
+) {
+    Text("Sign in")
+}
+```
+
+AppReveal reads `TestTag` directly; `testTagsAsResourceId` is not required. When a tag is absent,
+content descriptions and visible or editable text provide derived IDs. Compose actions are invoked
+through their semantics callbacks, so the feature does not depend on TalkBack being enabled.
+
 ### 4. Connect and use
 
 ```bash
@@ -167,11 +194,12 @@ interface NetworkObservable {
 
 - Transport: NanoHTTPD (embedded HTTP server)
 - Discovery: NsdManager (Android Network Service Discovery)
-- View hierarchy: ViewGroup tree walking
+- View hierarchy: ViewGroup walking plus dependency-free Jetpack Compose semantics traversal
 - Screenshots: PixelCopy (API 26+) / View.drawToBitmap
 - WebView: android.webkit.WebView + evaluateJavascript
 - Thread model: NanoHTTPD worker threads + MainThreadExecutor for UI access
 
 ## Example app
 
-See [`example/Android/`](../example/Android/) for a full example with 11 screens matching the iOS example, with all framework features integrated.
+See [`example/Android/`](../example/Android/) for a full example with View-based screens plus a
+Compose semantics fixture, with all framework features integrated.
