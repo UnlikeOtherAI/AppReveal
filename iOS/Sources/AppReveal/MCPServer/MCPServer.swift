@@ -2,6 +2,9 @@
 
 import Foundation
 import Network
+#if os(iOS)
+import UIKit
+#endif
 
 #if DEBUG
 
@@ -25,6 +28,9 @@ final class MCPServer {
     private var pendingBonjourPublication: BonjourPublication?
     private var networkMonitor: NWPathMonitor?
     private let networkMonitorQueue = DispatchQueue(label: "ai.unlikeother.appreveal.network-monitor")
+    #if os(iOS)
+    private var appLifecycleObservers: [NSObjectProtocol] = []
+    #endif
     private var networkPathStatus = "unknown"
     private var networkPathInterfaces: [String] = []
     private var lanInterfaces: [AppRevealLANInterface] = []
@@ -70,6 +76,7 @@ final class MCPServer {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
         refreshLANDiagnostics()
         startNetworkPathMonitor()
+        startAppLifecycleObservers()
         logBonjourConfigurationHints()
 
         let nwListener = listener
@@ -113,6 +120,7 @@ final class MCPServer {
         bonjourRetryTask = nil
         networkMonitor?.cancel()
         networkMonitor = nil
+        stopAppLifecycleObservers()
         bonjourService?.stop()
         bonjourService = nil
         bonjourDelegate = nil
@@ -587,6 +595,7 @@ final class MCPServer {
         bonjourRetryTask?.cancel()
         bonjourRetryTask = nil
         bonjourRetryDelaySeconds = nil
+        bonjourRetryAttempt = 0
         print("[AppReveal] Retrying Bonjour now (\(reason)).")
         publishBonjour(port: publication.port, bundleId: publication.bundleId, version: publication.version)
     }
@@ -622,6 +631,37 @@ final class MCPServer {
         }
         networkMonitor = monitor
         monitor.start(queue: networkMonitorQueue)
+    }
+
+    private func startAppLifecycleObservers() {
+        #if os(iOS)
+        guard appLifecycleObservers.isEmpty else { return }
+
+        let didBecomeActive = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshLANDiagnostics()
+                if self.pendingBonjourPublication != nil, self.bonjourService == nil {
+                    self.retryBonjourNow(reason: "app_did_become_active")
+                }
+            }
+        }
+
+        appLifecycleObservers.append(didBecomeActive)
+        #endif
+    }
+
+    private func stopAppLifecycleObservers() {
+        #if os(iOS)
+        for observer in appLifecycleObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        appLifecycleObservers.removeAll()
+        #endif
     }
 
     private func bonjourDiagnosticsPayload() -> [String: Any] {
