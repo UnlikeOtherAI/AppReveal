@@ -2,5 +2,5 @@
 // Update this constant on every release to match the git tag.
 
 enum AppRevealVersion {
-    static let current = "0.10.0"
+    static let current = "0.10.1"
 }

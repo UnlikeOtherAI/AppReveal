@@ -12,7 +12,7 @@ WebView tooling.
 ## Install
 
 ```sh
-dotnet add package AppReveal.Windows --version 0.10.0
+dotnet add package AppReveal.Windows --version 0.10.1
 ```
 
 ## Start in debug builds
