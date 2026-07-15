@@ -13,7 +13,7 @@
 Use the same package as iOS. AppReveal ships as a single Swift package with iOS and macOS platform support.
 
 ```swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.1")
 ```
 
 ## Quick start

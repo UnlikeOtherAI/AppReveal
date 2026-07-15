@@ -1,6 +1,6 @@
 [package]
 name = "appreveal-tauri"
-version = "0.10.0"
+version = "0.10.1"
 edition = "2021"
 authors = ["AppReveal Contributors"]
 license = "MIT"

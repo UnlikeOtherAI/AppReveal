@@ -13,14 +13,14 @@ metadata.
 ## Install
 
 ```sh
-cargo add appreveal-tauri --version 0.10.0
+cargo add appreveal-tauri --version 0.10.1
 ```
 
 For Tauri integration:
 
 ```toml
 [dependencies]
-appreveal-tauri = { version = "0.10.0", features = ["tauri"] }
+appreveal-tauri = { version = "0.10.1", features = ["tauri"] }
 ```
 
 ## Start in debug builds

@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'AppReveal'
-  s.version          = '0.10.0'
+  s.version          = '0.10.1'
   s.summary          = 'Debug-only in-app MCP framework for React Native'
   s.description      = <<-DESC
     AppReveal embeds an MCP server inside your React Native app in debug builds,

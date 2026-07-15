@@ -30,7 +30,7 @@ Full AppReveal integrations share the same core MCP surface across platforms. Fo
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.1")
 ```
 
 ```swift
@@ -51,7 +51,7 @@ To opt out of private APIs entirely (even in debug builds), remove the `swiftSet
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.0")
+.package(url: "https://github.com/UnlikeOtherAI/AppReveal.git", from: "0.10.1")
 ```
 
 ```swift
