@@ -154,6 +154,7 @@ For manual testing you can also paste the printed `AppReveal.sessionURL`, which 
 - `bonjour: "advertising"` means mDNS published successfully.
 - `bonjour: "suppressed"` means AppReveal kept the HTTP listener running but did not advertise because no usable LAN interface/path was visible. Check `bonjourDiagnostics.suppressionReason`.
 - `bonjour: "retrying"` or `"failed"` includes `lastError` and `lastErrorHint`; `-65555` is Bonjour `NoAuth`, usually Local Network permission or missing `NSBonjourServices`.
+- If iOS asks for Local Network permission after `AppReveal.start()`, grant it and return to the app. AppReveal retries Bonjour when the app becomes active again, so you do not need to restart the debug build.
 - `lan.interfaces` lists the process-visible IPv4/IPv6 interfaces and marks which ones are LAN candidates.
 
 ## Integration protocols
