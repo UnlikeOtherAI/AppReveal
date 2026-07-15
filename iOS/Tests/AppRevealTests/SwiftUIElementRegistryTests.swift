@@ -51,6 +51,34 @@ final class SwiftUIElementRegistryTests: XCTestCase {
 
         SwiftUIElementRegistry.shared.unregister(id: id)
     }
+
+    func testFindTappableElementAtPointPrefersSmallestContainingFrame() {
+        let outerId = "test.swiftui.outer.\(UUID().uuidString)"
+        let innerId = "test.swiftui.inner.\(UUID().uuidString)"
+
+        SwiftUIElementRegistry.shared.register(
+            id: outerId,
+            frame: CGRect(x: 0, y: 0, width: 200, height: 200),
+            label: "Outer",
+            type: .button
+        )
+        SwiftUIElementRegistry.shared.register(
+            id: innerId,
+            frame: CGRect(x: 50, y: 50, width: 40, height: 40),
+            label: "Inner",
+            type: .button
+        )
+
+        let element = SwiftUIElementRegistry.shared.findTappableElement(
+            at: CGPoint(x: 60, y: 60),
+            windowIds: []
+        )
+
+        XCTAssertEqual(element?.id, innerId)
+
+        SwiftUIElementRegistry.shared.unregister(id: outerId)
+        SwiftUIElementRegistry.shared.unregister(id: innerId)
+    }
 }
 
 #endif
