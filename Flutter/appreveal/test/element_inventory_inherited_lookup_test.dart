@@ -16,6 +16,8 @@ import 'package:appreveal/src/elements/element_inventory.dart';
 /// Observed in the Hugo POS during the PIN → Home transition while an agent
 /// polled `get_elements`.
 void main() {
+  setUp(() => _BuildProbe.builds = 0);
+
   // `.last`: the test harness wraps the tree in its own View MediaQuery, so the
   // element under test is the innermost match.
   Element findElement<T extends Widget>(WidgetTester tester) =>
