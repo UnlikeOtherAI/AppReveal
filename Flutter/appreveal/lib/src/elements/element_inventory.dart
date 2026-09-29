@@ -129,13 +129,28 @@ class ElementInventory {
     }
   }
 
+  // Inspection runs from an MCP request, outside any build, against elements
+  // the host app owns. It must READ inherited values, never subscribe to them:
+  // `MediaQuery.maybeOf` / `Directionality.maybeOf` are
+  // `dependOnInheritedWidgetOfExactType` lookups and would register the
+  // inspected element as a dependent. On a MediaQuery element that makes it its
+  // own dependent, so the next MediaQuery update fails
+  // `InheritedElement.notifyClients` and leaves the host's tree corrupt
+  // (`_dependents.isEmpty`, error screen). `getInheritedWidgetOfExactType`
+  // resolves the same widget without registering anything.
+  static MediaQueryData? _mediaQueryOf(Element element) =>
+      element.getInheritedWidgetOfExactType<MediaQuery>()?.data;
+
+  static TextDirection? _textDirectionOf(Element element) =>
+      element.getInheritedWidgetOfExactType<Directionality>()?.textDirection;
+
   static Map<String, double> getSafeAreaInsets(Element element) {
-    final mediaQuery = MediaQuery.maybeOf(element);
+    final mediaQuery = _mediaQueryOf(element);
     if (mediaQuery == null) {
       return {'top': 0, 'leading': 0, 'bottom': 0, 'trailing': 0};
     }
 
-    final textDirection = Directionality.maybeOf(element) ?? TextDirection.ltr;
+    final textDirection = _textDirectionOf(element) ?? TextDirection.ltr;
     final padding = mediaQuery.padding;
     final isRtl = textDirection == TextDirection.rtl;
 
@@ -151,7 +166,7 @@ class ElementInventory {
     final frameRect = getFrameRect(element);
     if (frameRect == null) return null;
 
-    final mediaQuery = MediaQuery.maybeOf(element);
+    final mediaQuery = _mediaQueryOf(element);
     if (mediaQuery == null) {
       return {
         'x': frameRect.left,
