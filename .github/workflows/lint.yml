@@ -25,6 +25,10 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
+        with:
+          # The default list includes the legacy 'tools' package, which current
+          # sdkmanager releases no longer provide.
+          packages: platform-tools
       - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck :appreveal:testDebugUnitTest :appreveal:assembleDebug :appreveal:lintDebug
       - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug
 
