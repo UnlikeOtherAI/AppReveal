@@ -30,6 +30,7 @@ internal object ScreenshotCapture {
     )
 
     fun captureScreen(format: String = "png"): CaptureResult? {
+        require(format == "png" || format == "jpeg") { "Unsupported screenshot format: $format" }
         val activity = ScreenResolver.currentActivity ?: return null
         val window = activity.window ?: return null
         val decorView = window.decorView

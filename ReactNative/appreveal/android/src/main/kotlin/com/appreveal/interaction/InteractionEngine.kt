@@ -30,14 +30,15 @@ internal object InteractionEngine {
             val view = ElementInventory.findElement(elementId)
                 ?: throw InteractionError.ElementNotFound(elementId)
 
+            check(ElementInventory.canInteract(view)) { "Element is disabled or hidden: $elementId" }
             if (view.isClickable || view.hasOnClickListeners()) {
-                view.performClick()
+                check(ElementInventory.clickView(view)) { "Click was not handled: $elementId" }
             } else {
                 // Try to find a parent that is clickable
                 var parent: View? = view.parent as? View
                 while (parent != null) {
                     if (parent.isClickable || parent.hasOnClickListeners()) {
-                        parent.performClick()
+                        check(ElementInventory.clickView(parent)) { "Parent cannot be tapped" }
                         return@runBlocking
                     }
                     parent = parent.parent as? View
@@ -59,18 +60,26 @@ internal object InteractionEngine {
     }
 
     private fun tapPoint(x: Float, y: Float) {
-        val activity = ScreenResolver.currentActivity ?: return
-        val decorView = activity.window?.decorView ?: return
+        val activity = ScreenResolver.currentActivity ?: throw InteractionError.NoNavigation()
+        val decorView = activity.window?.decorView ?: throw InteractionError.NoNavigation()
+        val location = IntArray(2)
+        decorView.getLocationOnScreen(location)
+        val localX = x - location[0]
+        val localY = y - location[1]
+        require(x.isFinite() && y.isFinite() && localX >= 0 && localY >= 0 && localX < decorView.width && localY < decorView.height) { "Point is outside the active window" }
 
         val downTime = SystemClock.uptimeMillis()
-        val downEvent = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0)
-        val upEvent = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, x, y, 0)
+        val downEvent = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, localX, localY, 0)
+        val upEvent = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, localX, localY, 0)
 
-        decorView.dispatchTouchEvent(downEvent)
-        decorView.dispatchTouchEvent(upEvent)
-
-        downEvent.recycle()
-        upEvent.recycle()
+        try {
+            val downHandled = decorView.dispatchTouchEvent(downEvent)
+            val upHandled = decorView.dispatchTouchEvent(upEvent)
+            check(downHandled && upHandled) { "Touch was not handled by the active window" }
+        } finally {
+            downEvent.recycle()
+            upEvent.recycle()
+        }
     }
 
     // MARK: - Tap by text
@@ -89,8 +98,9 @@ internal object InteractionEngine {
                     )
                 }
             } else {
+                check(ElementInventory.canInteract(view)) { "Element is disabled or hidden: $text" }
                 if (view.isClickable || view.hasOnClickListeners()) {
-                    view.performClick()
+                    check(ElementInventory.clickView(view)) { "Click was not handled: $text" }
                 } else {
                     // Fall back to center-point tap
                     val location = IntArray(2)
@@ -122,6 +132,7 @@ internal object InteractionEngine {
 
             when (target) {
                 is EditText -> {
+                    if (!ElementInventory.canInteract(target) || target.keyListener == null) throw InteractionError.NotEditable(elementId ?: "current focus")
                     target.requestFocus()
                     target.append(text)
                 }
@@ -137,6 +148,7 @@ internal object InteractionEngine {
 
             when (view) {
                 is EditText -> {
+                    if (!ElementInventory.canInteract(view) || view.keyListener == null) throw InteractionError.NotEditable(elementId)
                     view.setText("")
                 }
                 else -> throw InteractionError.NotEditable(elementId)
@@ -185,9 +197,8 @@ internal object InteractionEngine {
                 ?: throw InteractionError.ElementNotFound(elementId)
 
             val parentScrollView = findParentScrollView(view)
-            if (parentScrollView != null) {
-                view.requestRectangleOnScreen(android.graphics.Rect(0, 0, view.width, view.height), false)
-            }
+            if (parentScrollView == null) throw InteractionError.NotScrollable(elementId)
+            view.requestRectangleOnScreen(android.graphics.Rect(0, 0, view.width, view.height), true)
         }
     }
 
@@ -207,7 +218,10 @@ internal object InteractionEngine {
             if (index < 0 || index >= menu.size()) {
                 throw InteractionError.ElementNotFound("tab_$index")
             }
-            bottomNav.selectedItemId = menu.getItem(index).itemId
+            val item = menu.getItem(index)
+            check(item.isEnabled && item.isVisible) { "Tab is disabled or hidden: $index" }
+            bottomNav.selectedItemId = item.itemId
+            check(bottomNav.selectedItemId == item.itemId) { "Tab selection was rejected: $index" }
         }
     }
 
@@ -253,7 +267,7 @@ internal object InteractionEngine {
     }
 
     private fun findScrollViewIn(view: View): View? {
-        if (isScrollable(view) && view !is EditText) return view
+        if (isScrollable(view) && view !is EditText && ElementInventory.canInteract(view)) return view
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 val found = findScrollViewIn(view.getChildAt(i))

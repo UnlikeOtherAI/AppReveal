@@ -74,8 +74,7 @@
     <fragment
         android:id="@+id/tapCalibrationFragment"
         android:name="com.appreveal.example.screens.TapCalibrationFragment"
-        android:label="Tap Test"
-        tools:layout="@layout/fragment_tap_calibration" />
+        android:label="Tap Test" />
 
     <fragment
         android:id="@+id/navigation_web"

@@ -106,7 +106,7 @@ final class MCPRouter {
     ) throws -> AnyCodable {
         switch outputKind {
         case .jsonText:
-            return try makeTextToolCallResult(result)
+            return try makeTextToolCallResult(result, isError: appRevealToolResultIsError(result))
         case .image:
             return try makeImageToolCallResult(result)
         }

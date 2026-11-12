@@ -53,7 +53,7 @@ internal object NetworkObserverService : NetworkTrafficObserver {
     @Synchronized
     fun recentCalls(limit: Int = 50): List<CapturedRequest> {
         val size = capturedRequests.size
-        val fromIndex = maxOf(0, size - limit)
+        val fromIndex = maxOf(0, size - limit.coerceAtLeast(0))
         return capturedRequests.values.toList().subList(fromIndex, size).toList()
     }
 

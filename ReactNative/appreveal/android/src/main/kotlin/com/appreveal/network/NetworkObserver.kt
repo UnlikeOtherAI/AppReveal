@@ -21,7 +21,7 @@ internal object NetworkObserverService {
     @Synchronized
     fun recentCalls(limit: Int = 50): List<CapturedRequest> {
         val size = capturedRequests.size
-        val fromIndex = maxOf(0, size - limit)
+        val fromIndex = maxOf(0, size - limit.coerceAtLeast(0))
         return capturedRequests.subList(fromIndex, size).toList()
     }
 

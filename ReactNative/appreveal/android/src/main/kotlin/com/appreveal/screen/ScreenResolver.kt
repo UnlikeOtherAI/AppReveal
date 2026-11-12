@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.appreveal.shared.MainThreadExecutor
+import com.appreveal.state.StateBridge
 import com.facebook.react.bridge.ReactApplicationContext
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import java.lang.ref.WeakReference
@@ -61,8 +62,8 @@ internal object ScreenResolver {
                 frameworkType = "react-native",
                 activityChain = buildActivityChain(),
                 activeTab = detectActiveTab(),
-                navigationDepth = 0,
-                presentedModals = emptyList(),
+                navigationDepth = StateBridge.navigationStack.size,
+                presentedModals = StateBridge.presentedModals,
                 confidence = 1.0,
                 source = "explicit",
                 appBarTitle = extractToolbarTitle(currentActivity)
@@ -78,8 +79,8 @@ internal object ScreenResolver {
                 frameworkType = "unknown",
                 activityChain = emptyList(),
                 activeTab = null,
-                navigationDepth = 0,
-                presentedModals = emptyList(),
+                navigationDepth = StateBridge.navigationStack.size,
+                presentedModals = StateBridge.presentedModals,
                 confidence = 0.0,
                 source = "derived",
                 appBarTitle = null
@@ -96,8 +97,8 @@ internal object ScreenResolver {
             frameworkType = "react-native",
             activityChain = buildActivityChain(),
             activeTab = detectActiveTab(),
-            navigationDepth = 0,
-            presentedModals = emptyList(),
+            navigationDepth = StateBridge.navigationStack.size,
+            presentedModals = StateBridge.presentedModals,
             confidence = 0.8,
             source = "derived",
             appBarTitle = extractToolbarTitle(activity)

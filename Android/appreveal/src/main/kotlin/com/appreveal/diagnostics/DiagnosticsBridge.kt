@@ -44,7 +44,7 @@ internal object DiagnosticsBridge {
     ): List<LogEntry> =
         try {
             val pid = android.os.Process.myPid()
-            val args = arrayOf("logcat", "-d", "-t", limit.toString(), "--pid=$pid")
+            val args = arrayOf("logcat", "-d", "-t", limit.coerceIn(1, 1000).toString(), "--pid=$pid")
             val proc = ProcessBuilder(*args).redirectErrorStream(true).start()
             val reader = BufferedReader(InputStreamReader(proc.inputStream))
             val logs = mutableListOf<LogEntry>()
@@ -104,7 +104,7 @@ internal object DiagnosticsBridge {
     @Synchronized
     fun getRecentErrors(limit: Int = 20): List<AppError> {
         val size = recentErrors.size
-        val fromIndex = maxOf(0, size - limit)
+        val fromIndex = maxOf(0, size - limit.coerceAtLeast(0))
         return recentErrors.subList(fromIndex, size).toList()
     }
 

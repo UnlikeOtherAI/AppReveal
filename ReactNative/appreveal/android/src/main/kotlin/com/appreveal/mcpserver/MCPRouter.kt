@@ -89,7 +89,7 @@ internal object MCPRouter {
 
     private fun toolCallResult(toolName: String, handlerResult: JsonElement): JsonObject {
         if (toolName != "screenshot" || !handlerResult.isJsonObject) {
-            return textToolResult(handlerResult)
+            return textToolResult(handlerResult, isError = handlerResult.isToolFailure())
         }
 
         val screenshot = handlerResult.asJsonObject
@@ -129,4 +129,13 @@ internal object MCPRouter {
             if (isError) addProperty("isError", true)
         }
     }
+}
+
+internal fun JsonElement.isToolFailure(): Boolean {
+    if (!isJsonObject) return false
+    val payload = asJsonObject
+    val success = payload.get("success")
+    if (success?.isJsonPrimitive == true && success.asJsonPrimitive.isBoolean && !success.asBoolean) return true
+    val error = payload.get("error") ?: return false
+    return !error.isJsonNull && !(error.isJsonPrimitive && error.asJsonPrimitive.isString && error.asString.isBlank())
 }

@@ -95,43 +95,12 @@ class AppRevealModule(private val reactContext: ReactApplicationContext)
 
     @ReactMethod
     fun setFeatureFlags(flags: ReadableMap) {
-        val map = mutableMapOf<String, Any>()
-        val iterator = flags.keySetIterator()
-        while (iterator.hasNextKey()) {
-            val key = iterator.nextKey()
-            when (flags.getType(key)) {
-                ReadableType.Boolean -> map[key] = flags.getBoolean(key)
-                ReadableType.Number -> map[key] = flags.getDouble(key)
-                ReadableType.String -> map[key] = flags.getString(key) ?: ""
-                else -> {} // Skip complex types
-            }
-        }
-        StateBridge.featureFlagSnapshot = map
+        StateBridge.featureFlagSnapshot = readableMapToMap(flags)
     }
 
     @ReactMethod
     fun captureNetworkCall(call: ReadableMap) {
-        val id = call.getString("id") ?: java.util.UUID.randomUUID().toString()
-        val method = call.getString("method") ?: "GET"
-        val url = call.getString("url") ?: ""
-        val statusCode = if (call.hasKey("statusCode") && !call.isNull("statusCode")) {
-            call.getInt("statusCode")
-        } else null
-        val duration = if (call.hasKey("duration") && !call.isNull("duration")) {
-            call.getDouble("duration")
-        } else null
-        val error = if (call.hasKey("error") && !call.isNull("error")) {
-            call.getString("error")
-        } else null
-
-        val request = CapturedRequest(
-            id = id,
-            method = method,
-            url = url,
-            statusCode = statusCode,
-            duration = duration,
-            error = error
-        )
+        val request = CapturedRequest.fromJs(readableMapToMap(call))
         NetworkObserverService.addCall(request)
     }
 

@@ -1,8 +1,10 @@
 package com.appreveal.elements
 
+import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ListView
@@ -54,15 +56,14 @@ internal object ElementInventory {
         return MainThreadExecutor.runBlocking {
             val view = findElement(id)
             if (view != null) {
+                if (!canInteract(view)) return@runBlocking false
                 if (view.isClickable || view.hasOnClickListeners()) {
-                    view.performClick()
-                    return@runBlocking true
+                    return@runBlocking clickView(view)
                 } else {
                     var parent: View? = view.parent as? View
                     while (parent != null) {
                         if (parent.isClickable || parent.hasOnClickListeners()) {
-                            parent.performClick()
-                            return@runBlocking true
+                            return@runBlocking clickView(parent)
                         }
                         parent = parent.parent as? View
                     }
@@ -140,7 +141,9 @@ internal object ElementInventory {
                     "candidates" to candidates,
                 )
             }
-            tappable.performClick()
+            if (!clickView(tappable)) {
+                return@runBlocking mapOf("success" to false, "error" to "Element cannot be tapped: $text", "candidates" to candidates)
+            }
             mapOf("success" to true, "text" to text, "candidates" to candidates)
         }
     }
@@ -157,6 +160,7 @@ internal object ElementInventory {
             if (elementId != null) {
                 val view = findElement(elementId)
                 if (view is EditText) {
+                    if (!canInteract(view) || view.keyListener == null) return@runBlocking ElementTextActionResult.NOT_EDITABLE
                     view.requestFocus()
                     view.append(text)
                     return@runBlocking ElementTextActionResult.SUCCESS
@@ -174,6 +178,7 @@ internal object ElementInventory {
 
             val focusedView = ScreenResolver.currentActivity?.currentFocus
             if (focusedView is EditText) {
+                if (!canInteract(focusedView) || focusedView.keyListener == null) return@runBlocking ElementTextActionResult.NOT_EDITABLE
                 focusedView.append(text)
                 return@runBlocking ElementTextActionResult.SUCCESS
             }
@@ -194,6 +199,7 @@ internal object ElementInventory {
                     ?: return@runBlocking ElementTextActionResult.NOT_FOUND
             val view = findElement(elementId)
             if (view is EditText) {
+                if (!canInteract(view) || view.keyListener == null) return@runBlocking ElementTextActionResult.NOT_EDITABLE
                 view.setText("")
                 return@runBlocking ElementTextActionResult.SUCCESS
             }
@@ -208,6 +214,15 @@ internal object ElementInventory {
             ).toElementResult()
         }
     }
+
+    fun scrollCompose(
+        id: String?,
+        direction: String,
+    ): Boolean? =
+        MainThreadExecutor.runBlocking {
+            val root = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking null
+            ComposeElementInventory.scroll(root, id, direction, composeSeenIds(root))
+        }
 
     fun findElement(id: String): View? {
         return MainThreadExecutor.runBlocking {
@@ -242,7 +257,7 @@ internal object ElementInventory {
                 return@runBlocking Pair(null, candidates)
             }
 
-            if (occurrence >= matches.size) {
+            if (occurrence !in matches.indices) {
                 return@runBlocking Pair(null, candidates)
             }
 
@@ -260,6 +275,29 @@ internal object ElementInventory {
             dumpNode(decorView, 0, maxDepth)
         }
     }
+
+    internal fun clickView(view: View): Boolean {
+        if (!canInteract(view)) return false
+        if (view is CompoundButton) {
+            val previous = view.isChecked
+            val handled = view.performClick()
+            return handled || view.isChecked != previous
+        }
+        if (view is EditText) return view.requestFocus()
+        return view.performClick()
+    }
+
+    internal fun isVisible(view: View): Boolean {
+        if (!view.isShown || !view.getGlobalVisibleRect(Rect())) return false
+        var ancestor: View? = view
+        while (ancestor != null) {
+            if (ancestor.alpha <= 0f) return false
+            ancestor = ancestor.parent as? View
+        }
+        return true
+    }
+
+    internal fun canInteract(view: View): Boolean = view.isEnabled && isVisible(view)
 
     // -- Text helpers --
 
@@ -412,9 +450,9 @@ internal object ElementInventory {
             type = classifyView(view),
             label = view.contentDescription?.toString(),
             value = extractValue(view),
-            enabled = view.isEnabled && (view.isClickable || view.isFocusable || view is EditText),
-            visible = view.visibility == View.VISIBLE && view.alpha > 0f,
-            tappable = view.isClickable || view.hasOnClickListeners(),
+            enabled = view.isEnabled,
+            visible = isVisible(view),
+            tappable = canInteract(view) && (view.isClickable || view.hasOnClickListeners()),
             frame = frame,
             safeAreaInsets = safeAreaInsets(view, systemInsets),
             safeAreaLayoutGuideFrame = safeAreaLayoutGuideFrame(frame, systemInsets),
@@ -452,6 +490,7 @@ internal object ElementInventory {
 
     private fun classifyView(view: View): ElementType =
         when {
+            view is CompoundButton -> ElementType.TOGGLE
             view is Button || view.javaClass.simpleName.contains("MaterialButton") -> ElementType.BUTTON
             view is EditText -> ElementType.TEXT_FIELD
             view is TextView -> ElementType.LABEL
@@ -473,6 +512,7 @@ internal object ElementInventory {
 
     private fun extractValue(view: View): String? =
         when (view) {
+            is CompoundButton -> view.isChecked.toString()
             is EditText -> {
                 view.text?.toString()
             }
@@ -501,10 +541,11 @@ internal object ElementInventory {
 
     private fun availableActions(view: View): List<String> {
         val actions = mutableListOf<String>()
+        if (!canInteract(view)) return actions
         if (view.isClickable || view.hasOnClickListeners()) {
             actions.add("tap")
         }
-        if (view is EditText) {
+        if (view is EditText && view.keyListener != null) {
             actions.add("type")
             actions.add("clear")
         }
@@ -522,6 +563,7 @@ internal object ElementInventory {
         matchMode: String,
         matches: MutableList<Pair<View, String>>,
     ) {
+        if (!isVisible(view)) return
         if (view is TextView) {
             val viewText = view.text?.toString() ?: ""
             val matched =

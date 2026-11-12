@@ -13,7 +13,7 @@ internal object StateBridge {
     @Volatile var presentedModals: List<String> = emptyList()
 
     // Feature flags — set by AppRevealModule.setFeatureFlags()
-    @Volatile var featureFlagSnapshot: Map<String, Any> = emptyMap()
+    @Volatile var featureFlagSnapshot: Map<String, Any?> = emptyMap()
 
     // App state snapshot — set by AppRevealModule.setState()
     @Volatile var stateSnapshot: Map<String, Any?> = emptyMap()
