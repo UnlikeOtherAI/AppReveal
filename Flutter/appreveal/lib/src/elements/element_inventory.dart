@@ -2,7 +2,11 @@
 
 import 'dart:math' as math;
 
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/cupertino.dart';
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 class ElementInventory {
@@ -40,20 +44,16 @@ class ElementInventory {
   }
 
   /// List all interactive/identified elements on the current screen.
-  List<Map<String, dynamic>> listElements() {
-    final root = WidgetsBinding.instance.rootElement;
-    if (root == null) return [];
+  List<Map<String, dynamic>> listElements() => _inventory().$1;
 
+  (List<Map<String, dynamic>>, Map<String, Element>) _inventory() {
     final results = <Map<String, dynamic>>[];
-    final seen = <String>{};
-    final visited = <Element>{};
-    _collectElements(root, results, seen, visited);
-
-    for (final entry in overlayEntryElements(root)) {
-      _collectElements(entry, results, seen, visited);
+    final targets = <String, Element>{};
+    final root = WidgetsBinding.instance.rootElement;
+    if (root != null) {
+      _collectElements(root, results, <String>{}, <Element>{}, targets);
     }
-
-    return results;
+    return (results, targets);
   }
 
   /// Full widget tree dump for get_view_tree.
@@ -76,17 +76,25 @@ class ElementInventory {
   Element? findElement(String id) {
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) return null;
-    final visited = <Element>{};
-    final seen = <String>{};
-    final found = _findByListedId(root, id, visited, seen);
-    if (found != null) return found;
+    final listed = _inventory().$2[id];
+    if (listed != null) return listed;
 
-    for (final entry in overlayEntryElements(root)) {
-      final result = _findByListedId(entry, id, visited, seen);
-      if (result != null) return result;
+    // Keep keyed, laid-out offscreen children available to scroll_to_element.
+    Element? found;
+    void walk(Element element) {
+      if (found != null || !isActive(element)) return;
+      final key = element.widget.key;
+      final widget = element.widget;
+      if ((key is ValueKey<String> && key.value == id) ||
+          (widget is Semantics && widget.properties.label == id)) {
+        found = element;
+        return;
+      }
+      element.visitChildren(walk);
     }
 
-    return null;
+    walk(root);
+    return found;
   }
 
   // ─── Public Helpers ──────────────────────────────────────────────────────
@@ -120,13 +128,62 @@ class ElementInventory {
       final renderObject = element.renderObject;
       if (renderObject is! RenderBox) return null;
       if (!renderObject.attached) return null;
-      final offset = renderObject.localToGlobal(Offset.zero);
-      final size = renderObject.size;
-      if (size.isEmpty) return null;
-      return offset & size;
+      if (!renderObject.hasSize || renderObject.size.isEmpty) return null;
+      final rect = MatrixUtils.transformRect(
+          renderObject.getTransformTo(null), Offset.zero & renderObject.size);
+      return rect.isFinite && !rect.isEmpty ? rect : null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Exclude retained routes, inactive tabs and fully transparent subtrees.
+  /// These are non-subscribing reads, including when called outside build.
+  static bool isActive(Element element) {
+    if (!element.mounted) return false;
+    bool active = true;
+    final branch = <Widget>{element.widget};
+    bool inspect(Element candidate) {
+      final widget = candidate.widget;
+      if ((widget is Offstage && widget.offstage) ||
+          (widget is Visibility && !widget.visible) ||
+          (widget is Opacity && widget.opacity == 0)) {
+        active = false;
+      }
+      if (candidate != element &&
+          widget is IndexedStack &&
+          (widget.index == null ||
+              (widget.children.any(branch.contains) &&
+                  !branch.contains(widget.children[widget.index!])))) {
+        active = false;
+      }
+      branch.add(widget);
+      return active;
+    }
+
+    inspect(element);
+    if (active) element.visitAncestorElements(inspect);
+    return active;
+  }
+
+  static Rect? visibleRect(Element element) {
+    if (!isActive(element)) return null;
+    var rect = getFrameRect(element);
+    if (rect == null) return null;
+    final view = WidgetsBinding.instance.platformDispatcher.views.first;
+    rect = rect
+        .intersect(Offset.zero & (view.physicalSize / view.devicePixelRatio));
+    RenderObject? child = element.renderObject;
+    while (child != null && child.parent is RenderObject) {
+      final parent = child.parent!;
+      final clip = parent.describeApproximatePaintClip(child);
+      if (clip != null) {
+        rect = rect!.intersect(
+            MatrixUtils.transformRect(parent.getTransformTo(null), clip));
+      }
+      child = parent;
+    }
+    return rect!.isEmpty ? null : rect;
   }
 
   // Inspection runs from an MCP request, outside any build, against elements
@@ -244,6 +301,7 @@ class ElementInventory {
 
   /// Try to extract a label directly from a widget's title/child property.
   static String? _extractDirectLabel(Widget widget) {
+    if (widget is Text) return widget.data ?? widget.textSpan?.toPlainText();
     Widget? labelWidget;
     if (widget is ListTile) {
       labelWidget = widget.title;
@@ -268,8 +326,9 @@ class ElementInventory {
     List<Map<String, dynamic>> results,
     Set<String> seen,
     Set<Element> visited,
+    Map<String, Element> targets,
   ) {
-    if (!visited.add(element)) return;
+    if (!visited.add(element) || !isActive(element)) return;
 
     final info = _describeInteractive(element);
     if (info != null) {
@@ -279,27 +338,15 @@ class ElementInventory {
           info['idSource'] != 'explicit' &&
           _hasLogicalTappableAncestor(element)) {
         element.visitChildren(
-          (child) => _collectElements(child, results, seen, visited),
+          (child) => _collectElements(child, results, seen, visited, targets),
         );
         return;
       }
 
-      var id = info['id'] as String;
-      if (seen.contains(id)) {
-        // Append suffix index to make unique
-        for (int i = 1; i < 100; i++) {
-          final deduped = '${id}_$i';
-          if (!seen.contains(deduped)) {
-            id = deduped;
-            info['id'] = id;
-            break;
-          }
-        }
-      }
-      if (!seen.contains(id)) {
-        seen.add(id);
-        results.add(info);
-      }
+      final id = _dedupeListedId(info['id'] as String, seen);
+      info['id'] = id;
+      targets[id] = element;
+      results.add(info);
     }
 
     // Standalone Semantics nodes
@@ -308,9 +355,10 @@ class ElementInventory {
       final label = widget.properties.label;
       if (label != null && label.isNotEmpty && !seen.contains(label)) {
         final frame = getFrame(element);
-        if (frame != null) {
+        if (frame != null && visibleRect(element) != null) {
           final safeAreaLayoutGuideFrame = getSafeAreaLayoutGuideFrame(element);
           seen.add(label);
+          targets[label] = element;
           results.add({
             'id': label,
             'type': 'semantic',
@@ -330,7 +378,7 @@ class ElementInventory {
     }
 
     element.visitChildren(
-      (child) => _collectElements(child, results, seen, visited),
+      (child) => _collectElements(child, results, seen, visited, targets),
     );
   }
 
@@ -362,7 +410,7 @@ class ElementInventory {
   Map<String, dynamic>? _describeInteractive(Element element) {
     final widget = element.widget;
     final frame = getFrame(element);
-    if (frame == null) return null;
+    if (frame == null || visibleRect(element) == null) return null;
 
     String? explicitId;
     String type = 'view';
@@ -422,10 +470,13 @@ class ElementInventory {
       type = 'textField';
       tappable = true;
       label = widget.decoration?.labelText ?? widget.decoration?.hintText;
-      actions = ['tap', 'type', 'clear'];
+      enabled = widget.enabled ?? true;
+      value = widget.obscureText ? '' : widget.controller?.text;
+      actions = widget.readOnly ? ['tap'] : ['tap', 'type', 'clear'];
     } else if (widget is TextFormField) {
       type = 'textField';
       tappable = true;
+      enabled = widget.enabled;
       actions = ['tap', 'type', 'clear'];
     } else if (widget is Checkbox) {
       type = 'checkbox';
@@ -586,7 +637,7 @@ class ElementInventory {
 
     // Widget-specific properties
     if (widget is Text) {
-      node['text'] = widget.data ?? '';
+      node['text'] = widget.data ?? widget.textSpan?.toPlainText() ?? '';
     } else if (widget is TextField) {
       if (widget.decoration?.hintText != null) {
         node['placeholder'] = widget.decoration!.hintText;
@@ -619,45 +670,13 @@ class ElementInventory {
         typeName.contains('SegmentedButton');
   }
 
-  Element? _findByListedId(
-    Element element,
-    String id,
-    Set<Element> visited,
-    Set<String> seen,
-  ) {
-    if (!visited.add(element)) return null;
-
-    final info = _describeInteractive(element);
-    if (info != null) {
-      final resolvedId = _dedupeListedId(info['id'] as String, seen);
-      if (resolvedId == id) return element;
-    }
-
-    final key = element.widget.key;
-    if (key is ValueKey<String> && key.value == id) return element;
-
-    if (element.widget is Semantics) {
-      final label = (element.widget as Semantics).properties.label;
-      if (label == id) return element;
-    }
-
-    Element? found;
-    element.visitChildren((child) {
-      found ??= _findByListedId(child, id, visited, seen);
-    });
-    return found;
-  }
-
   String _dedupeListedId(String id, Set<String> seen) {
     if (seen.add(id)) return id;
 
-    for (var i = 1; i < 100; i++) {
-      final candidate = '${id}_$i';
-      if (seen.add(candidate)) {
-        return candidate;
-      }
+    var index = 1;
+    while (!seen.add('${id}_$index')) {
+      index++;
     }
-
-    return id;
+    return '${id}_$index';
   }
 }

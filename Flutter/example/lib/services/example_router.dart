@@ -1,31 +1,16 @@
 import 'package:appreveal/appreveal.dart';
 
+/// Report the Navigator that the example actually uses.
 class ExampleRouter implements NavigationProviding {
   static final instance = ExampleRouter._();
   ExampleRouter._();
 
-  final _routeStack = <String>['/catalog'];
-  final _modalStack = <String>[];
-
-  void push(String route) {
-    _routeStack.add(route);
-  }
-
-  void pop() {
-    if (_routeStack.length > 1) _routeStack.removeLast();
-  }
-
-  void presentModal(String route) => _modalStack.add(route);
-  void dismissModal() {
-    if (_modalStack.isNotEmpty) _modalStack.removeLast();
-  }
+  @override
+  String get currentRoute => AppReveal.navigatorObserver.currentRoute;
 
   @override
-  String get currentRoute => _routeStack.last;
+  List<String> get navigationStack => AppReveal.navigatorObserver.routeStack;
 
   @override
-  List<String> get navigationStack => List.unmodifiable(_routeStack);
-
-  @override
-  List<String> get presentedModals => List.unmodifiable(_modalStack);
+  List<String> get presentedModals => AppReveal.navigatorObserver.presentedModals;
 }

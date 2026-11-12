@@ -42,6 +42,13 @@ class MCPServer {
   Future<void> _handleRequest(HttpRequest request) async {
     request.response.headers.contentType = ContentType.json;
     _applyCors(request);
+    final origins = request.headers['origin'];
+    if (origins != null &&
+        (origins.length != 1 || !_isLoopbackOrigin(origins.single))) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      return;
+    }
 
     if (request.method == 'OPTIONS') {
       request.response.statusCode = HttpStatus.noContent;
@@ -82,7 +89,17 @@ class MCPServer {
       final body = await utf8.decoder.bind(request).join();
       final decoded = jsonDecode(body);
       if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('JSON-RPC payload must be an object');
+        request.response.statusCode = HttpStatus.badRequest;
+        request.response.write(jsonEncode({
+          'jsonrpc': '2.0',
+          'id': null,
+          'error': {
+            'code': -32600,
+            'message': 'JSON-RPC payload must be an object'
+          }
+        }));
+        await request.response.close();
+        return;
       }
       final expectsResponse = decoded.containsKey('id');
       final response = await MCPRouter.shared.handle(decoded);
@@ -133,10 +150,11 @@ class MCPServer {
     final queryToken = request.uri.queryParameters[_sessionTokenQueryName];
     if (_constantTimeEquals(queryToken, expected)) return true;
 
-    final headerToken = request.headers.value(_sessionTokenHeaderName);
+    final headerToken = _singleHeader(request, _sessionTokenHeaderName);
     if (_constantTimeEquals(headerToken, expected)) return true;
 
-    final bearerToken = _readBearerToken(request.headers.value('authorization'));
+    final bearerToken =
+        _readBearerToken(_singleHeader(request, 'authorization'));
     return _constantTimeEquals(bearerToken, expected);
   }
 
@@ -164,7 +182,7 @@ class MCPServer {
   }
 
   void _applyCors(HttpRequest request) {
-    final origin = request.headers.value('origin');
+    final origin = _singleHeader(request, 'origin');
     if (origin == null || !_isLoopbackOrigin(origin)) return;
 
     request.response.headers
@@ -177,16 +195,26 @@ class MCPServer {
       ..set('Vary', 'Origin');
   }
 
+  String? _singleHeader(HttpRequest request, String name) {
+    final values = request.headers[name];
+    return values?.length == 1 ? values!.single : null;
+  }
+
   bool _isLoopbackOrigin(String origin) {
     final uri = Uri.tryParse(origin);
-    final host = uri?.host.toLowerCase().replaceAll(RegExp(r'\.$'), '');
-    return host != null &&
-        (uri!.scheme == 'http' || uri.scheme == 'https') &&
-        (host == 'localhost' ||
-            host.endsWith('.localhost') ||
-            host == '127.0.0.1' ||
-            host.startsWith('127.') ||
-            host == '::1');
+    if (uri == null ||
+        !['http', 'https'].contains(uri.scheme) ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        (uri.path.isNotEmpty && uri.path != '/')) {
+      return false;
+    }
+    final host = uri.host.toLowerCase().replaceAll(RegExp(r'\.$'), '');
+    final address = InternetAddress.tryParse(host);
+    return host == 'localhost' ||
+        host.endsWith('.localhost') ||
+        (address?.isLoopback ?? false);
   }
 
   String _makeSessionToken() {

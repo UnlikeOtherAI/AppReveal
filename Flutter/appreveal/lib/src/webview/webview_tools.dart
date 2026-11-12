@@ -1,5 +1,7 @@
 // Registers all 21 WebView MCP tools.
 
+import 'dart:convert';
+
 import 'dom_serializer.dart';
 import 'webview_bridge.dart';
 import '../mcp/mcp_router.dart';
@@ -12,7 +14,8 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_webviews',
-    description: 'List all registered WebView instances with URL, title, and navigation state',
+    description:
+        'List all registered WebView instances with URL, title, and navigation state',
     inputSchema: {'type': 'object', 'properties': <String, dynamic>{}},
     handler: (_) async {
       final info = await bridge.webViewInfo();
@@ -24,14 +27,27 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_dom_tree',
-    description: 'Get the DOM tree of a web view. Returns full or partial DOM structure as JSON.',
+    description:
+        'Get the DOM tree of a web view. Returns full or partial DOM structure as JSON.',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
-        'root': {'type': 'string', 'description': 'CSS selector for subtree root (default: body)'},
-        'max_depth': {'type': 'integer', 'description': 'Max tree depth (default: 30)'},
-        'visible_only': {'type': 'boolean', 'description': 'Only visible elements (default: false)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
+        'root': {
+          'type': 'string',
+          'description': 'CSS selector for subtree root (default: body)'
+        },
+        'max_depth': {
+          'type': 'integer',
+          'description': 'Max tree depth (default: 30)'
+        },
+        'visible_only': {
+          'type': 'boolean',
+          'description': 'Only visible elements (default: false)'
+        },
       },
     },
     handler: (params) async {
@@ -41,7 +57,8 @@ void registerWebViewTools() {
         visibleOnly: params?['visible_only'] as bool? ?? false,
       );
       try {
-        final result = await bridge.evaluate(js: js, webViewId: params?['webview_id'] as String?);
+        final result = await bridge.evaluate(
+            js: js, webViewId: params?['webview_id'] as String?);
         return {'dom': result};
       } catch (e) {
         return {'error': e.toString()};
@@ -53,11 +70,15 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_dom_interactive',
-    description: 'Get all interactive DOM elements (inputs, buttons, links, selects) with their attributes, values, and selectors',
+    description:
+        'Get all interactive DOM elements (inputs, buttons, links, selects) with their attributes, values, and selectors',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -66,7 +87,7 @@ void registerWebViewTools() {
           js: DOMSerializer.interactiveJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -77,23 +98,32 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'query_dom',
-    description: 'Query the DOM with a CSS selector. Returns matching elements with tag, text, attributes, rect.',
+    description:
+        'Query the DOM with a CSS selector. Returns matching elements with tag, text, attributes, rect.',
     inputSchema: {
       'type': 'object',
       'properties': {
         'selector': {'type': 'string', 'description': 'CSS selector'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
-        'limit': {'type': 'integer', 'description': 'Max results (default: 50)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
+        'limit': {
+          'type': 'integer',
+          'description': 'Max results (default: 50)'
+        },
       },
       'required': ['selector'],
     },
     handler: (params) async {
       final selector = params?['selector'] as String?;
       if (selector == null) return {'error': 'selector required'};
-      final js = DOMSerializer.queryJS(selector, limit: params?['limit'] as int? ?? 50);
+      final js = DOMSerializer.queryJS(selector,
+          limit: params?['limit'] as int? ?? 50);
       try {
-        final result = await bridge.evaluate(js: js, webViewId: params?['webview_id'] as String?);
-        return {'result': result};
+        final result = await bridge.evaluate(
+            js: js, webViewId: params?['webview_id'] as String?);
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -109,8 +139,14 @@ void registerWebViewTools() {
       'type': 'object',
       'properties': {
         'text': {'type': 'string', 'description': 'Text to search for'},
-        'tag': {'type': 'string', 'description': "Optional tag filter (e.g. 'button', 'a')"},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'tag': {
+          'type': 'string',
+          'description': "Optional tag filter (e.g. 'button', 'a')"
+        },
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['text'],
     },
@@ -119,8 +155,9 @@ void registerWebViewTools() {
       if (text == null) return {'error': 'text required'};
       final js = DOMSerializer.findTextJS(text, tag: params?['tag'] as String?);
       try {
-        final result = await bridge.evaluate(js: js, webViewId: params?['webview_id'] as String?);
-        return {'result': result};
+        final result = await bridge.evaluate(
+            js: js, webViewId: params?['webview_id'] as String?);
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -136,7 +173,10 @@ void registerWebViewTools() {
       'type': 'object',
       'properties': {
         'selector': {'type': 'string', 'description': 'CSS selector'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['selector'],
     },
@@ -148,7 +188,7 @@ void registerWebViewTools() {
           js: DOMSerializer.clickJS(selector),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -165,21 +205,30 @@ void registerWebViewTools() {
       'properties': {
         'selector': {'type': 'string', 'description': 'CSS selector'},
         'text': {'type': 'string', 'description': 'Text to type'},
-        'clear': {'type': 'boolean', 'description': 'Clear field first (default: false)'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'clear': {
+          'type': 'boolean',
+          'description': 'Clear field first (default: false)'
+        },
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['selector', 'text'],
     },
     handler: (params) async {
       final selector = params?['selector'] as String?;
       final text = params?['text'] as String?;
-      if (selector == null || text == null) return {'error': 'selector and text required'};
+      if (selector == null || text == null) {
+        return {'error': 'selector and text required'};
+      }
       try {
         final result = await bridge.evaluate(
-          js: DOMSerializer.typeJS(selector, text, clear: params?['clear'] as bool? ?? false),
+          js: DOMSerializer.typeJS(selector, text,
+              clear: params?['clear'] as bool? ?? false),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -194,22 +243,30 @@ void registerWebViewTools() {
     inputSchema: {
       'type': 'object',
       'properties': {
-        'selector': {'type': 'string', 'description': 'CSS selector for the select element'},
+        'selector': {
+          'type': 'string',
+          'description': 'CSS selector for the select element'
+        },
         'value': {'type': 'string', 'description': 'Option value to select'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['selector', 'value'],
     },
     handler: (params) async {
       final selector = params?['selector'] as String?;
       final value = params?['value'] as String?;
-      if (selector == null || value == null) return {'error': 'selector and value required'};
+      if (selector == null || value == null) {
+        return {'error': 'selector and value required'};
+      }
       try {
         final result = await bridge.evaluate(
           js: DOMSerializer.selectJS(selector, value),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -226,20 +283,25 @@ void registerWebViewTools() {
       'properties': {
         'selector': {'type': 'string', 'description': 'CSS selector'},
         'checked': {'type': 'boolean', 'description': 'Desired checked state'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['selector', 'checked'],
     },
     handler: (params) async {
       final selector = params?['selector'] as String?;
       final checked = params?['checked'] as bool?;
-      if (selector == null || checked == null) return {'error': 'selector and checked required'};
+      if (selector == null || checked == null) {
+        return {'error': 'selector and checked required'};
+      }
       try {
         final result = await bridge.evaluate(
           js: DOMSerializer.toggleJS(selector, checked),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -255,7 +317,10 @@ void registerWebViewTools() {
       'type': 'object',
       'properties': {
         'selector': {'type': 'string', 'description': 'CSS selector'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['selector'],
     },
@@ -267,7 +332,7 @@ void registerWebViewTools() {
           js: DOMSerializer.scrollToJS(selector),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -282,8 +347,14 @@ void registerWebViewTools() {
     inputSchema: {
       'type': 'object',
       'properties': {
-        'javascript': {'type': 'string', 'description': 'JavaScript to evaluate'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'javascript': {
+          'type': 'string',
+          'description': 'JavaScript to evaluate'
+        },
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['javascript'],
     },
@@ -291,8 +362,9 @@ void registerWebViewTools() {
       final js = params?['javascript'] as String?;
       if (js == null) return {'error': 'javascript required'};
       try {
-        final result = await bridge.evaluate(js: js, webViewId: params?['webview_id'] as String?);
-        return {'result': result};
+        final result = await bridge.evaluate(
+            js: js, webViewId: params?['webview_id'] as String?);
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -308,7 +380,10 @@ void registerWebViewTools() {
       'type': 'object',
       'properties': {
         'url': {'type': 'string', 'description': 'URL to navigate to'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
       'required': ['url'],
     },
@@ -334,7 +409,10 @@ void registerWebViewTools() {
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -354,13 +432,18 @@ void registerWebViewTools() {
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
       final controller = bridge.resolve(id: params?['webview_id'] as String?);
       if (controller == null) return {'error': 'WebView not found'};
-      if (!await controller.canGoForward()) return {'error': 'Cannot go forward'};
+      if (!await controller.canGoForward()) {
+        return {'error': 'Cannot go forward'};
+      }
       await controller.goForward();
       return {'success': true};
     },
@@ -370,11 +453,15 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_dom_links',
-    description: 'Get all links on the page — just text and href. Minimal tokens.',
+    description:
+        'Get all links on the page — just text and href. Minimal tokens.',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -383,7 +470,7 @@ void registerWebViewTools() {
           js: DOMSerializer.linksJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -394,19 +481,28 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_dom_text',
-    description: 'Get visible text content of the page stripped of all markup. Optionally scope to a CSS selector. Minimal tokens.',
+    description:
+        'Get visible text content of the page stripped of all markup. Optionally scope to a CSS selector. Minimal tokens.',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'selector': {'type': 'string', 'description': 'CSS selector to scope text extraction (default: body)'},
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'selector': {
+          'type': 'string',
+          'description': 'CSS selector to scope text extraction (default: body)'
+        },
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
-      final js = DOMSerializer.textContentJS(selector: params?['selector'] as String?);
+      final js =
+          DOMSerializer.textContentJS(selector: params?['selector'] as String?);
       try {
-        final result = await bridge.evaluate(js: js, webViewId: params?['webview_id'] as String?);
-        return {'result': result};
+        final result = await bridge.evaluate(
+            js: js, webViewId: params?['webview_id'] as String?);
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -417,11 +513,15 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_dom_forms',
-    description: 'Get all forms and their fields with types, names, values, options, and selectors. Includes pages without <form> tags.',
+    description:
+        'Get all forms and their fields with types, names, values, options, and selectors. Includes pages without <form> tags.',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -430,7 +530,7 @@ void registerWebViewTools() {
           js: DOMSerializer.formsJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -441,11 +541,15 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_dom_headings',
-    description: 'Get all headings (h1-h6) for page structure overview. Minimal tokens.',
+    description:
+        'Get all headings (h1-h6) for page structure overview. Minimal tokens.',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -454,7 +558,7 @@ void registerWebViewTools() {
           js: DOMSerializer.headingsJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -469,7 +573,10 @@ void registerWebViewTools() {
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -478,7 +585,7 @@ void registerWebViewTools() {
           js: DOMSerializer.imagesJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -493,7 +600,10 @@ void registerWebViewTools() {
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -502,7 +612,7 @@ void registerWebViewTools() {
           js: DOMSerializer.tablesJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -513,11 +623,15 @@ void registerWebViewTools() {
 
   router.register(MCPToolDefinition(
     name: 'get_dom_summary',
-    description: 'Get a compact page summary: title, meta, headings (h1-h3), element counts (links, images, inputs, buttons), and form overview. Cheapest way to understand a page.',
+    description:
+        'Get a compact page summary: title, meta, headings (h1-h3), element counts (links, images, inputs, buttons), and form overview. Cheapest way to understand a page.',
     inputSchema: {
       'type': 'object',
       'properties': {
-        'webview_id': {'type': 'string', 'description': 'Web view ID (default: first registered)'},
+        'webview_id': {
+          'type': 'string',
+          'description': 'Web view ID (default: first registered)'
+        },
       },
     },
     handler: (params) async {
@@ -526,10 +640,22 @@ void registerWebViewTools() {
           js: DOMSerializer.summaryJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return {'result': result};
+        return _webResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
     },
   ));
+}
+
+Map<String, dynamic> _webResult(String result) {
+  try {
+    final decoded = jsonDecode(result);
+    if (decoded is Map<String, dynamic> && MCPRouter.isToolFailure(decoded)) {
+      return decoded;
+    }
+  } on FormatException {
+    // web_evaluate also supports plain strings.
+  }
+  return {'result': result};
 }

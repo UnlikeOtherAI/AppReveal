@@ -1,14 +1,13 @@
 import 'package:appreveal/appreveal.dart';
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
-import 'screens/catalog_screen.dart';
 import 'screens/product_detail_screen.dart';
 import 'screens/orders_list_screen.dart';
 import 'screens/order_detail_screen.dart';
-import 'screens/cart_screen.dart';
-import 'screens/profile_screen.dart';
 import 'screens/edit_profile_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/webview_demo_screen.dart';
