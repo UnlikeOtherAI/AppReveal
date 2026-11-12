@@ -30,36 +30,42 @@ final class MacOSInteractionEngine {
             }
 
             let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
-            tap(point: view.convert(point, to: nil), windowId: windowId)
-            return
+            if tap(point: view.convert(point, to: nil), windowId: windowId) { return }
+            throw InteractionError.notTappable(elementId)
         }
 
         let windowIds = candidateWindowIds(windowId: windowId)
+        guard !windowIds.isEmpty else { throw InteractionError.elementNotFound(elementId) }
         if let entry = SwiftUIElementRegistry.shared.findElement(byId: elementId, windowIds: windowIds) {
+            guard entry.enabled else { throw InteractionError.notTappable(elementId) }
             if SwiftUIElementRegistry.shared.activate(id: entry.id) {
                 return
             }
-            tap(point: entry.frame.center, windowId: windowId)
-            return
+            if tap(point: entry.frame.center, windowId: windowId) { return }
+            throw InteractionError.notTappable(elementId)
         }
 
         throw InteractionError.elementNotFound(elementId)
     }
 
-    func tap(point: CGPoint, windowId: String? = nil) {
-        guard let window = MacOSWindowProvider.shared.resolve(windowId: windowId)?.nativeWindow,
-              let contentView = window.contentView else {
-            return
+    /// Points use AppKit window coordinates (origin at the bottom left), as in get_elements.
+    @discardableResult
+    func tap(point: CGPoint, windowId: String? = nil) -> Bool {
+        guard point.x.isFinite, point.y.isFinite,
+              let window = MacOSWindowProvider.shared.resolve(windowId: windowId)?.nativeWindow,
+              let contentView = window.contentView,
+              contentView.convert(contentView.bounds, to: nil).contains(point) else {
+            return false
         }
 
-        let localPoint = contentView.convert(point, from: nil)
-        guard let hitView = contentView.hitTest(localPoint) else { return }
-
-        if performClick(on: hitView) {
-            return
-        }
-
-        _ = performTableSelection(for: hitView)
+        // NSView.hitTest takes coordinates in the receiver's superview, not its bounds.
+        let parentPoint = contentView.superview?.convert(point, from: nil) ?? point
+        guard let hitView = contentView.hitTest(parentPoint) else { return false }
+        if let ref = MacOSWindowProvider.shared.resolve(windowId: windowId),
+           let entry = SwiftUIElementRegistry.shared.findTappableElement(at: point, windowIds: [ref.id]),
+           SwiftUIElementRegistry.shared.activate(id: entry.id) { return true }
+        if performClick(on: hitView) { return true }
+        return performTableSelection(for: hitView, windowPoint: point)
     }
 
     // MARK: - Text
@@ -67,39 +73,33 @@ final class MacOSInteractionEngine {
     func type(text: String, elementId: String?, windowId: String? = nil) throws {
         let target = try resolveEditableTarget(elementId: elementId, windowId: windowId)
 
-        if let textField = target as? NSTextField {
-            textField.stringValue += text
-            textField.currentEditor()?.selectedRange = NSRange(location: textField.stringValue.count, length: 0)
-            textField.sendAction(textField.action, to: textField.target)
-            return
-        }
-
-        if let textView = target as? NSTextView {
-            textView.insertText(text, replacementRange: textView.selectedRange())
-            return
-        }
-
-        throw InteractionError.notEditable(elementId ?? "current responder")
+        let editor = try editableTextView(for: target, id: elementId ?? "current responder")
+        editor.insertText(text, replacementRange: editor.selectedRange())
     }
 
     func clear(elementId: String, windowId: String? = nil) throws {
-        guard let view = MacOSElementInventory.shared.findElement(byId: elementId, windowId: windowId) else {
-            throw InteractionError.elementNotFound(elementId)
-        }
+        let target = try resolveEditableTarget(elementId: elementId, windowId: windowId)
+        let editor = try editableTextView(for: target, id: elementId)
+        editor.insertText("", replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
+    }
 
-        if let textField = view as? NSTextField {
-            textField.stringValue = ""
-            textField.currentEditor()?.string = ""
-            textField.sendAction(textField.action, to: textField.target)
-            return
+    private func editableTextView(for target: AnyObject, id: String) throws -> NSTextView {
+        if let field = target as? NSTextField {
+            guard field.isEnabled, field.isEditable else { throw InteractionError.notEditable(id) }
+            if let editor = field.currentEditor() as? NSTextView { return editor }
+            guard field.window?.makeFirstResponder(field) == true,
+                  let editor = field.currentEditor() as? NSTextView else {
+                throw InteractionError.notEditable(id)
+            }
+            return editor
         }
-
-        if let textView = view as? NSTextView {
-            textView.string = ""
-            return
+        if let editor = target as? NSTextView, editor.isEditable {
+            if editor.isFieldEditor, let field = editor.delegate as? NSTextField {
+                guard field.isEnabled, field.isEditable else { throw InteractionError.notEditable(id) }
+            }
+            return editor
         }
-
-        throw InteractionError.notEditable(elementId)
+        throw InteractionError.notEditable(id)
     }
 
     // MARK: - Scroll
@@ -181,31 +181,20 @@ final class MacOSInteractionEngine {
             throw InteractionError.noNavigation
         }
 
-        var current = findTopViewController(from: root)
-
-        while let parent = current.parent {
-            if let tabController = parent as? NSTabViewController,
-               let currentIndex = tabController.children.firstIndex(where: { $0 === current }),
-               currentIndex > 0 {
-                tabController.selectedTabViewItemIndex = currentIndex - 1
-                return
-            }
-
-            if let currentIndex = parent.children.firstIndex(where: { $0 === current }),
-               currentIndex > 0 {
-                ref.nativeWindow.contentViewController = parent.children[currentIndex - 1]
-                return
-            }
-
-            current = parent
-        }
-
+        // AppKit has no generic navigation stack. Siblings in a split view or tabs
+        // are not back-stack entries; replacing the window root destroys the app layout.
+        _ = root
         throw InteractionError.noNavigation
     }
 
     func dismissModal(windowId: String? = nil) throws {
         guard let ref = MacOSWindowProvider.shared.resolve(windowId: windowId) else {
             throw InteractionError.noModal
+        }
+
+        if let parent = ref.nativeWindow.sheetParent {
+            parent.endSheet(ref.nativeWindow)
+            return
         }
 
         if let sheet = ref.nativeWindow.attachedSheet {
@@ -224,42 +213,63 @@ final class MacOSInteractionEngine {
     // MARK: - Helpers
 
     private func performClick(on view: NSView) -> Bool {
-        if let button = findAncestor(of: view, matching: { $0 is NSButton }) as? NSButton {
-            button.performClick(nil)
-            return true
+        guard !view.isHiddenOrHasHiddenAncestor else { return false }
+        if let control = findAncestor(of: view, matching: { candidate in
+            candidate is NSControl && !(candidate is NSTableView) &&
+                !((candidate as? NSTextField).map { !$0.isEditable } ?? false)
+        }) as? NSControl {
+            guard control.isEnabled else { return false }
+            if let field = control as? NSTextField {
+                return field.window?.makeFirstResponder(field) == true
+            }
+            if let toggle = control as? NSSwitch {
+                toggle.state = toggle.state == .on ? .off : .on
+                _ = toggle.sendAction(toggle.action, to: toggle.target)
+                return true
+            }
+            if let button = control as? NSButton {
+                button.performClick(nil)
+                return true
+            }
+            // Generic NSControl.performClick can silently do nothing (sliders, tables).
+            return control.accessibilityPerformPress()
         }
-
-        if let control = findAncestor(of: view, matching: { $0 is NSControl }) as? NSControl {
-            control.performClick(nil)
-            return true
-        }
-
         return false
     }
 
-    private func performTableSelection(for view: NSView) -> Bool {
-        guard let tableView = findAncestorTableView(from: view) else {
-            return false
+    private func performTableSelection(for view: NSView, windowPoint: CGPoint? = nil) -> Bool {
+        guard let tableView = findAncestorTableView(from: view), tableView.isEnabled else { return false }
+        let row: Int
+        if let point = windowPoint {
+            row = tableView.row(at: tableView.convert(point, from: nil))
+        } else {
+            row = tableView.row(for: view)
         }
-
-        let row = tableView === view ? tableView.selectedRow : tableView.row(for: view)
-        guard row >= 0 else { return false }
+        guard row >= 0, row < tableView.numberOfRows,
+              tableView.delegate?.tableView?(tableView, shouldSelectRow: row) != false else { return false }
 
         tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        guard tableView.selectedRowIndexes.contains(row) else { return false }
         tableView.scrollRowToVisible(row)
         if let action = tableView.action {
             NSApp.sendAction(action, to: tableView.target, from: tableView)
         }
-        tableView.delegate?.tableViewSelectionDidChange?(Notification(name: NSTableView.selectionDidChangeNotification, object: tableView))
+        // selectRowIndexes posts the selection notification itself. Calling the delegate
+        // again duplicates navigation and any side effects attached to selection.
         return true
     }
 
     private func resolveEditableTarget(elementId: String?, windowId: String?) throws -> AnyObject {
         if let id = elementId {
-            guard let target = MacOSElementInventory.shared.findElement(byId: id, windowId: windowId) else {
-                throw InteractionError.elementNotFound(id)
+            if let target = MacOSElementInventory.shared.findElement(byId: id, windowId: windowId) { return target }
+            if let ref = MacOSWindowProvider.shared.resolve(windowId: windowId),
+               let contentView = ref.contentView,
+               let entry = SwiftUIElementRegistry.shared.findElement(byId: id, windowIds: [ref.id]),
+               entry.enabled, entry.type == .textField,
+               let target = findEditableView(in: contentView, at: entry.frame.center) {
+                return target
             }
-            return target
+            throw InteractionError.elementNotFound(id)
         }
 
         guard let window = MacOSWindowProvider.shared.resolve(windowId: windowId)?.nativeWindow else {
@@ -275,6 +285,17 @@ final class MacOSInteractionEngine {
         }
 
         throw InteractionError.notEditable("current responder")
+    }
+
+    private func findEditableView(in view: NSView, at windowPoint: CGPoint) -> NSView? {
+        guard !view.isHiddenOrHasHiddenAncestor,
+              view.convert(view.bounds, to: nil).contains(windowPoint) else { return nil }
+        if let field = view as? NSTextField, field.isEditable, field.isEnabled { return field }
+        if let editor = view as? NSTextView, editor.isEditable { return editor }
+        for child in view.subviews {
+            if let target = findEditableView(in: child, at: windowPoint) { return target }
+        }
+        return nil
     }
 
     private func findFirstScrollView(windowId: String?) -> NSScrollView? {
@@ -368,7 +389,7 @@ final class MacOSInteractionEngine {
         if let ref = MacOSWindowProvider.shared.resolve(windowId: windowId) {
             return Set([ref.id])
         }
-        return Set(MacOSWindowProvider.shared.allWindows().map(\.id))
+        return windowId == nil ? Set(MacOSWindowProvider.shared.allWindows().map(\.id)) : []
     }
 }
 

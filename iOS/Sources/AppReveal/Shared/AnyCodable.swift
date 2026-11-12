@@ -74,6 +74,7 @@ public struct AnyCodable: Codable, Sendable {
         case let int as Int:
             return int
         case let double as Double:
+            guard double.isFinite, double >= Double(Int.min), double < Double(Int.max) else { return nil }
             return Int(double)
         case let number as NSNumber:
             return number.intValue

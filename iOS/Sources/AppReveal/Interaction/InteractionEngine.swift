@@ -14,6 +14,7 @@ enum ScrollDirection: String, Codable {
 
 enum InteractionError: LocalizedError {
     case elementNotFound(String)
+    case notTappable(String)
     case notEditable(String)
     case notScrollable(String)
     case noScrollView
@@ -23,6 +24,7 @@ enum InteractionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .elementNotFound(let id): return "Element not found: \(id)"
+        case .notTappable(let id): return "Element not tappable: \(id)"
         case .notEditable(let id): return "Element not editable: \(id)"
         case .notScrollable(let id): return "Element not scrollable: \(id)"
         case .noScrollView: return "No scroll view found"
@@ -79,6 +81,7 @@ final class InteractionEngine {
 
     @discardableResult
     func tap(point: CGPoint, windowId: String? = nil) -> Bool {
+        guard point.x.isFinite, point.y.isFinite else { return false }
         postTapPoint(point)
 
         for ref in candidateWindows(windowId: windowId) {
@@ -436,6 +439,9 @@ final class InteractionEngine {
             // and the full fallback stack. postTapPoint is called inside tap(point:).
             return tap(point: point, windowId: windowId)
         case .appReveal(let id, let point):
+            guard SwiftUIElementRegistry.shared.findElement(
+                byId: id, windowIds: Set(candidateWindows(windowId: windowId).map(\.id))
+            )?.enabled == true else { return false }
             if SwiftUIElementRegistry.shared.activate(id: id) {
                 if postPoint {
                     postTapPoint(point)
@@ -447,21 +453,26 @@ final class InteractionEngine {
     }
 
     private func performTap(onView view: UIView?, at point: CGPoint) -> Bool {
-        guard let view else { return false }
+        guard let view, !view.isHidden, view.alpha > 0 else { return false }
 
         if let control = findAncestorControl(from: view) {
+            guard control.isEnabled else { return false }
             // UITextField/UITextView respond to tap by becoming first responder.
             // sendActions(for:) does not trigger focus — call becomeFirstResponder directly.
             if let textInput = control as? UITextField {
-                textInput.becomeFirstResponder()
-                return true
+                return textInput.becomeFirstResponder()
             }
-            if let textInput = control as? UITextView {
-                textInput.becomeFirstResponder()
+            if let toggle = control as? UISwitch {
+                toggle.setOn(!toggle.isOn, animated: false)
+                toggle.sendActions(for: .valueChanged)
                 return true
             }
             control.sendActions(for: .touchUpInside)
             return true
+        }
+
+        if let textInput = findParent(of: view, type: UITextView.self), textInput.isEditable {
+            return textInput.becomeFirstResponder()
         }
 
         if let cell = findParent(of: view, type: UITableViewCell.self),
@@ -499,11 +510,11 @@ final class InteractionEngine {
     func type(text: String, elementId: String?, windowId: String? = nil) throws {
         let target = try resolveEditableTarget(elementId: elementId, windowId: windowId)
 
-        if let textField = target as? UITextField {
-            textField.becomeFirstResponder()
+        if let textField = target as? UITextField, textField.isEnabled {
+            guard textField.becomeFirstResponder() else { throw InteractionError.notEditable(elementId ?? "current responder") }
             textField.insertText(text)
-        } else if let textView = target as? UITextView {
-            textView.becomeFirstResponder()
+        } else if let textView = target as? UITextView, textView.isEditable {
+            guard textView.becomeFirstResponder() else { throw InteractionError.notEditable(elementId ?? "current responder") }
             textView.insertText(text)
         } else {
             throw InteractionError.notEditable(elementId ?? "current responder")
@@ -513,11 +524,14 @@ final class InteractionEngine {
     func clear(elementId: String, windowId: String? = nil) throws {
         let view = try resolveEditableTarget(elementId: elementId, windowId: windowId)
 
-        if let textField = view as? UITextField {
-            textField.text = ""
-            textField.sendActions(for: .editingChanged)
-        } else if let textView = view as? UITextView {
-            textView.text = ""
+        if let textField = view as? UITextField, textField.isEnabled {
+            guard textField.becomeFirstResponder() else { throw InteractionError.notEditable(elementId) }
+            textField.selectedTextRange = textField.textRange(from: textField.beginningOfDocument, to: textField.endOfDocument)
+            textField.insertText("")
+        } else if let textView = view as? UITextView, textView.isEditable {
+            guard textView.becomeFirstResponder() else { throw InteractionError.notEditable(elementId) }
+            textView.selectedRange = NSRange(location: 0, length: (textView.text as NSString).length)
+            textView.insertText("")
         } else {
             throw InteractionError.notEditable(elementId)
         }
@@ -543,11 +557,16 @@ final class InteractionEngine {
         let pageSize = direction.isVertical ? scrollView.bounds.height : scrollView.bounds.width
         var offset = scrollView.contentOffset
 
+        let insets = scrollView.adjustedContentInset
+        let minX = -insets.left
+        let minY = -insets.top
+        let maxX = max(minX, scrollView.contentSize.width - scrollView.bounds.width + insets.right)
+        let maxY = max(minY, scrollView.contentSize.height - scrollView.bounds.height + insets.bottom)
         switch direction {
-        case .up:    offset.y = max(offset.y - pageSize * 0.8, 0)
-        case .down:  offset.y = min(offset.y + pageSize * 0.8, scrollView.contentSize.height - scrollView.bounds.height)
-        case .left:  offset.x = max(offset.x - pageSize * 0.8, 0)
-        case .right: offset.x = min(offset.x + pageSize * 0.8, scrollView.contentSize.width - scrollView.bounds.width)
+        case .up: offset.y = max(minY, min(maxY, offset.y - pageSize * 0.8))
+        case .down: offset.y = max(minY, min(maxY, offset.y + pageSize * 0.8))
+        case .left: offset.x = max(minX, min(maxX, offset.x - pageSize * 0.8))
+        case .right: offset.x = max(minX, min(maxX, offset.x + pageSize * 0.8))
         }
 
         scrollView.setContentOffset(offset, animated: true)
@@ -584,7 +603,7 @@ final class InteractionEngine {
             throw InteractionError.noNavigation
         }
 
-        if let nav = findNavigationController(from: rootVC) {
+        if let nav = findNavigationController(from: rootVC), nav.viewControllers.count > 1 {
             nav.popViewController(animated: true)
         } else {
             throw InteractionError.noNavigation
@@ -633,12 +652,12 @@ final class InteractionEngine {
     }
 
     private func findNavigationController(from vc: UIViewController) -> UINavigationController? {
+        if let presented = vc.presentedViewController {
+            return findNavigationController(from: presented)
+        }
         if let nav = vc as? UINavigationController { return nav }
         if let tab = vc as? UITabBarController, let selected = tab.selectedViewController {
             return findNavigationController(from: selected)
-        }
-        if let presented = vc.presentedViewController {
-            return findNavigationController(from: presented)
         }
         return vc.navigationController
     }
@@ -724,7 +743,7 @@ final class InteractionEngine {
             if let entry = SwiftUIElementRegistry.shared.findElement(
                 byId: id,
                 windowIds: Set(candidateWindows(windowId: windowId).map(\.id))
-            ), entry.type == .textField {
+            ), entry.type == .textField, entry.enabled {
                 if let editable = focusSwiftUIRegisteredTextField(at: point, windowId: windowId) {
                     return editable
                 }
@@ -761,6 +780,7 @@ final class InteractionEngine {
 
     private func currentEditableResponder(windowId: String?) -> UIView? {
         if let responder = UIResponder.currentFirstResponder as? UIView,
+           candidateWindows(windowId: windowId).contains(where: { $0.nativeWindow === responder.window }),
            let editable = editableAncestor(for: responder) {
             return editable
         }

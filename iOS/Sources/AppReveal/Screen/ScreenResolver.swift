@@ -199,11 +199,12 @@ final class ScreenResolver {
     private func contentWindowRoots(windowId: String? = nil) -> [UIViewController] {
         IOSWindowProvider.shared.windowsForInteraction(windowId: windowId)
             .compactMap(\.rootViewController)
-            .filter { !isKeyboardController($0) }
+            .filter { !isSystemOverlayController($0) }
     }
 
-    private func isKeyboardController(_ controller: UIViewController) -> Bool {
-        String(describing: type(of: controller)).contains("UIInputWindowController")
+    private func isSystemOverlayController(_ controller: UIViewController) -> Bool {
+        let name = String(describing: type(of: controller))
+        return name.contains("UIInputWindowController") || name.contains("UITrackingElementWindowController")
     }
 
     private func findVisiblePresentedControllers(from root: UIViewController) -> [UIViewController] {
@@ -245,7 +246,11 @@ final class ScreenResolver {
 
     private func extractNavBarTitle(windowId: String? = nil) -> String? {
         for root in contentWindowRoots(windowId: windowId) {
-            if let title = findNavBarTitle(in: root.view) {
+            let visible = topMost(from: root)
+            if let title = visible.navigationController?.navigationBar.topItem?.title {
+                return title
+            }
+            if let title = findNavBarTitle(in: visible.view) {
                 return title
             }
         }
