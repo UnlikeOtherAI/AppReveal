@@ -2,10 +2,10 @@
 // Identical JS payload to iOS and Android implementations.
 
 abstract final class DOMSerializer {
-
   // MARK: - DOM Tree
 
-  static String dumpTreeJS({String? root, int maxDepth = 30, bool visibleOnly = false}) {
+  static String dumpTreeJS(
+      {String? root, int maxDepth = 30, bool visibleOnly = false}) {
     final rootExpr = root != null
         ? "document.querySelector('${_escapeJs(root)}')"
         : 'document.body';
@@ -53,7 +53,7 @@ abstract final class DOMSerializer {
             if (children.length > 0) el.children = children;
             return el;
         }
-        var r = root || document.body;
+        var r = root;
         if (!r) return JSON.stringify({error:'Root element not found'});
         return JSON.stringify(serialize(r, 0));
     })($rootExpr, $maxDepth, $visibleOnly)
@@ -203,6 +203,7 @@ abstract final class DOMSerializer {
     (function() {
         var el = document.querySelector('${_escapeJs(selector)}');
         if (!el) return JSON.stringify({error:'Element not found: ${_escapeJs(selector)}'});
+        if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') return JSON.stringify({error:'Element is disabled'});
         el.click();
         return JSON.stringify({success:true, tag:el.tagName.toLowerCase(), text:el.textContent.trim().substring(0,100)});
     })()
@@ -210,10 +211,13 @@ abstract final class DOMSerializer {
 
   // MARK: - Type
 
-  static String typeJS(String selector, String text, {bool clear = false}) => """
+  static String typeJS(String selector, String text, {bool clear = false}) =>
+      """
     (function() {
         var el = document.querySelector('${_escapeJs(selector)}');
         if (!el) return JSON.stringify({error:'Element not found: ${_escapeJs(selector)}'});
+        if (!['INPUT','TEXTAREA'].includes(el.tagName)) return JSON.stringify({error:'Element is not a text input'});
+        if (el.matches(':disabled') || el.readOnly) return JSON.stringify({error:'Input is disabled or read-only'});
         el.focus();
         var proto = el.tagName === 'TEXTAREA' ?
             window.HTMLTextAreaElement.prototype :
@@ -236,6 +240,9 @@ abstract final class DOMSerializer {
     (function() {
         var el = document.querySelector('${_escapeJs(selector)}');
         if (!el || el.tagName !== 'SELECT') return JSON.stringify({error:'Select not found: ${_escapeJs(selector)}'});
+        if (el.matches(':disabled')) return JSON.stringify({error:'Select is disabled'});
+        var option = Array.from(el.options).find(function(o) { return o.value === '${_escapeJs(value)}'; });
+        if (!option || option.disabled || (option.parentElement.tagName === 'OPTGROUP' && option.parentElement.disabled)) return JSON.stringify({error:'Option is unavailable'});
         el.value = '${_escapeJs(value)}';
         el.dispatchEvent(new Event('change', {bubbles:true}));
         return JSON.stringify({success:true, value:el.value});
@@ -248,7 +255,10 @@ abstract final class DOMSerializer {
     (function() {
         var el = document.querySelector('${_escapeJs(selector)}');
         if (!el) return JSON.stringify({error:'Element not found: ${_escapeJs(selector)}'});
+        if (el.tagName !== 'INPUT' || !['checkbox','radio'].includes(el.type)) return JSON.stringify({error:'Element is not a checkbox or radio'});
+        if (el.matches(':disabled')) return JSON.stringify({error:'Control is disabled'});
         if (el.checked !== $checked) el.click();
+        if (el.checked !== $checked) return JSON.stringify({error:'Control did not reach requested checked state', checked:el.checked});
         return JSON.stringify({success:true, checked:el.checked});
     })()
     """;
@@ -259,7 +269,7 @@ abstract final class DOMSerializer {
     (function() {
         var el = document.querySelector('${_escapeJs(selector)}');
         if (!el) return JSON.stringify({error:'Element not found: ${_escapeJs(selector)}'});
-        el.scrollIntoView({behavior:'smooth',block:'center'});
+        el.scrollIntoView({behavior:'instant',block:'center'});
         var rect = el.getBoundingClientRect();
         return JSON.stringify({success:true, rect:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height)}});
     })()
@@ -357,7 +367,7 @@ abstract final class DOMSerializer {
             if (el.disabled) f.disabled = true;
             var testId = el.getAttribute('data-testid') || el.getAttribute('data-test');
             if (testId) f.testId = testId;
-            f.selector = testId ? '[data-testid="' + testId + '"]' :
+            f.selector = testId ? '[' + (el.hasAttribute('data-testid') ? 'data-testid' : 'data-test') + '="' + testId + '"]' :
                 (el.id ? '#' + el.id : (el.name ? el.tagName.toLowerCase() + '[name="' + el.name + '"]' : null));
             if (el.tagName === 'SELECT') {
                 f.options = [];

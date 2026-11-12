@@ -1,5 +1,7 @@
 // Text-based element resolution and enhanced element lookup.
 
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'element_inventory.dart';
@@ -58,7 +60,11 @@ class ElementResolver {
     final visited = <Element>{};
 
     void walk(Element element) {
-      if (keyMatch != null || !visited.add(element)) return;
+      if (keyMatch != null ||
+          !visited.add(element) ||
+          !ElementInventory.isActive(element)) {
+        return;
+      }
       final widget = element.widget;
 
       // Priority 1: Exact ValueKey<String>
@@ -142,13 +148,15 @@ class ElementResolver {
     final visited = <Element>{};
 
     void walk(Element element) {
-      if (!visited.add(element)) return;
+      if (!visited.add(element) || !ElementInventory.isActive(element)) return;
       String? textContent;
       final widget = element.widget;
       if (widget is Text) {
         textContent = widget.data ?? widget.textSpan?.toPlainText();
       }
-      if (textContent != null && _textMatches(textContent, text, matchMode)) {
+      if (textContent != null &&
+          ElementInventory.visibleRect(element) != null &&
+          _textMatches(textContent, text, matchMode)) {
         final tappable = findTappableAncestor(element);
         if (tappable != null && tappablesSeen.add(tappable)) {
           final elementToTap =
@@ -184,11 +192,6 @@ class ElementResolver {
       );
     }
 
-    if (matches.length == 1) {
-      return TextResolveResult.success(matches[0].tappableElement);
-    }
-
-    // Multiple matches
     if (occurrence != null) {
       if (occurrence < 0 || occurrence >= matches.length) {
         return TextResolveResult.error(
@@ -199,6 +202,9 @@ class ElementResolver {
       return TextResolveResult.success(matches[occurrence].tappableElement);
     }
 
+    if (matches.length == 1) {
+      return TextResolveResult.success(matches[0].tappableElement);
+    }
     return TextResolveResult.ambiguous(
       matches.map((m) => m.toCandidate()).toList(),
     );
@@ -248,7 +254,7 @@ class ElementResolver {
     if (w is FloatingActionButton) return w.onPressed != null;
     if (w is GestureDetector) return w.onTap != null;
     if (w is InkWell) return w.onTap != null;
-    if (w is ListTile) return w.onTap != null;
+    if (w is ListTile) return w.enabled && w.onTap != null;
     if (w is SwitchListTile) return w.onChanged != null;
     if (w is CheckboxListTile) return w.onChanged != null;
     if (w is ExpansionTile) return true;
@@ -272,7 +278,7 @@ class ElementResolver {
   /// Whether a widget is a "logical" tappable (user-facing composite widget)
   /// as opposed to a raw InkWell/GestureDetector.
   static bool _isLogicalTappable(Widget w) {
-    if (w is ListTile) return w.onTap != null;
+    if (w is ListTile) return w.enabled && w.onTap != null;
     if (w is SwitchListTile) return w.onChanged != null;
     if (w is CheckboxListTile) return w.onChanged != null;
     if (w is ExpansionTile) return true;

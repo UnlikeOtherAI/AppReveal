@@ -62,6 +62,7 @@ void registerBuiltInTools() {
         'properties': {
           'max_depth': {
             'type': 'integer',
+            'minimum': 0,
             'description': 'Max hierarchy depth (default 50)',
           },
         },
@@ -168,6 +169,7 @@ void registerBuiltInTools() {
           },
           'occurrence': {
             'type': 'integer',
+            'minimum': 0,
             'description':
                 '0-based index when multiple elements match the same text. Omit for single-match auto-tap.',
           },
@@ -363,7 +365,11 @@ void registerBuiltInTools() {
       inputSchema: {
         'type': 'object',
         'properties': {
-          'index': {'type': 'integer', 'description': 'Tab index (0-based)'},
+          'index': {
+            'type': 'integer',
+            'minimum': 0,
+            'description': 'Tab index (0-based)'
+          },
         },
         'required': ['index'],
       },
@@ -486,6 +492,7 @@ void registerBuiltInTools() {
         'properties': {
           'limit': {
             'type': 'integer',
+            'minimum': 0,
             'description': 'Max results (default 50)',
           },
         },
@@ -510,6 +517,7 @@ void registerBuiltInTools() {
           'category': {'type': 'string', 'description': 'Filter by category'},
           'limit': {
             'type': 'integer',
+            'minimum': 0,
             'description': 'Max results (default 50)',
           },
         },
@@ -642,16 +650,13 @@ void registerBuiltInTools() {
               'offsetHours': tzOffset.inHours,
             },
 
-            // Environment (non-secret keys only)
-            'environment': Platform.environment.entries
-                .where(
-              (e) =>
-                  !e.key.toLowerCase().contains('secret') &&
-                  !e.key.toLowerCase().contains('token') &&
-                  !e.key.toLowerCase().contains('password') &&
-                  !e.key.toLowerCase().contains('key'),
-            )
-                .fold(<String, String>{}, (map, e) => map..[e.key] = e.value),
+            // Only expose known runtime metadata. Arbitrary environment values
+            // can contain credentials even when their names look harmless.
+            'environment': {
+              for (final name in ['LANG', 'LC_ALL', 'TZ', 'FLUTTER_ROOT'])
+                if (Platform.environment.containsKey(name))
+                  name: Platform.environment[name],
+            },
           };
         } catch (e) {
           return {'error': e.toString()};
@@ -684,6 +689,7 @@ void registerBuiltInTools() {
                 },
                 'delay_ms': {
                   'type': 'integer',
+                  'minimum': 0,
                   'description': 'Milliseconds to wait before this action',
                 },
               },
@@ -730,6 +736,16 @@ void registerBuiltInTools() {
             continue;
           }
 
+          if (toolName == 'batch') {
+            results.add({
+              'index': i,
+              'tool': toolName,
+              'error': 'Nested batches are not supported'
+            });
+            if (stopOnError) break;
+            continue;
+          }
+
           if (definition.outputKind == MCPToolOutputKind.image) {
             results.add({
               'index': i,
@@ -743,15 +759,28 @@ void registerBuiltInTools() {
 
           try {
             final args = action['arguments'] as Map<String, dynamic>?;
+            final validation =
+                MCPRouter.validateArguments(definition.inputSchema, args ?? {});
+            if (validation != null) throw ArgumentError(validation);
             final result = await definition.handler(args);
             results.add({'index': i, 'tool': toolName, 'result': result});
+            if (stopOnError && MCPRouter.isToolFailure(result)) {
+              break;
+            }
           } catch (e) {
             results.add({'index': i, 'tool': toolName, 'error': e.toString()});
             if (stopOnError) break;
           }
         }
 
-        return {'results': results, 'count': results.length};
+        final failed = results.any((entry) =>
+            MCPRouter.isToolFailure(entry) ||
+            MCPRouter.isToolFailure(entry['result']));
+        return {
+          'results': results,
+          'count': results.length,
+          if (failed) 'success': false
+        };
       },
     ),
   );

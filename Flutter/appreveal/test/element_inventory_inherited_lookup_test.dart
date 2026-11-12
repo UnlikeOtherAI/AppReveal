@@ -1,3 +1,5 @@
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -46,7 +48,8 @@ void main() {
     await tester.pumpWidget(host(padding: const EdgeInsets.only(top: 44)));
     expect(tester.takeException(), isNull);
     expect(
-      ElementInventory.getSafeAreaInsets(findElement<MediaQuery>(tester))['top'],
+      ElementInventory.getSafeAreaInsets(
+          findElement<MediaQuery>(tester))['top'],
       44,
     );
   });
@@ -56,7 +59,8 @@ void main() {
       'dependency either', (tester) async {
     await tester.pumpWidget(host(padding: const EdgeInsets.only(top: 20)));
 
-    ElementInventory.getSafeAreaLayoutGuideFrame(findElement<MediaQuery>(tester));
+    ElementInventory.getSafeAreaLayoutGuideFrame(
+        findElement<MediaQuery>(tester));
 
     await tester.pumpWidget(host(padding: const EdgeInsets.only(top: 44)));
     expect(tester.takeException(), isNull);
@@ -73,21 +77,26 @@ void main() {
           ),
         );
 
-    await tester.pumpWidget(tree(const EdgeInsets.only(top: 20), TextDirection.ltr));
+    await tester
+        .pumpWidget(tree(const EdgeInsets.only(top: 20), TextDirection.ltr));
     ElementInventory.getSafeAreaInsets(findElement<_BuildProbe>(tester));
-    ElementInventory.getSafeAreaLayoutGuideFrame(findElement<_BuildProbe>(tester));
+    ElementInventory.getSafeAreaLayoutGuideFrame(
+        findElement<_BuildProbe>(tester));
     final before = _BuildProbe.builds;
 
     // The probe is a const widget that reads neither MediaQuery nor
     // Directionality, so only a dependency registered by the inspection could
     // rebuild it when either value changes.
-    await tester.pumpWidget(tree(const EdgeInsets.only(top: 44), TextDirection.ltr));
+    await tester
+        .pumpWidget(tree(const EdgeInsets.only(top: 44), TextDirection.ltr));
     expect(tester.takeException(), isNull);
     expect(_BuildProbe.builds, before, reason: 'MediaQuery dependency leaked');
 
-    await tester.pumpWidget(tree(const EdgeInsets.only(top: 44), TextDirection.rtl));
+    await tester
+        .pumpWidget(tree(const EdgeInsets.only(top: 44), TextDirection.rtl));
     expect(tester.takeException(), isNull);
-    expect(_BuildProbe.builds, before, reason: 'Directionality dependency leaked');
+    expect(_BuildProbe.builds, before,
+        reason: 'Directionality dependency leaked');
   });
 }
 

@@ -1,8 +1,11 @@
 // Resolves the currently active screen key, title, and metadata.
 
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'screen_identifiable.dart';
 import 'navigator_observer.dart';
+import '../elements/element_inventory.dart';
 
 class ScreenInfo {
   final String screenKey;
@@ -43,13 +46,15 @@ class ScreenResolver {
 
   AppRevealNavigatorObserver? _observer;
   ScreenIdentifiable? _currentScreen;
+  Route<dynamic>? _registeredRoute;
 
   void attachObserver(AppRevealNavigatorObserver observer) {
     _observer = observer;
   }
 
   void register(ScreenIdentifiable screen) {
-    _currentScreen = screen;
+    _currentScreen = screen is State ? null : screen;
+    _registeredRoute = _observer?.currentRouteObject;
   }
 
   ScreenInfo resolve() {
@@ -58,7 +63,12 @@ class ScreenResolver {
     final depth = routeStack.length;
 
     // 1. Explicit ScreenIdentifiable registration
-    final screen = _currentScreen;
+    final registered = _currentScreen;
+    final screen = registered is State
+        ? null // Mounted states are resolved from the active tree below.
+        : identical(_registeredRoute, _observer?.currentRouteObject)
+            ? registered
+            : null;
     if (screen != null) {
       return ScreenInfo(
         screenKey: screen.screenKey,
@@ -97,7 +107,7 @@ class ScreenResolver {
         screenTitle: appBarTitle ?? title,
         frameworkType: 'flutter',
         routeStack: stack,
-        navigationDepth: depth.clamp(1, depth),
+        navigationDepth: depth == 0 ? 1 : depth,
         confidence: 0.8,
         source: 'route',
         appBarTitle: appBarTitle,
@@ -112,7 +122,7 @@ class ScreenResolver {
         screenTitle: appBarTitle,
         frameworkType: 'flutter',
         routeStack: stack,
-        navigationDepth: depth.clamp(1, depth),
+        navigationDepth: depth == 0 ? 1 : depth,
         confidence: 0.6,
         source: 'appbar',
         appBarTitle: appBarTitle,
@@ -126,7 +136,7 @@ class ScreenResolver {
       screenTitle: title,
       frameworkType: 'flutter',
       routeStack: stack,
-      navigationDepth: depth.clamp(1, depth),
+      navigationDepth: depth == 0 ? 1 : depth,
       confidence: 0.3,
       source: 'inferred',
     );
@@ -137,10 +147,11 @@ class ScreenResolver {
     final root = WidgetsBinding.instance.rootElement;
     if (root == null) return null;
     _visitElements(root, (element) {
-      if (found != null) return false;
+      if (element.widget is ScreenIdentifiable) {
+        found = element.widget as ScreenIdentifiable;
+      }
       if (element is StatefulElement && element.state is ScreenIdentifiable) {
         found = element.state as ScreenIdentifiable;
-        return false;
       }
       return true;
     });
@@ -154,13 +165,12 @@ class ScreenResolver {
 
     String? title;
     _visitElements(root, (element) {
-      if (title != null) return false;
       if (element.widget is AppBar) {
         final titleWidget = (element.widget as AppBar).title;
         if (titleWidget is Text) {
           title = titleWidget.data ?? titleWidget.textSpan?.toPlainText();
         }
-        return false; // stop after first AppBar
+        return false; // The AppBar title is already available.
       }
       return true;
     });
@@ -182,7 +192,7 @@ class ScreenResolver {
   }
 
   void _visitElements(Element element, bool Function(Element) visitor) {
-    if (!visitor(element)) return;
+    if (!ElementInventory.isActive(element) || !visitor(element)) return;
     element.visitChildren((child) => _visitElements(child, visitor));
   }
 

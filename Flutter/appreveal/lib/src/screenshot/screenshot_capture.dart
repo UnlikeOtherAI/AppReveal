@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
 import '../elements/element_inventory.dart';
+import '../elements/element_resolver.dart';
 
 class ScreenshotCapture {
   static final shared = ScreenshotCapture._();
@@ -64,31 +65,28 @@ class ScreenshotCapture {
     required String elementId,
     String format = 'png',
   }) async {
-    final root = WidgetsBinding.instance.rootElement;
-    if (root == null) return {'error': 'No root element'};
-
-    Element? target;
-    _visitElements(root, (el) {
-      if (target != null) return false;
-      if (el.widget.key is ValueKey<String> &&
-          (el.widget.key as ValueKey<String>).value == elementId) {
-        target = el;
-        return false;
-      }
-      return true;
-    });
-
+    final target = ElementResolver.shared.resolve(elementId);
     if (target == null) return {'error': 'Element not found: $elementId'};
-
-    final renderObject = target!.renderObject;
-    if (renderObject is! RenderBox) {
+    if (ElementInventory.visibleRect(target) == null) {
+      return {'error': 'Element is not visible: $elementId'};
+    }
+    final renderObject = target.renderObject;
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
       return {'error': 'Element has no render box'};
     }
-
-    final boundary = _findRepaintBoundary(renderObject);
-    if (boundary == null) return {'error': 'No repaint boundary for element'};
-
-    return _capture(boundary, format: format);
+    RenderObject? ancestor = renderObject;
+    while (ancestor != null && ancestor is! RenderRepaintBoundary) {
+      ancestor = ancestor.parent;
+    }
+    if (ancestor is! RenderRepaintBoundary) {
+      return {
+        'error':
+            'No repaint boundary for element. Wrap your app with AppReveal.wrap.'
+      };
+    }
+    final rect = MatrixUtils.transformRect(
+        renderObject.getTransformTo(ancestor), Offset.zero & renderObject.size);
+    return _capture(ancestor, format: format, region: rect);
   }
 
   RenderRepaintBoundary? _boundaryFromKey() {
@@ -112,10 +110,37 @@ class ScreenshotCapture {
   Future<Map<String, dynamic>> _capture(
     RenderRepaintBoundary boundary, {
     required String format,
+    Rect? region,
   }) async {
     final normalizedFormat = format == 'jpeg' ? 'jpeg' : 'png';
     try {
-      final image = await boundary.toImage(pixelRatio: 2.0);
+      if (boundary.debugNeedsPaint) await WidgetsBinding.instance.endOfFrame;
+      final bounds = (region ?? (Offset.zero & boundary.size))
+          .intersect(Offset.zero & boundary.size);
+      if (bounds.isEmpty) {
+        return {'error': 'Screenshot target is outside the painted boundary'};
+      }
+      var image = await boundary.toImage(pixelRatio: 2.0);
+      if (region != null) {
+        final fullImage = image;
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        final width = (bounds.width * 2).ceil();
+        final height = (bounds.height * 2).ceil();
+        canvas.drawImageRect(
+            fullImage,
+            Rect.fromLTWH(bounds.left * 2, bounds.top * 2, bounds.width * 2,
+                bounds.height * 2),
+            Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+            Paint());
+        final picture = recorder.endRecording();
+        try {
+          image = await picture.toImage(width, height);
+        } finally {
+          picture.dispose();
+          fullImage.dispose();
+        }
+      }
       try {
         final byteData = await image.toByteData(
           format: normalizedFormat == 'jpeg'
@@ -144,9 +169,5 @@ class ScreenshotCapture {
     } catch (e) {
       return {'error': e.toString()};
     }
-  }
-
-  void _visitElements(Element element, bool Function(Element) visitor) {
-    ElementInventory.visitAll(element, visitor);
   }
 }

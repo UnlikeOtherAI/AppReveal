@@ -3,8 +3,6 @@
 
 library appreveal;
 
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -54,6 +52,7 @@ class AppReveal {
   AppReveal._();
 
   static final _server = MCPServer();
+  static Future<void>? _launching;
 
   /// Add to [MaterialApp.navigatorObservers] for automatic screen tracking.
   static final AppRevealNavigatorObserver navigatorObserver =
@@ -72,13 +71,18 @@ class AppReveal {
   /// No-ops silently in release mode — safe to call unconditionally.
   static void start({int port = 0}) {
     if (kReleaseMode) return;
-    unawaited(_launch(port: port));
+    if (_launching != null || _server.url != null) return;
+    _launching = _launch(port: port).catchError((Object error) {
+      DiagnosticsBridge.shared.addError('AppReveal startup failed: $error');
+    }).whenComplete(() => _launching = null);
   }
 
   /// Stop the server and cancel mDNS advertisement.
   static Future<void> stop() async {
+    await _launching;
     await _server.stop();
     await MdnsAdvertiser.shared.unregister();
+    DiagnosticsBridge.shared.uninstall();
   }
 
   // ─── Registration ────────────────────────────────────────────────────────

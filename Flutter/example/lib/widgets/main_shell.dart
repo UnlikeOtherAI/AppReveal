@@ -1,6 +1,9 @@
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../screens/catalog_screen.dart';
+import '../services/example_state_container.dart';
 import '../screens/orders_list_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/profile_screen.dart';
@@ -70,7 +73,10 @@ class _MainShellState extends State<MainShell> {
         key: const ValueKey('main.tab_bar'),
         currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: (i) => setState(() {
+          _selectedIndex = i;
+          ExampleStateContainer.instance.selectedTab = ['catalog', 'orders', 'cart', 'profile', 'webview'][i];
+        }),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.store), label: 'Catalog'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Orders'),

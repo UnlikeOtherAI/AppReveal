@@ -13,22 +13,38 @@ class DiagnosticsBridge {
   final _errors = <Map<String, dynamic>>[];
 
   DebugPrintCallback? _originalDebugPrint;
+  FlutterExceptionHandler? _originalOnError;
+  bool _installed = false;
 
   void install() {
+    if (_installed) return;
+    _installed = true;
     // Intercept debugPrint
     _originalDebugPrint = debugPrint;
     debugPrint = _interceptPrint;
 
     // Capture Flutter framework errors
-    final originalOnError = FlutterError.onError;
-    FlutterError.onError = (FlutterErrorDetails details) {
-      _addError(
+    _originalOnError = FlutterError.onError;
+    FlutterError.onError = _interceptError;
+  }
+
+  void uninstall() {
+    if (!_installed) return;
+    if (debugPrint == _interceptPrint && _originalDebugPrint != null) {
+      debugPrint = _originalDebugPrint!;
+    }
+    if (FlutterError.onError == _interceptError) {
+      FlutterError.onError = _originalOnError;
+    }
+    _installed = false;
+  }
+
+  void _interceptError(FlutterErrorDetails details) {
+    _addError(
         message: details.exceptionAsString(),
         stackTrace: details.stack?.toString(),
-        category: 'flutter',
-      );
-      originalOnError?.call(details);
-    };
+        category: 'flutter');
+    _originalOnError?.call(details);
   }
 
   void _interceptPrint(String? message, {int? wrapWidth}) {
@@ -53,7 +69,8 @@ class DiagnosticsBridge {
     if (_logs.length > _maxLogs) _logs.removeAt(0);
   }
 
-  void _addError({required String message, String? stackTrace, String? category}) {
+  void _addError(
+      {required String message, String? stackTrace, String? category}) {
     _errors.add({
       'timestamp': DateTime.now().toIso8601String(),
       'category': category ?? 'app',
