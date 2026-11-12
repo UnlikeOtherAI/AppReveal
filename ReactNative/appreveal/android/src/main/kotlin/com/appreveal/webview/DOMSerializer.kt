@@ -209,6 +209,9 @@ internal object DOMSerializer {
         (function() {
             var el = document.querySelector('${escapeJS(selector)}');
             if (!el) return JSON.stringify({error:'Element not found: ${escapeJS(selector)}'});
+            if (el.disabled || el.matches(':disabled')) return JSON.stringify({error:'Element is disabled'});
+            var rect = el.getBoundingClientRect();
+            if (!rect.width || !rect.height || getComputedStyle(el).visibility === 'hidden') return JSON.stringify({error:'Element is hidden'});
             el.click();
             return JSON.stringify({success:true, tag:el.tagName.toLowerCase(), text:el.textContent.trim().substring(0,100)});
         })()
@@ -223,6 +226,8 @@ internal object DOMSerializer {
         (function() {
             var el = document.querySelector('${escapeJS(selector)}');
             if (!el) return JSON.stringify({error:'Element not found: ${escapeJS(selector)}'});
+            if (!['INPUT','TEXTAREA'].includes(el.tagName) || ['button','submit','reset','checkbox','radio','hidden','file'].includes(el.type)) return JSON.stringify({error:'Element is not a text input'});
+            if (el.disabled || el.readOnly || el.matches(':disabled')) return JSON.stringify({error:'Element is not editable'});
             el.focus();
             var proto = el.tagName === 'TEXTAREA' ?
                 window.HTMLTextAreaElement.prototype :
@@ -247,6 +252,9 @@ internal object DOMSerializer {
         (function() {
             var el = document.querySelector('${escapeJS(selector)}');
             if (!el || el.tagName !== 'SELECT') return JSON.stringify({error:'Select not found: ${escapeJS(selector)}'});
+            if (el.disabled || el.matches(':disabled')) return JSON.stringify({error:'Select is disabled'});
+            var option = Array.from(el.options).find(function(o){return o.value === '${escapeJS(value)}';});
+            if (!option || option.disabled || (option.parentElement.tagName === 'OPTGROUP' && option.parentElement.disabled)) return JSON.stringify({error:'Option is missing or disabled'});
             el.value = '${escapeJS(value)}';
             el.dispatchEvent(new Event('change', {bubbles:true}));
             return JSON.stringify({success:true, value:el.value});
@@ -261,7 +269,10 @@ internal object DOMSerializer {
         (function() {
             var el = document.querySelector('${escapeJS(selector)}');
             if (!el) return JSON.stringify({error:'Element not found: ${escapeJS(selector)}'});
+            if (el.tagName !== 'INPUT' || !['checkbox','radio'].includes(el.type)) return JSON.stringify({error:'Element is not a checkbox or radio'});
+            if (el.disabled || el.matches(':disabled')) return JSON.stringify({error:'Element is disabled'});
             if (el.checked !== $checked) el.click();
+            if (el.checked !== $checked) return JSON.stringify({error:'Requested checked state was not applied'});
             return JSON.stringify({success:true, checked:el.checked});
         })()
         """.trimIndent()

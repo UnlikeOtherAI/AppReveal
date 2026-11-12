@@ -6,7 +6,7 @@ import { useAppRevealScreen } from 'react-native-appreveal';
 export function WebViewScreen() {
   useAppRevealScreen('web.view.demo', 'Web View');
 
-  const webViewRef = React.useRef<WebView>(null);
+  const webViewRef = React.useRef<WebView<object>>(null);
 
   return (
     <View style={styles.container}>
@@ -34,7 +34,7 @@ export function WebViewScreen() {
         </TouchableOpacity>
       </View>
 
-      <WebView
+      <WebView<object>
         ref={webViewRef}
         testID="webdemo.webview"
         source={{ uri: 'https://example.com' }}

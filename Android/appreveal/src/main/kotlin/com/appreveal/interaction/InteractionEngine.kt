@@ -44,18 +44,26 @@ internal object InteractionEngine {
         x: Float,
         y: Float,
     ) {
-        val activity = ScreenResolver.currentActivity ?: return
-        val decorView = activity.window?.decorView ?: return
+        val activity = ScreenResolver.currentActivity ?: throw InteractionError.NoNavigation()
+        val decorView = activity.window?.decorView ?: throw InteractionError.NoNavigation()
+        val location = IntArray(2)
+        decorView.getLocationOnScreen(location)
+        val localX = x - location[0]
+        val localY = y - location[1]
+        require(x.isFinite() && y.isFinite() && localX >= 0 && localY >= 0 && localX < decorView.width && localY < decorView.height) { "Point is outside the active window" }
 
         val downTime = SystemClock.uptimeMillis()
-        val downEvent = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0)
-        val upEvent = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, x, y, 0)
+        val downEvent = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, localX, localY, 0)
+        val upEvent = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, localX, localY, 0)
 
-        decorView.dispatchTouchEvent(downEvent)
-        decorView.dispatchTouchEvent(upEvent)
-
-        downEvent.recycle()
-        upEvent.recycle()
+        try {
+            val downHandled = decorView.dispatchTouchEvent(downEvent)
+            val upHandled = decorView.dispatchTouchEvent(upEvent)
+            check(downHandled && upHandled) { "Touch was not handled by the active window" }
+        } finally {
+            downEvent.recycle()
+            upEvent.recycle()
+        }
     }
 
     // MARK: - Tap by text
@@ -106,6 +114,13 @@ internal object InteractionEngine {
         containerId: String?,
     ) {
         MainThreadExecutor.runBlocking {
+            require(direction in listOf("up", "down", "left", "right")) { "Invalid direction: $direction" }
+            val composeResult = ElementInventory.scrollCompose(containerId, direction)
+            if (composeResult != null) {
+                if (!composeResult) throw InteractionError.NotScrollable(containerId ?: "compose")
+                return@runBlocking
+            }
+
             val scrollView: View =
                 if (containerId != null) {
                     val view = ElementInventory.findElement(containerId)
@@ -163,9 +178,8 @@ internal object InteractionEngine {
                     ?: throw InteractionError.ElementNotFound(elementId)
 
             val parentScrollView = findParentScrollView(view)
-            if (parentScrollView != null) {
-                view.requestRectangleOnScreen(android.graphics.Rect(0, 0, view.width, view.height), false)
-            }
+            if (parentScrollView == null) throw InteractionError.NotScrollable(elementId)
+            view.requestRectangleOnScreen(android.graphics.Rect(0, 0, view.width, view.height), true)
         }
     }
 
@@ -188,7 +202,10 @@ internal object InteractionEngine {
             if (index < 0 || index >= menu.size()) {
                 throw InteractionError.ElementNotFound("tab_$index")
             }
-            bottomNav.selectedItemId = menu.getItem(index).itemId
+            val item = menu.getItem(index)
+            check(item.isEnabled && item.isVisible) { "Tab is disabled or hidden: $index" }
+            bottomNav.selectedItemId = item.itemId
+            check(bottomNav.selectedItemId == item.itemId) { "Tab selection was rejected: $index" }
         }
     }
 
@@ -235,7 +252,7 @@ internal object InteractionEngine {
     }
 
     private fun findScrollViewIn(view: View): View? {
-        if (isScrollable(view) && view !is EditText) return view
+        if (isScrollable(view) && view !is EditText && ElementInventory.canInteract(view)) return view
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 val found = findScrollViewIn(view.getChildAt(i))

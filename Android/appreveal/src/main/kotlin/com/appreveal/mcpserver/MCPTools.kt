@@ -142,7 +142,7 @@ internal fun registerBuiltInTools() {
                     }
                 } catch (e: Exception) {
                     // Try text-based resolution as fallback
-                    val textResult = InteractionEngine.tapByText(elementId, "contains")
+                    val textResult = if (ElementInventory.listElements().any { it.id == elementId }) mapOf("success" to false) else InteractionEngine.tapByText(elementId, "contains")
                     val success = textResult["success"] as? Boolean ?: false
                     if (success) {
                         JsonObject().apply {
@@ -1019,6 +1019,7 @@ internal fun registerBuiltInTools() {
                                 addProperty("result", resultJson)
                             },
                         )
+                        if (stopOnError && result.isToolFailure()) break
                     } catch (e: Exception) {
                         results.add(
                             JsonObject().apply {

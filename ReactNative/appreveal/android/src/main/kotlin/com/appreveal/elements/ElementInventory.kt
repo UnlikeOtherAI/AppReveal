@@ -1,6 +1,8 @@
 package com.appreveal.elements
 
+import android.graphics.Rect
 import android.view.View
+import android.widget.CompoundButton
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -42,8 +44,9 @@ internal object ElementInventory {
     fun findElement(id: String): View? {
         return MainThreadExecutor.runBlocking {
             val decorView = ScreenResolver.currentActivity?.window?.decorView ?: return@runBlocking null
-            // Try direct ID match first
-            findView(id, decorView)
+            // Resolve the same deduplicated IDs returned by listElements.
+            findViewByListedId(id, decorView, null, mutableMapOf())
+                ?: findView(id, decorView)
                 // Try text-based lookup
                 ?: findViewByNormalizedText(id, decorView)
                 // Try semantics-based lookup
@@ -69,7 +72,7 @@ internal object ElementInventory {
                 return@runBlocking Pair(null, candidates)
             }
 
-            if (occurrence >= matches.size) {
+            if (occurrence !in matches.indices) {
                 return@runBlocking Pair(null, candidates)
             }
 
@@ -87,6 +90,29 @@ internal object ElementInventory {
             dumpNode(decorView, 0, maxDepth)
         }
     }
+
+    internal fun clickView(view: View): Boolean {
+        if (!canInteract(view)) return false
+        if (view is CompoundButton) {
+            val previous = view.isChecked
+            val handled = view.performClick()
+            return handled || view.isChecked != previous
+        }
+        if (view is EditText) return view.requestFocus()
+        return view.performClick()
+    }
+
+    internal fun isVisible(view: View): Boolean {
+        if (!view.isShown || !view.getGlobalVisibleRect(Rect())) return false
+        var ancestor: View? = view
+        while (ancestor != null) {
+            if (ancestor.alpha <= 0f) return false
+            ancestor = ancestor.parent as? View
+        }
+        return true
+    }
+
+    internal fun canInteract(view: View): Boolean = view.isEnabled && isVisible(view)
 
     // -- Text helpers --
 
@@ -161,7 +187,11 @@ internal object ElementInventory {
         var id: String?
         var idSource: String
 
-        if (view.id != View.NO_ID) {
+        val testId = view.getTag(com.facebook.react.R.id.react_test_id) as? String
+        if (!testId.isNullOrEmpty()) {
+            id = testId
+            idSource = "explicit"
+        } else if (view.id != View.NO_ID) {
             val name = try {
                 view.resources.getResourceEntryName(view.id)
             } catch (_: Exception) { null }
@@ -222,9 +252,9 @@ internal object ElementInventory {
             type = classifyView(view),
             label = view.contentDescription?.toString(),
             value = extractValue(view),
-            enabled = view.isEnabled && (view.isClickable || view.isFocusable || view is EditText),
-            visible = view.visibility == View.VISIBLE && view.alpha > 0f,
-            tappable = view.isClickable || view.hasOnClickListeners(),
+            enabled = view.isEnabled,
+            visible = isVisible(view),
+            tappable = canInteract(view) && (view.isClickable || view.hasOnClickListeners()),
             frame = frame,
             safeAreaInsets = safeAreaInsets(view, systemInsets),
             safeAreaLayoutGuideFrame = safeAreaLayoutGuideFrame(frame, systemInsets),
@@ -235,6 +265,7 @@ internal object ElementInventory {
     }
 
     internal fun resolveElementId(view: View): String? {
+        (view.getTag(com.facebook.react.R.id.react_test_id) as? String)?.takeIf { it.isNotEmpty() }?.let { return it }
         // 1. Check resource entry name
         if (view.id != View.NO_ID) {
             try {
@@ -258,6 +289,7 @@ internal object ElementInventory {
 
     private fun classifyView(view: View): ElementType {
         return when {
+            view is CompoundButton -> ElementType.TOGGLE
             view is Button || view.javaClass.simpleName.contains("MaterialButton") -> ElementType.BUTTON
             view is EditText -> ElementType.TEXT_FIELD
             view is TextView -> ElementType.LABEL
@@ -281,6 +313,7 @@ internal object ElementInventory {
 
     private fun extractValue(view: View): String? {
         return when (view) {
+            is CompoundButton -> view.isChecked.toString()
             is EditText -> view.text?.toString()
             is TextView -> view.text?.toString()
             is SeekBar -> view.progress.toString()
@@ -297,10 +330,11 @@ internal object ElementInventory {
 
     private fun availableActions(view: View): List<String> {
         val actions = mutableListOf<String>()
+        if (!canInteract(view)) return actions
         if (view.isClickable || view.hasOnClickListeners()) {
             actions.add("tap")
         }
-        if (view is EditText) {
+        if (view is EditText && view.keyListener != null) {
             actions.add("type")
             actions.add("clear")
         }
@@ -318,6 +352,7 @@ internal object ElementInventory {
         matchMode: String,
         matches: MutableList<Pair<View, String>>
     ) {
+        if (!isVisible(view)) return
         if (view is TextView) {
             val viewText = view.text?.toString() ?: ""
             val matched = when (matchMode) {
@@ -369,6 +404,29 @@ internal object ElementInventory {
                 if (found != null) return found
             }
         }
+        return null
+    }
+
+    private fun findViewByListedId(
+        targetId: String,
+        view: View,
+        containerId: String?,
+        seenIds: MutableMap<String, Int>,
+    ): View? {
+        val info = makeElementInfo(view, containerId, seenIds)
+        if (info?.id == targetId) return view
+
+        val currentContainerId = info?.id ?: containerId
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val child = view.getChildAt(i)
+                if (child.visibility != View.GONE) {
+                    val found = findViewByListedId(targetId, child, currentContainerId, seenIds)
+                    if (found != null) return found
+                }
+            }
+        }
+
         return null
     }
 

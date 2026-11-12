@@ -13,6 +13,8 @@ android {
         minSdk = 26
     }
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -35,6 +37,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     compileOnly("com.squareup.okhttp3:okhttp:4.12.0")
     compileOnly("com.squareup.okio:okio:3.6.0")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
