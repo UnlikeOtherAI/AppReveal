@@ -49,3 +49,28 @@ AppReveal.Start(new AppRevealOptions
 
 Provider-backed tools are advertised only when the host supplies real
 implementations. Keep AppReveal guarded out of production release builds.
+
+## Interaction contracts
+
+Native text editing requires a writable UI Automation ValuePattern and replaces
+its value. With no `element_id`, it uses the focused field inside the selected
+app window. Disabled/read-only targets fail; there is no global keyboard
+fallback. `scroll` requires a ScrollPattern and returns `not_scrolled` at a
+boundary. `scroll_to_element` verifies visibility. Element IDs come from UIA
+runtime IDs so inventory, tree, menu and interaction calls identify the same
+control, including repeated AutomationIds.
+
+`tap_point` uses physical screen coordinates and rejects points outside the
+selected app window. `navigate_back` and `dismiss_modal` require that window to
+already be foreground; their `input_sent` result confirms delivery of the
+shortcut, not that the host navigated or closed a modal. Use app state or a fresh
+inventory to verify the effect. `open_deeplink` delegates to the Windows URI
+handler; it does not verify navigation in the current app.
+
+WebView methods require a host implementation of `IAppRevealWebViewProvider`;
+the default native provider does not implement DOM tools. A registered WebView
+provider must implement all advertised WebView methods and return
+`{ "success": false, "error": "..." }` for unsupported/failed actions.
+Provider failures set MCP `isError`, including inside `batch`.
+`stop_on_error` stops on returned failures as well as exceptions; nested batches
+and batches over 100 actions are rejected. HTTP bodies are limited to 1 MiB.

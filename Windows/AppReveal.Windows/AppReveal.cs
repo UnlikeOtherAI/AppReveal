@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 
@@ -229,6 +230,12 @@ internal sealed class AppRevealRuntime
         this.options = options;
     }
 
+    public bool HasStateProvider => options.StateProvider is not null;
+    public bool HasNavigationProvider => options.NavigationProvider is not null;
+    public bool HasFeatureFlagProvider => options.FeatureFlagProvider is not null;
+    public bool HasNetworkProvider => options.NetworkProvider is not null;
+    public bool HasLogProvider => options.LogProvider is not null;
+
     public bool HasDesktopProvider => options.DesktopProvider is not null;
 
     public bool HasInteractionProvider => options.InteractionProvider is not null;
@@ -280,7 +287,7 @@ internal sealed class AppRevealRuntime
             ["processName"] = process.ProcessName,
             ["processId"] = Environment.ProcessId,
             ["processorCount"] = Environment.ProcessorCount,
-            ["physicalMemoryMB"] = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024 / 1024,
+            ["physicalMemoryMB"] = GetPhysicallyInstalledSystemMemory(out var memoryKb) ? memoryKb / 1024 : (ulong?)null,
             ["currentDirectory"] = Environment.CurrentDirectory,
             ["userName"] = Environment.UserName,
             ["machineName"] = Environment.MachineName,
@@ -288,6 +295,10 @@ internal sealed class AppRevealRuntime
             ["is64BitOperatingSystem"] = Environment.Is64BitOperatingSystem
         });
     }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetPhysicallyInstalledSystemMemory(out ulong totalMemoryInKilobytes);
 
     public ValueTask<JsonNode> GetState(CancellationToken cancellationToken)
     {
@@ -316,7 +327,9 @@ internal sealed class AppRevealRuntime
         return InvokeProviderAsync(
             () => Json.ToNode(new Dictionary<string, object?>
             {
-                ["logs"] = options.LogProvider?.RecentLogs(limit) ?? Array.Empty<AppRevealLogEntry>()
+                ["logs"] = (options.LogProvider?.RecentLogs(MaxLogLimit) ?? Array.Empty<AppRevealLogEntry>())
+                    .Where(entry => Json.ReadString(args, "subsystem") is not { } subsystem || entry.Subsystem == subsystem)
+                    .Take(limit).ToArray()
             }),
             cancellationToken);
     }
@@ -330,7 +343,7 @@ internal sealed class AppRevealRuntime
                 var calls = options.NetworkProvider?.RecentCalls(limit) ?? Array.Empty<AppRevealNetworkCall>();
                 return Json.ToNode(new Dictionary<string, object?>
                 {
-                    ["calls"] = RedactNetworkCalls(calls)
+                    ["calls"] = RedactNetworkCalls(calls.Take(limit).ToArray())
                 });
             },
             cancellationToken);

@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>AppReveal verification</title>
+<style>body{font:18px system-ui;padding:20px}button,input,select,[contenteditable]{display:block;margin:8px;padding:8px}output{display:block;white-space:pre-wrap}</style>
+<button id="counter">Count</button>
+<button id="literal">button</button>
+<button id="insert">Insert before counter</button>
+<button id="disabled" disabled>Disabled</button>
+<fieldset disabled><input id="inherited-disabled" value="fixed"></fieldset>
+<label for="edit">Unicode editor</label><input id="edit">
+<input id="readonly" readonly value="fixed" aria-label="Read only">
+<input id="password" type="password" value="private-value" aria-label="Password">
+<input id="checkbox" type="checkbox" aria-label="Checked">
+<select id="select" aria-label="Choice"><option value="one">One</option><option value="two">Two</option></select>
+<div id="rich" contenteditable="true" aria-label="Rich editor"></div>
+<output role="status" aria-label="State" id="state"></output>
+<script>
+let clicks=0,literalClicks=0,inserted=false;
+const $=id=>document.getElementById(id);
+const render=()=>{$('state').textContent=JSON.stringify({clicks,literalClicks,inserted,text:$('edit').value,checked:$('checkbox').checked,choice:$('select').value,rich:$('rich').textContent})};
+$('counter').onclick=()=>{clicks++;render()};
+$('literal').onclick=()=>{literalClicks++;render()};
+$('insert').onclick=()=>{const button=document.createElement('button');button.textContent='Inserted';document.body.prepend(button);inserted=true;render()};
+for(const id of ['edit','checkbox','select','rich']){$(id).oninput=render;$(id).onchange=render}
+render();
+</script>

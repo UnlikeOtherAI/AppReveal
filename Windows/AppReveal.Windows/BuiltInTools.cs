@@ -42,7 +42,7 @@ internal static class BuiltInTools
 
         Register(router, "focus_window", "Bring a specific window to the front and make it key.", ObjectSchema(["window_id"], ("window_id", new JsonObject { ["type"] = "string" })), (args, cancellationToken) => runtime.FocusWindow(args, cancellationToken));
         Register(router, "get_screen", "Get the currently active screen identity and metadata.", NoArgs(), (_, cancellationToken) => runtime.GetScreen(cancellationToken));
-        Register(router, "get_elements", "List all visible interactive elements on the current screen.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" })), (args, cancellationToken) => runtime.GetElements(args, cancellationToken));
+        Register(router, "get_elements", "List app UI Automation elements, including visibility, enabled state and supported actions.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" })), (args, cancellationToken) => runtime.GetElements(args, cancellationToken));
         Register(router, "get_view_tree", "Dump the view hierarchy with class, frame, properties, and accessibility info.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" }), ("max_depth", new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 200 })), (args, cancellationToken) => runtime.GetViewTree(args, cancellationToken));
         Register(router, "screenshot", "Capture the screen or a single element as an MCP image content block.", ObjectSchema(("window_id", new JsonObject { ["type"] = "string" }), ("element_id", new JsonObject { ["type"] = "string" }), ("format", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("png", "jpeg") })), runtime.Screenshot);
 
@@ -50,16 +50,16 @@ internal static class BuiltInTools
         {
             foreach (var tool in new[] { "tap_element", "tap_text", "tap_point", "type_text", "clear_text", "scroll", "scroll_to_element", "select_tab", "navigate_back", "dismiss_modal", "open_deeplink" })
             {
-                Register(router, tool, $"Windows interaction tool `{tool}`.", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject(), ["additionalProperties"] = true }, (args, cancellationToken) => runtime.Interaction(tool, args, cancellationToken));
+                Register(router, tool, $"Windows interaction tool `{tool}`.", InteractionSchema(tool), (args, cancellationToken) => runtime.Interaction(tool, args, cancellationToken));
             }
         }
 
-        Register(router, "get_state", "App state snapshot.", NoArgs(), (_, cancellationToken) => runtime.GetState(cancellationToken));
-        Register(router, "get_navigation_stack", "Current route, navigation stack, and presented modals.", NoArgs(), (_, cancellationToken) => runtime.GetNavigationStack(cancellationToken));
-        Register(router, "get_feature_flags", "All active feature flags.", NoArgs(), (_, cancellationToken) => runtime.GetFeatureFlags(cancellationToken));
-        Register(router, "get_network_calls", "Recent HTTP traffic captured by the app.", ObjectSchema(("limit", new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 500 })), (args, cancellationToken) => runtime.GetNetworkCalls(args, cancellationToken));
-        Register(router, "get_logs", "Recent app log output.", ObjectSchema(("limit", new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 1000 }), ("subsystem", new JsonObject { ["type"] = "string" })), (args, cancellationToken) => runtime.GetLogs(args, cancellationToken));
-        Register(router, "get_recent_errors", "Recent errors captured by the app.", NoArgs(), (_, cancellationToken) => runtime.GetRecentErrors(cancellationToken));
+        if (runtime.HasStateProvider) Register(router, "get_state", "App state snapshot.", NoArgs(), (_, cancellationToken) => runtime.GetState(cancellationToken));
+        if (runtime.HasNavigationProvider) Register(router, "get_navigation_stack", "Current route, navigation stack, and presented modals.", NoArgs(), (_, cancellationToken) => runtime.GetNavigationStack(cancellationToken));
+        if (runtime.HasFeatureFlagProvider) Register(router, "get_feature_flags", "All active feature flags.", NoArgs(), (_, cancellationToken) => runtime.GetFeatureFlags(cancellationToken));
+        if (runtime.HasNetworkProvider) Register(router, "get_network_calls", "Recent HTTP traffic captured by the app.", ObjectSchema(("limit", new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 500 })), (args, cancellationToken) => runtime.GetNetworkCalls(args, cancellationToken));
+        if (runtime.HasLogProvider) Register(router, "get_logs", "Recent app log output.", ObjectSchema(("limit", new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 1000 }), ("subsystem", new JsonObject { ["type"] = "string" })), (args, cancellationToken) => runtime.GetLogs(args, cancellationToken));
+        if (runtime.HasLogProvider) Register(router, "get_recent_errors", "Recent errors captured by the app.", NoArgs(), (_, cancellationToken) => runtime.GetRecentErrors(cancellationToken));
         Register(router, "launch_context", "App launch environment info.", NoArgs(), (_, _) => runtime.LaunchContext());
         Register(router, "device_info", "Comprehensive Windows device and app snapshot.", NoArgs(), (_, _) => runtime.DeviceInfo());
 
@@ -89,6 +89,7 @@ internal static class BuiltInTools
         }, async (args, cancellationToken) =>
         {
             var actions = args?["actions"] as JsonArray ?? throw new McpInvalidParamsException("actions array required");
+            if (actions.Count > MaxBatchActions) throw new McpInvalidParamsException("batch supports at most 100 actions");
             var stopOnError = Json.ReadBool(args, "stop_on_error") ?? false;
             var results = new JsonArray();
             var actionCount = Math.Min(actions.Count, MaxBatchActions);
@@ -134,13 +135,18 @@ internal static class BuiltInTools
 
                     var actionArgs = argumentNode as JsonObject;
                     var result = await router.CallToolAsync(name, actionArgs, cancellationToken);
+                    var failed = McpRouter.IsToolFailure(result);
                     results.Add(new JsonObject
                     {
                         ["index"] = i,
                         ["tool"] = name,
-                        ["success"] = true,
+                        ["success"] = !failed,
                         ["result"] = result?.DeepClone()
                     });
+                    if (failed && stopOnError)
+                    {
+                        break;
+                    }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -165,11 +171,34 @@ internal static class BuiltInTools
 
             return new JsonObject
             {
+                ["success"] = !results.OfType<JsonObject>().Any(result => Json.ReadBool(result, "success") == false),
                 ["results"] = results,
                 ["truncated"] = actions.Count > MaxBatchActions,
                 ["maxActions"] = MaxBatchActions
             };
         });
+    }
+
+    private static JsonObject InteractionSchema(string tool)
+    {
+        var properties = new List<(string, JsonNode)> { ("window_id", new JsonObject { ["type"] = "string" }) };
+        var required = Array.Empty<string>();
+        void Add(string name, string type) => properties.Add((name, new JsonObject { ["type"] = type }));
+        switch (tool)
+        {
+            case "tap_element": case "scroll_to_element":
+                Add("element_id", "string"); required = ["element_id"]; break;
+            case "type_text":
+                Add("element_id", "string"); Add("text", "string"); required = ["text"]; break;
+            case "clear_text": Add("element_id", "string"); break;
+            case "tap_text":
+                Add("text", "string"); Add("match_mode", "string"); Add("occurrence", "integer"); required = ["text"]; break;
+            case "tap_point": Add("x", "number"); Add("y", "number"); required = ["x", "y"]; break;
+            case "scroll": Add("element_id", "string"); Add("direction", "string"); Add("amount", "integer"); break;
+            case "select_tab": Add("index", "integer"); required = ["index"]; break;
+            case "open_deeplink": Add("url", "string"); required = ["url"]; break;
+        }
+        return ObjectSchema(required, properties.ToArray());
     }
 
     private static void Register(McpRouter router, string name, string description, JsonObject schema, Func<JsonObject?, CancellationToken, ValueTask<JsonNode>> handler)

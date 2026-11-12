@@ -239,6 +239,12 @@ fn register_batch(registry: &ToolRegistry) -> Result<()> {
                 None => false,
             };
 
+            const MAX_BATCH_ACTIONS: usize = 100;
+            if actions.len() > MAX_BATCH_ACTIONS {
+                return Err(AppRevealError::InvalidParams(
+                    "batch supports at most 100 actions".to_string(),
+                ));
+            }
             let mut results = Vec::with_capacity(actions.len());
 
             for (index, action) in actions.iter().enumerate() {
@@ -261,6 +267,18 @@ fn register_batch(registry: &ToolRegistry) -> Result<()> {
                     }
                 };
 
+                if tool_name == "batch" {
+                    push_batch_error(
+                        &mut results,
+                        index,
+                        Some(tool_name),
+                        "batch cannot call batch",
+                    );
+                    if stop_on_error {
+                        break;
+                    }
+                    continue;
+                }
                 if tool_name == "screenshot" {
                     push_batch_error(
                         &mut results,
@@ -312,12 +330,18 @@ fn register_batch(registry: &ToolRegistry) -> Result<()> {
                 };
 
                 match result {
-                    Ok(value) => results.push(json!({
-                        "index": index,
-                        "tool": tool_name,
-                        "success": true,
-                        "result": value
-                    })),
+                    Ok(value) => {
+                        let failed = crate::protocol::is_tool_failure(&value);
+                        results.push(json!({
+                            "index": index,
+                            "tool": tool_name,
+                            "success": !failed,
+                            "result": value
+                        }));
+                        if failed && stop_on_error {
+                            break;
+                        }
+                    }
                     Err(error) => {
                         results.push(json!({
                             "index": index,
@@ -332,7 +356,8 @@ fn register_batch(registry: &ToolRegistry) -> Result<()> {
                 }
             }
 
-            Ok(json!({ "results": results }))
+            let success = !results.iter().any(crate::protocol::is_tool_failure);
+            Ok(json!({ "success": success, "results": results }))
         },
     ))
 }
@@ -433,6 +458,54 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect()
+    }
+
+    #[test]
+    fn batch_continues_past_empty_errors_and_stops_on_nonempty_error() {
+        let registry = registry_with_builtins(ProviderRegistry::new());
+        for (name, error) in [("empty", ""), ("whitespace", " \t"), ("failure", "timeout")] {
+            registry
+                .register(Tool::new(name, name, json!({}), move |_| {
+                    Ok(json!({"error":error}))
+                }))
+                .unwrap();
+        }
+        let result = registry.tool("batch").unwrap().unwrap().call(Some(&json!({"stop_on_error":true,"actions":[{"tool":"empty"},{"tool":"whitespace"},{"tool":"failure"},{"tool":"launch_context"}]}))).unwrap();
+        assert_eq!(result["results"].as_array().unwrap().len(), 3);
+        assert_eq!(result["results"][0]["success"], true);
+        assert_eq!(result["results"][1]["success"], true);
+        assert_eq!(result["results"][2]["success"], false);
+    }
+
+    #[test]
+    fn batch_refuses_recursion_and_excess_actions() {
+        let registry = registry_with_builtins(ProviderRegistry::new());
+        let batch = registry.tool("batch").unwrap().unwrap();
+        let result = batch
+            .call(Some(
+                &json!({"actions":[{"tool":"batch","arguments":{"actions":[]}}]}),
+            ))
+            .unwrap();
+        assert_eq!(result["success"], false);
+        assert_eq!(result["results"][0]["success"], false);
+        assert!(batch
+            .call(Some(
+                &json!({"actions": vec![json!({"tool":"launch_context"});101]})
+            ))
+            .is_err());
+    }
+
+    #[test]
+    fn batch_stops_on_returned_failure() {
+        let registry = registry_with_builtins(ProviderRegistry::new());
+        registry
+            .register(Tool::new("failure", "failure", json!({}), |_| {
+                Ok(json!({"success":false,"error":"disabled"}))
+            }))
+            .unwrap();
+        let result = registry.tool("batch").unwrap().unwrap().call(Some(&json!({"stop_on_error":true,"actions":[{"tool":"failure"},{"tool":"launch_context"}]}))).unwrap();
+        assert_eq!(result["success"], false);
+        assert_eq!(result["results"].as_array().unwrap().len(), 1);
     }
 
     #[test]
