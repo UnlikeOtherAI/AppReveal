@@ -111,6 +111,8 @@ class MCPRouterTest {
         }
         val result = callTool("batch", args)
         val payload = MCPGson.gson.fromJson(result.getAsJsonArray("content")[0].asJsonObject.get("text").asString, JsonObject::class.java)
+        assertTrue(result.get("isError").asBoolean)
+        assertFalse(payload.get("success").asBoolean)
         assertEquals(1, payload.get("count").asInt)
         assertFalse(executed)
         args.addProperty("stop_on_error", false)

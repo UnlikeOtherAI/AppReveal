@@ -595,7 +595,7 @@ internal fun registerBuiltInTools() {
 
             JsonObject().apply {
                 addProperty("platform", "Android")
-                addProperty("frameworkType", "reactnative"); addProperty("frameworkType", "react-native")
+                addProperty("frameworkType", "reactnative")
                 addProperty("applicationId", packageName)
                 addProperty("appName", appInfo?.loadLabel(pm)?.toString() ?: "unknown")
                 addProperty("versionName", pkgInfo?.versionName ?: "unknown")
@@ -726,7 +726,8 @@ internal fun registerBuiltInTools() {
                     results.add(JsonObject().apply {
                         addProperty("index", index)
                         addProperty("tool", toolName)
-                        addProperty("result", resultJson)
+                        addProperty("success", !result.isToolFailure())
+                                addProperty("result", resultJson)
                     })
                     if (stopOnError && result.isToolFailure()) break
                 } catch (e: Exception) {
@@ -740,7 +741,8 @@ internal fun registerBuiltInTools() {
             }
 
             JsonObject().apply {
-                add("results", results)
+                addProperty("success", results.none { it.isToolFailure() })
+                    add("results", results)
                 addProperty("count", results.size())
             }
         }

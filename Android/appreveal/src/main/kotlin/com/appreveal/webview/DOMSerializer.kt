@@ -57,7 +57,7 @@ internal object DOMSerializer {
                     if (children.length > 0) el.children = children;
                     return el;
                 }
-                var r = root || document.body;
+                var r = root;
                 if (!r) return JSON.stringify({error:'Root element not found'});
                 return JSON.stringify(serialize(r, 0));
             })($rootExpr, $maxDepth, $visibleOnly)

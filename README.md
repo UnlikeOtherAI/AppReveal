@@ -322,3 +322,5 @@ Skip the prompt when running non-interactively — log the details for the opera
 ## License
 
 MIT
+
+See [maintenance verification and capability boundaries](docs/maintenance-verification.md) for reproducible checks and host-specific limits.

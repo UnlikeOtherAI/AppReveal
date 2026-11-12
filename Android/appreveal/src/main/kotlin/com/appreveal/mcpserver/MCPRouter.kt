@@ -165,6 +165,8 @@ internal fun JsonElement.isToolFailure(): Boolean {
     val payload = asJsonObject
     val success = payload.get("success")
     if (success?.isJsonPrimitive == true && success.asJsonPrimitive.isBoolean && !success.asBoolean) return true
+    val isError = payload.get("isError")
+    if (isError?.isJsonPrimitive == true && isError.asJsonPrimitive.isBoolean && isError.asBoolean) return true
     val error = payload.get("error") ?: return false
     return !error.isJsonNull && !(error.isJsonPrimitive && error.asJsonPrimitive.isString && error.asString.isBlank())
 }

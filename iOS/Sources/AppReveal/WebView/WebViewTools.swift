@@ -53,7 +53,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["dom": result] as [String: Any])
+                return webViewToolResult(result, key: "dom")
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }

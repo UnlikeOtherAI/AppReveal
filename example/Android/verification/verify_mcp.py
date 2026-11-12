@@ -164,8 +164,10 @@ call('web_scroll_to', {'selector': '#result'})
 call('web_back', error=True)
 call('web_forward', error=True)
 call('web_navigate', {'url': 'about:blank'})
+call('get_dom_tree', {'root': '#appreveal-missing-root'}, error=True)
+call('get_dom_tree', {'root': 'body'})
 call('get_dom_tree', {'webview_id': 'missing'}, error=True)
-result = call('batch', {'stop_on_error': True, 'actions': [{'tool': 'clear_text', 'arguments': {'element_id': 'missing'}}, {'tool': 'get_state'}]})
+result = call('batch', {'stop_on_error': True, 'actions': [{'tool': 'clear_text', 'arguments': {'element_id': 'missing'}}, {'tool': 'get_state'}]}, error=True)
 assert result['count'] == 1
 call('open_deeplink', {'url': 'appreveal://settings'})
 

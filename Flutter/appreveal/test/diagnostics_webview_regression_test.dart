@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:appreveal/src/diagnostics/diagnostics_bridge.dart';
 import 'package:appreveal/src/webview/webview_bridge.dart';
+import 'package:appreveal/src/webview/webview_tools.dart';
+import 'package:appreveal/src/mcp/mcp_router.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -42,6 +44,20 @@ void main() {
       bridge.uninstall();
       debugPrint = savedPrint;
       FlutterError.onError = savedError;
+    }
+  });
+  test('DOM wrappers expose failures without changing successful payload keys', () {
+    for (final key in ['dom', 'result']) {
+      final missing = decodeWebToolResult(
+          '{"error":"Root element not found"}', key: key);
+      expect(MCPRouter.isToolFailure(missing), isTrue);
+      expect(missing['error'], 'Root element not found');
+      for (final error in ['', '   ']) {
+        final payload = jsonEncode({'error': error, 'tag': 'body'});
+        final wrapped = decodeWebToolResult(payload, key: key);
+        expect(MCPRouter.isToolFailure(wrapped), isFalse);
+        expect(wrapped, {key: payload});
+      }
     }
   });
   test('WebView results preserve escaped strings on Android and iOS', () {

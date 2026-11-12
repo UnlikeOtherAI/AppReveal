@@ -50,7 +50,9 @@ swiftc -swift-version 5 \
 ReactNative/appreveal/build/native-contract-checks
 ```
 
-The Android/RN implementation reviewer did not run Apple builds. The harness
+The integration verification compiles all Swift sources for the iOS simulator
+with `swiftc -swift-version 5 -emit-module`, independently of React Native
+autolinking. CI repeats this check on macOS. The harness
 checks error-result classification and network timestamps/redaction; it does not
 exercise the UIKit router or native React Native startup.
 

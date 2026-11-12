@@ -185,7 +185,7 @@ extension AnyCodable {
     var isToolFailure: Bool {
         guard let payload = dictionaryValue else { return false }
         return payload["error"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
-            payload["success"]?.boolValue == false
+            payload["success"]?.boolValue == false || payload["isError"]?.boolValue == true
     }
 }
 #endif

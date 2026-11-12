@@ -122,6 +122,9 @@ func registerBuiltInTools() {
             #if os(iOS)
             let opened = await UIApplication.shared.open(url)
             #elseif os(macOS)
+            guard NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
+                return AnyCodable(["success": false, "error": "No application handles this URL"] as [String: Any])
+            }
             let opened = NSWorkspace.shared.open(url)
             #endif
             return AnyCodable(["success": opened, "url": urlStr] as [String: Any])
@@ -451,7 +454,7 @@ func registerBuiltInTools() {
                     let result = try await tool.handler(arguments)
                     let resultData = try JSONEncoder().encode(result)
                     let resultString = String(data: resultData, encoding: .utf8) ?? "{}"
-                    results.append(["index": index, "tool": toolName, "result": resultString])
+                    results.append(["index": index, "tool": toolName, "result": resultString, "success": !result.isToolFailure])
                     if stopOnError && result.isToolFailure { break }
                 } catch {
                     results.append(["index": index, "tool": toolName, "error": error.localizedDescription])
@@ -459,7 +462,8 @@ func registerBuiltInTools() {
                 }
             }
 
-            return AnyCodable(["results": results, "count": results.count] as [String: Any])
+            return AnyCodable(["results": results, "count": results.count,
+                              "success": !results.contains { AnyCodable($0).isToolFailure }] as [String: Any])
         }
     ))
 

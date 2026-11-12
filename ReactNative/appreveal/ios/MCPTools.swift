@@ -662,7 +662,7 @@ func registerBuiltInTools() {
             ]
             var result: [String: Any] = [
                 "platform": "iOS",
-                "frameworkType": "reactnative", "frameworkType": "react-native",
+                "frameworkType": "reactnative",
                 "bundleId":     info["CFBundleIdentifier"] as? String ?? "unknown",
                 "appName":      info["CFBundleName"] as? String ?? "unknown",
                 "displayName":  info["CFBundleDisplayName"] as? String ?? info["CFBundleName"] as? String ?? "unknown",
@@ -792,7 +792,7 @@ func registerBuiltInTools() {
                     let result = try await tool.handler(arguments)
                     let resultData = try JSONEncoder().encode(result)
                     let resultString = String(data: resultData, encoding: .utf8) ?? "{}"
-                    results.append(["index": index, "tool": toolName, "result": resultString])
+                    results.append(["index": index, "tool": toolName, "result": resultString, "success": !appRevealToolResultIsError(result)])
                     if stopOnError && appRevealToolResultIsError(result) { break }
                 } catch {
                     results.append(["index": index, "tool": toolName, "error": error.localizedDescription])
@@ -800,7 +800,8 @@ func registerBuiltInTools() {
                 }
             }
 
-            return AnyCodable(["results": results, "count": results.count] as [String: Any])
+            return AnyCodable(["results": results, "count": results.count,
+                               "success": !results.contains { appRevealToolResultIsError(AnyCodable($0)) }] as [String: Any])
         }
     ))
 }

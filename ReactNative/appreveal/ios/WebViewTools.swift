@@ -41,7 +41,7 @@ func registerWebViewTools() {
             )
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["dom": result] as [String: Any])
+                return appRevealWebToolResult(result, key: "dom")
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -63,7 +63,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.interactiveJS()
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -91,7 +91,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.queryJS(selector: selector, limit: params?["limit"]?.intValue ?? 50)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -119,7 +119,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.findTextJS(text: text, tag: params?["tag"]?.stringValue)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -146,7 +146,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.clickJS(selector: selector)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -176,7 +176,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.typeJS(selector: selector, text: text, clear: params?["clear"]?.boolValue ?? false)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -205,7 +205,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.selectJS(selector: selector, value: value)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -234,7 +234,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.toggleJS(selector: selector, checked: checked)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -261,7 +261,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.scrollToJS(selector: selector)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -287,7 +287,7 @@ func registerWebViewTools() {
             }
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -380,7 +380,7 @@ func registerWebViewTools() {
         handler: { params in
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.linksJS(), webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -403,7 +403,7 @@ func registerWebViewTools() {
             let js = DOMSerializer.textContentJS(selector: params?["selector"]?.stringValue)
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -424,7 +424,7 @@ func registerWebViewTools() {
         handler: { params in
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.formsJS(), webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -445,7 +445,7 @@ func registerWebViewTools() {
         handler: { params in
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.headingsJS(), webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -466,7 +466,7 @@ func registerWebViewTools() {
         handler: { params in
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.imagesJS(), webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -487,7 +487,7 @@ func registerWebViewTools() {
         handler: { params in
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.tablesJS(), webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -508,7 +508,7 @@ func registerWebViewTools() {
         handler: { params in
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.summaryJS(), webViewId: params?["webview_id"]?.stringValue)
-                return AnyCodable(["result": result] as [String: Any])
+                return appRevealWebToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }

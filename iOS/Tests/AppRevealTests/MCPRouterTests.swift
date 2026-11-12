@@ -10,6 +10,17 @@ final class MCPRouterTests: XCTestCase {
         super.tearDown()
     }
 
+    #if os(macOS)
+    func testUnhandledDeepLinkFailsWithoutOpeningSystemChooser() async throws {
+        registerBuiltInTools()
+        let response = await MCPRouter.shared.handle(toolRequest(
+            name: "open_deeplink",
+            arguments: ["url": "appreveal-maintenance-invalid://unhandled"]
+        ))
+        XCTAssertEqual(try resultObject(from: response)["isError"] as? Bool, true)
+    }
+    #endif
+
     func testImageToolReturnsMCPImageBlockAndMetadata() async throws {
         let imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
         let toolName = "test_image_result"
@@ -174,6 +185,7 @@ final class MCPRouterTests: XCTestCase {
             let actions = [["tool": "test_returned_failure"], ["tool": "test_after_failure"]]
             let result = try await batch.handler(["actions": AnyCodable(actions), "stop_on_error": AnyCodable(true)])
             XCTAssertEqual(result.dictionaryValue?["count"]?.intValue, 1)
+            XCTAssertTrue(result.isToolFailure)
             XCTAssertEqual(subsequentCalls, 0)
             _ = try await batch.handler(["actions": AnyCodable(actions), "stop_on_error": AnyCodable(false)])
             XCTAssertEqual(subsequentCalls, 1)
@@ -195,6 +207,7 @@ final class MCPRouterTests: XCTestCase {
                 "stop_on_error": AnyCodable(true)
             ])
             XCTAssertEqual(result.dictionaryValue?["count"]?.intValue, 2)
+            XCTAssertFalse(result.isToolFailure)
         }
     }
 

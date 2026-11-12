@@ -172,7 +172,7 @@ def main():
         client.call("scroll_to_element", {"element_id": "missing"}, failure=True)
         batch = client.call("batch", {"stop_on_error": True, "actions": [
             {"tool": "tap_element", "arguments": {"element_id": "missing", "window_id": "missing"}},
-            {"tool": "get_state"}]})
+            {"tool": "get_state"}]}, failure=True)
         assert batch["count"] == 1
         (verify_ios if args.platform == "ios" else verify_mac)(client)
         if args.screenshot:

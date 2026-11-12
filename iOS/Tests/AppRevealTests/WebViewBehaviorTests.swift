@@ -54,6 +54,18 @@ final class WebViewBehaviorTests: XCTestCase {
         XCTAssertEqual(value4, "null")
     }
 
+    func testMissingDOMRootFailsThroughTheToolAndRecovers() async throws {
+        registerMacOSWebViewTools()
+        let tool = try XCTUnwrap(MCPRouter.shared.tool(named: "get_dom_tree"))
+        let missing = try await tool.handler(["root": AnyCodable("#missing"), "window_id": AnyCodable(windowID)])
+        XCTAssertTrue(missing.isToolFailure)
+        let recovered = try await tool.handler(["root": AnyCodable("body"), "window_id": AnyCodable(windowID)])
+        XCTAssertFalse(recovered.isToolFailure)
+        let dom = try XCTUnwrap(recovered.dictionaryValue?["dom"]?.stringValue)
+        let tree = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(dom.utf8)) as? [String: Any])
+        XCTAssertEqual(tree["tag"] as? String, "body")
+    }
+
     func testTypingNotifiesAndRejectsReadOnlyOrNonTextTargets() async throws {
         let typed = try await run(DOMSerializer.typeJS(selector: "#text", text: " updated", clear: false))
         XCTAssertEqual(typed["value"] as? String, "initial updated")

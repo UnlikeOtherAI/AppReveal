@@ -59,7 +59,7 @@ void registerWebViewTools() {
       try {
         final result = await bridge.evaluate(
             js: js, webViewId: params?['webview_id'] as String?);
-        return {'dom': result};
+        return decodeWebToolResult(result, key: 'dom');
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -87,7 +87,7 @@ void registerWebViewTools() {
           js: DOMSerializer.interactiveJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -123,7 +123,7 @@ void registerWebViewTools() {
       try {
         final result = await bridge.evaluate(
             js: js, webViewId: params?['webview_id'] as String?);
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -157,7 +157,7 @@ void registerWebViewTools() {
       try {
         final result = await bridge.evaluate(
             js: js, webViewId: params?['webview_id'] as String?);
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -188,7 +188,7 @@ void registerWebViewTools() {
           js: DOMSerializer.clickJS(selector),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -228,7 +228,7 @@ void registerWebViewTools() {
               clear: params?['clear'] as bool? ?? false),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -266,7 +266,7 @@ void registerWebViewTools() {
           js: DOMSerializer.selectJS(selector, value),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -301,7 +301,7 @@ void registerWebViewTools() {
           js: DOMSerializer.toggleJS(selector, checked),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -332,7 +332,7 @@ void registerWebViewTools() {
           js: DOMSerializer.scrollToJS(selector),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -364,7 +364,7 @@ void registerWebViewTools() {
       try {
         final result = await bridge.evaluate(
             js: js, webViewId: params?['webview_id'] as String?);
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -470,7 +470,7 @@ void registerWebViewTools() {
           js: DOMSerializer.linksJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -502,7 +502,7 @@ void registerWebViewTools() {
       try {
         final result = await bridge.evaluate(
             js: js, webViewId: params?['webview_id'] as String?);
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -530,7 +530,7 @@ void registerWebViewTools() {
           js: DOMSerializer.formsJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -558,7 +558,7 @@ void registerWebViewTools() {
           js: DOMSerializer.headingsJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -585,7 +585,7 @@ void registerWebViewTools() {
           js: DOMSerializer.imagesJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -612,7 +612,7 @@ void registerWebViewTools() {
           js: DOMSerializer.tablesJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -640,7 +640,7 @@ void registerWebViewTools() {
           js: DOMSerializer.summaryJS(),
           webViewId: params?['webview_id'] as String?,
         );
-        return _webResult(result);
+        return decodeWebToolResult(result);
       } catch (e) {
         return {'error': e.toString()};
       }
@@ -648,7 +648,7 @@ void registerWebViewTools() {
   ));
 }
 
-Map<String, dynamic> _webResult(String result) {
+Map<String, dynamic> decodeWebToolResult(String result, {String key = 'result'}) {
   try {
     final decoded = jsonDecode(result);
     if (decoded is Map<String, dynamic> && MCPRouter.isToolFailure(decoded)) {
@@ -657,5 +657,5 @@ Map<String, dynamic> _webResult(String result) {
   } on FormatException {
     // web_evaluate also supports plain strings.
   }
-  return {'result': result};
+  return {key: result};
 }

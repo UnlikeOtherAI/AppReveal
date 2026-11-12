@@ -40,11 +40,11 @@ jobs:
               - '!**/*.md'
               - '!**/LICENSE'
             windows:
-              - 'Windows/AppReveal.Windows/**'
+              - '{Windows/AppReveal.Windows/**,Windows/verification/dotnet/**}'
               - '!**/*.md'
               - '!**/LICENSE'
             tauri:
-              - 'Windows/appreveal-tauri/**'
+              - '{Windows/appreveal-tauri/**,Windows/verification/tauri/**}'
               - '!**/*.md'
               - '!**/LICENSE'
             reactnative:
@@ -128,6 +128,32 @@ jobs:
           channel: stable
       - run: cd Flutter/appreveal && flutter pub get && flutter analyze --fatal-warnings
       - run: cd Flutter/appreveal && flutter test
+      - run: cd Flutter/example && flutter pub get && flutter analyze --fatal-infos
+
+  flutter_windows:
+    needs: changes
+    if: needs.changes.outputs.flutter == 'true'
+    name: Example MCP smoke (Flutter Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+        working-directory: Flutter/example
+      - name: Build the real example verification entry point
+        working-directory: Flutter/example
+        run: flutter build windows --debug -t tool/verify_mcp.dart --dart-define=APPREVEAL_SOURCE_REVISION=${{ github.sha }}
+      - name: Verify app interactions over authenticated MCP HTTP
+        working-directory: Flutter/example
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path build/windows/x64/runner/Debug/appreveal_example.exe).Path
+          $app = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          if (-not $app.WaitForExit(180000)) { throw 'Flutter MCP verification timed out' }
+          if ($app.ExitCode -ne 0) { throw "Flutter MCP verification failed: $($app.ExitCode)" }
 
   windows:
     needs: changes
@@ -141,6 +167,7 @@ jobs:
           dotnet-version: 8.0.x
       - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj --configuration Debug
       - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj --configuration Release
+      - run: dotnet run --project Windows/verification/dotnet -- --protocol
 
   tauri:
     needs: changes
@@ -155,7 +182,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml --features mdns -- --test-threads=1
       - if: runner.os == 'Windows'
-        run: cargo check --manifest-path Windows/appreveal-tauri/Cargo.toml --features tauri
+        run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml --features tauri -j 2
 
   reactnative:
     needs: changes
@@ -173,6 +200,31 @@ jobs:
           cache: pnpm
           cache-dependency-path: ReactNative/appreveal/pnpm-lock.yaml
       - run: cd ReactNative/appreveal && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test
+
+  reactnative_ios:
+    needs: changes
+    if: needs.changes.outputs.reactnative == 'true'
+    name: Compile and test (React Native iOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the Swift native library
+        run: |
+          mkdir -p ReactNative/appreveal/build
+          xcrun swiftc -swift-version 5 -emit-module -module-name AppRevealRN \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -target arm64-apple-ios16.0-simulator ReactNative/appreveal/ios/*.swift \
+            -emit-module-path ReactNative/appreveal/build/AppRevealRN.swiftmodule
+      - name: Run Foundation contracts
+        run: |
+          swiftc -swift-version 5 \
+            ReactNative/appreveal/ios/AnyCodable.swift \
+            ReactNative/appreveal/ios/CapturedRequest.swift \
+            ReactNative/appreveal/ios/NetworkObserver.swift \
+            ReactNative/appreveal/ios/ToolResult.swift \
+            ReactNative/appreveal/tests/NativeContractChecks.swift \
+            -o ReactNative/appreveal/build/native-contract-checks
+          ReactNative/appreveal/build/native-contract-checks
 
   reactnative_android:
     needs: changes

@@ -3,11 +3,20 @@ import Foundation
 // Run on an Apple verification host with the four library files listed in MAINTENANCE.md.
 @main
 struct NativeContractChecks {
-    @MainActor static func main() {
+    @MainActor static func main() throws {
         precondition(appRevealToolResultIsError(AnyCodable(["error": "rejected"])))
         precondition(appRevealToolResultIsError(AnyCodable(["success": false])))
         precondition(!appRevealToolResultIsError(AnyCodable(["error": ""])))
         precondition(!appRevealToolResultIsError(AnyCodable(["error": NSNull()])))
+        precondition(appRevealToolResultIsError(AnyCodable(["isError": true])))
+        for key in ["dom", "result"] {
+            precondition(appRevealToolResultIsError(appRevealWebToolResult("{\"error\":\"missing\"}", key: key)))
+            precondition(!appRevealToolResultIsError(appRevealWebToolResult("{\"error\":\"  \"}", key: key)))
+        }
+        let scalar = try appRevealWebResultString(42)
+        let boolean = try appRevealWebResultString(true)
+        let empty = try appRevealWebResultString(nil)
+        precondition(scalar == "42" && boolean == "true" && empty == "null")
         let observer = NetworkObserverService.shared
         observer.clear()
         observer.addCall([

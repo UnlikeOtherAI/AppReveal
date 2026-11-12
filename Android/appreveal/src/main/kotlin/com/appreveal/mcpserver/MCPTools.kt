@@ -331,7 +331,7 @@ internal fun registerBuiltInTools() {
     router.register(
         MCPToolDefinition(
             name = "scroll_to_element",
-            description = "Scroll until an element is visible",
+            description = "Scroll until a native View element is visible. Compose targets are not supported by this tool.",
             inputSchema =
                 jsonSchema(
                     "element_id" to jsonProp("string"),
@@ -1016,6 +1016,7 @@ internal fun registerBuiltInTools() {
                             JsonObject().apply {
                                 addProperty("index", index)
                                 addProperty("tool", toolName)
+                                addProperty("success", !result.isToolFailure())
                                 addProperty("result", resultJson)
                             },
                         )
@@ -1033,6 +1034,7 @@ internal fun registerBuiltInTools() {
                 }
 
                 JsonObject().apply {
+                    addProperty("success", results.none { it.isToolFailure() })
                     add("results", results)
                     addProperty("count", results.size())
                 }
