@@ -114,7 +114,7 @@ jobs:
           # sdkmanager releases no longer provide.
           packages: platform-tools
       - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck :appreveal:testDebugUnitTest :appreveal:assembleDebug :appreveal:lintDebug
-      - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug
+      - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug :app:assembleRelease
 
   flutter:
     needs: changes
@@ -188,7 +188,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - run: chmod +x Android/gradlew && Android/gradlew -p ReactNative/appreveal/android testDebugUnitTest assembleDebug --max-workers=2 --console=plain
+      - run: chmod +x Android/gradlew && Android/gradlew -p ReactNative/appreveal/android testDebugUnitTest assembleDebug lintDebug --max-workers=2 --console=plain
 
   cli:
     name: CLI (${{ matrix.os }})
