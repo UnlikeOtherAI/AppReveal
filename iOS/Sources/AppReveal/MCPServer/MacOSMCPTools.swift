@@ -157,12 +157,16 @@ func registerMacOSBuiltInToolsImpl() {
 
             if let view = result.view {
                 let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
-                MacOSInteractionEngine.shared.tap(point: view.convert(point, to: nil), windowId: windowId)
+                guard MacOSInteractionEngine.shared.tap(point: view.convert(point, to: nil), windowId: windowId) else {
+                    return AnyCodable(["error": "Resolved text target is not tappable"])
+                }
             } else if let appRevealId = result.appRevealId,
                       SwiftUIElementRegistry.shared.activate(id: appRevealId) {
                 // Direct debug activation path for SwiftUI controls registered with .appReveal(..., activate:).
             } else if let point = result.point {
-                MacOSInteractionEngine.shared.tap(point: point, windowId: windowId)
+                guard MacOSInteractionEngine.shared.tap(point: point, windowId: windowId) else {
+                    return AnyCodable(["error": "Resolved text target is not tappable"])
+                }
             } else {
                 return AnyCodable(["error": result.error ?? "Resolved text target is not tappable"])
             }
@@ -172,17 +176,19 @@ func registerMacOSBuiltInToolsImpl() {
 
     router.register(MCPToolDefinition(
         name: "tap_point",
-        description: "Tap at specific screen coordinates",
+        description: "Tap at AppKit window coordinates in logical points (origin at bottom left), matching get_elements frames",
         inputSchema: macOSInputSchema([
             "x": ["type": "number"],
             "y": ["type": "number"]
         ], required: ["x", "y"]),
         handler: { params in
-            let x = params?["x"]?.doubleValue ?? 0
-            let y = params?["y"]?.doubleValue ?? 0
+            guard let x = params?["x"]?.doubleValue, x.isFinite,
+                  let y = params?["y"]?.doubleValue, y.isFinite else {
+                return AnyCodable(["error": "x and y are required finite numeric coordinates"])
+            }
             let windowId = params?["window_id"]?.stringValue
-            MacOSInteractionEngine.shared.tap(point: CGPoint(x: x, y: y), windowId: windowId)
-            return AnyCodable(["success": true, "x": x, "y": y] as [String: Any])
+            let activated = MacOSInteractionEngine.shared.tap(point: CGPoint(x: x, y: y), windowId: windowId)
+            return AnyCodable(["success": activated, "x": x, "y": y] as [String: Any])
         }
     ))
 
@@ -393,11 +399,14 @@ func registerMacOSBuiltInToolsImpl() {
                 return AnyCodable(["error": "Menu item disabled: \(rawPath)"])
             }
 
-            if match.item.submenu != nil && match.item.action == nil {
+            if match.item.submenu != nil {
                 return AnyCodable(["error": "Menu path points to a submenu, not an actionable item"])
             }
 
-            match.menu.performActionForItem(at: match.index)
+            guard let action = match.item.action,
+                  NSApp.sendAction(action, to: match.item.target, from: match.item) else {
+                return AnyCodable(["error": "Menu item has no available action: \(rawPath)"])
+            }
             return AnyCodable(["success": true, "path": rawPath] as [String: Any])
         }
     ))
@@ -798,7 +807,7 @@ private func evaluateMacOSWebView(
             webViewId: params?["webview_id"]?.stringValue,
             windowId: windowId
         )
-        return AnyCodable([resultKey: result] as [String: Any])
+        return webViewToolResult(result, key: resultKey)
     } catch {
         return AnyCodable(["error": error.localizedDescription])
     }

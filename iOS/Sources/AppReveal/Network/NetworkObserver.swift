@@ -46,7 +46,7 @@ final class NetworkObserverService: NetworkTrafficObserver {
     }
 
     func recentCalls(limit: Int = 50) -> [CapturedRequest] {
-        Array(capturedRequests.suffix(limit))
+        Array(capturedRequests.suffix(max(0, limit)))
     }
 
     func callDetail(id: String) -> CapturedRequest? {

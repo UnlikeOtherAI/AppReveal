@@ -6,7 +6,7 @@
 // AppReveal's in-process query cannot trigger that build without VoiceOver.
 //
 // Solution: apps opt in by applying .appReveal("id") to SwiftUI views.
-// The modifier tracks the view's global frame via PreferenceKey and registers
+// The modifier measures native window coordinates and registers
 // it with SwiftUIElementRegistry, which ElementInventory includes in get_elements.
 
 import Foundation
@@ -34,8 +34,10 @@ final class SwiftUIElementRegistry {
         let type: ElementType
         let windowId: String?
         let activate: (() -> Void)?
+        let enabled: Bool
 
         var actions: [String] {
+            guard enabled else { return [] }
             switch type {
             case .textField:
                 return ["tap", "type", "clear"]
@@ -61,7 +63,9 @@ final class SwiftUIElementRegistry {
         frame: CGRect,
         label: String?,
         type: ElementType = .button,
-        activate: (() -> Void)? = nil
+        activate: (() -> Void)? = nil,
+        windowId: String? = nil,
+        enabled: Bool = true
     ) {
         pendingUnregisterTokens[id] = nil
         entries[id] = RegisteredElement(
@@ -69,8 +73,9 @@ final class SwiftUIElementRegistry {
             frame: frame,
             label: label,
             type: type,
-            windowId: Self.windowId(containing: frame),
-            activate: activate
+            windowId: windowId ?? Self.windowId(containing: frame),
+            activate: activate,
+            enabled: enabled
         )
     }
 
@@ -94,7 +99,8 @@ final class SwiftUIElementRegistry {
                 label: entry.label,
                 type: entry.type,
                 windowId: entry.windowId,
-                activate: entry.activate
+                activate: entry.activate,
+                enabled: entry.enabled
             )
         }
     }
@@ -134,7 +140,7 @@ final class SwiftUIElementRegistry {
     }
 
     func activate(id: String) -> Bool {
-        guard let activate = entries[id]?.activate else {
+        guard let entry = entries[id], entry.enabled, let activate = entry.activate else {
             return false
         }
 
@@ -172,49 +178,79 @@ extension CGRect {
     var area: CGFloat { width * height }
 }
 
-// MARK: - SwiftUI PreferenceKey
+// MARK: - Native frame measurement
 
-private struct AppRevealFramePreference: PreferenceKey {
-    static let defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
+// SwiftUI's .global space belongs to its hosting view, not necessarily to the
+// window. In AppKit it also has the opposite Y axis. Measure in the actual
+// window so embedded hosts and overlapping windows cannot target another view.
+#if os(iOS)
+private final class AppRevealFrameView: UIView {
+    var report: ((CGRect, String) -> Void)?
+    override func didMoveToWindow() { super.didMoveToWindow(); reportFrame() }
+    override func layoutSubviews() { super.layoutSubviews(); reportFrame() }
+    func reportFrame() {
+        guard let window, !bounds.isEmpty else { return }
+        let id = window.accessibilityIdentifier.flatMap { $0.isEmpty ? nil : $0 }
+            ?? "window-\(ObjectIdentifier(window).hashValue)"
+        report?(convert(bounds, to: window), id)
     }
 }
 
-// MARK: - ViewModifier
+private struct AppRevealFrameReader: UIViewRepresentable {
+    let layoutFrame: CGRect
+    let report: (CGRect, String) -> Void
+    func makeUIView(context: Context) -> AppRevealFrameView { AppRevealFrameView() }
+    func updateUIView(_ view: AppRevealFrameView, context: Context) {
+        view.report = report
+        view.reportFrame()
+    }
+}
+#elseif os(macOS)
+private final class AppRevealFrameView: NSView {
+    var report: ((CGRect, String) -> Void)?
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); reportFrame() }
+    override func layout() { super.layout(); reportFrame() }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); reportFrame() }
+    override func setFrameOrigin(_ newOrigin: NSPoint) { super.setFrameOrigin(newOrigin); reportFrame() }
+    func reportFrame() {
+        guard let window, !bounds.isEmpty else { return }
+        let id = window.identifier?.rawValue ?? "window_\(window.windowNumber)"
+        report?(convert(bounds, to: nil), id)
+    }
+}
+
+private struct AppRevealFrameReader: NSViewRepresentable {
+    let layoutFrame: CGRect
+    let report: (CGRect, String) -> Void
+    func makeNSView(context: Context) -> AppRevealFrameView { AppRevealFrameView() }
+    func updateNSView(_ view: AppRevealFrameView, context: Context) {
+        view.report = report
+        view.reportFrame()
+    }
+}
+#endif
 
 struct AppRevealModifier: ViewModifier {
     let id: String
     let label: String?
     let type: ElementType
     let activate: (() -> Void)?
+    @Environment(\.isEnabled) private var isEnabled
 
     func body(content: Content) -> some View {
         content
             .overlay(
-                GeometryReader { geo in
-                    Color.clear
-                        .allowsHitTesting(false)
-                        .preference(
-                            key: AppRevealFramePreference.self,
-                            value: geo.frame(in: .global)
-                        )
-                }
+                GeometryReader { geometry in
+                    AppRevealFrameReader(layoutFrame: geometry.frame(in: .global)) { frame, windowId in
+                        Task { @MainActor in
+                            SwiftUIElementRegistry.shared.register(
+                                id: id, frame: frame, label: label, type: type,
+                                activate: activate, windowId: windowId, enabled: isEnabled
+                            )
+                        }
+                    }.allowsHitTesting(false)
+                }.allowsHitTesting(false)
             )
-            .onPreferenceChange(AppRevealFramePreference.self) { frame in
-                guard !frame.isEmpty else { return }
-                let registeredId = id
-                let registeredLabel = label
-                Task { @MainActor in
-                    SwiftUIElementRegistry.shared.register(
-                        id: registeredId,
-                        frame: frame,
-                        label: registeredLabel,
-                        type: type,
-                        activate: activate
-                    )
-                }
-            }
             .onDisappear {
                 let registeredId = id
                 Task { @MainActor in

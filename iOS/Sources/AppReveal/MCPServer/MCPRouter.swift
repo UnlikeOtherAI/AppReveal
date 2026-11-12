@@ -108,7 +108,7 @@ final class MCPRouter {
     ) throws -> AnyCodable {
         switch outputKind {
         case .jsonText:
-            return try makeTextToolCallResult(result)
+            return try makeTextToolCallResult(result, isError: result.isToolFailure)
         case .image:
             return try makeImageToolCallResult(result)
         }
@@ -178,4 +178,14 @@ final class MCPRouter {
     }
 }
 
+#endif
+
+#if DEBUG
+extension AnyCodable {
+    var isToolFailure: Bool {
+        guard let payload = dictionaryValue else { return false }
+        return payload["error"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            payload["success"]?.boolValue == false
+    }
+}
 #endif

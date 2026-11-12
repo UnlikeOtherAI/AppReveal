@@ -18,6 +18,18 @@ enum WebViewError: LocalizedError {
     }
 }
 
+/// Preserve the existing serialized DOM result while surfacing action failures to MCP clients.
+func webViewToolResult(_ result: String, key: String = "result") -> AnyCodable {
+    var payload: [String: Any] = [key: result]
+    if let data = result.data(using: .utf8),
+       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       AnyCodable(object).isToolFailure {
+        payload["error"] = object["error"] ?? "WebView action did not complete"
+        payload["success"] = false
+    }
+    return AnyCodable(payload)
+}
+
 #if os(iOS)
 
 import UIKit
@@ -193,22 +205,16 @@ final class WebViewBridge {
     }
 
     @discardableResult
-    func typeText(_ text: String, in target: DOMElementTarget, clear: Bool, windowId: String? = nil) -> Bool {
-        guard target.actions.contains("type"),
-              let webView = resolveWebView(id: target.webViewId, windowId: windowId) else {
-            return false
+    func typeTextResult(_ text: String, in target: DOMElementTarget, clear: Bool, windowId: String? = nil) async -> [String: Any] {
+        do {
+            let json = try await evaluate(
+                js: DOMSerializer.typeJS(selector: target.selector, text: text, clear: clear),
+                webViewId: target.webViewId, windowId: windowId
+            )
+            return Self.jsonDictionary(from: json) ?? ["error": "Invalid DOM editing result"]
+        } catch {
+            return ["error": error.localizedDescription]
         }
-        webView.evaluateJavaScript(DOMSerializer.typeJS(selector: target.selector, text: text, clear: clear)) { _, error in
-            if let error {
-                print("[AppReveal] WebView DOM type failed: \(error.localizedDescription)")
-            }
-        }
-        return true
-    }
-
-    @discardableResult
-    func clearText(in target: DOMElementTarget, windowId: String? = nil) -> Bool {
-        typeText("", in: target, clear: true, windowId: windowId)
     }
 
     func domElementTargets(windowId: String? = nil) async -> [DOMElementTarget] {
@@ -363,7 +369,7 @@ final class WebViewBridge {
         guard let result else {
             return "null"
         }
-        let data = try JSONSerialization.data(withJSONObject: result, options: [])
+        let data = try JSONSerialization.data(withJSONObject: result, options: [.fragmentsAllowed])
         return String(data: data, encoding: .utf8) ?? "null"
     }
 

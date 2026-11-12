@@ -38,7 +38,7 @@ final class DiagnosticsBridge {
     }
 
     func getRecentErrors(limit: Int = 20) -> [AppError] {
-        Array(recentErrors.suffix(limit))
+        Array(recentErrors.suffix(max(0, limit)))
     }
 
     // MARK: - Logs
@@ -52,6 +52,7 @@ final class DiagnosticsBridge {
     }
 
     func getRecentLogs(subsystem: String? = nil, limit: Int = 50) -> [LogEntry] {
+        guard limit > 0 else { return [] }
         // OSLogStore requires iOS 15+ and entitlements for full access.
         // This provides a best-effort query of recent logs.
         guard #available(iOS 15.0, *) else { return [] }

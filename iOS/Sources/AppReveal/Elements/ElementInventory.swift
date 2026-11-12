@@ -114,6 +114,7 @@ final class ElementInventory {
 
     func findTapTarget(byId id: String, windowId: String? = nil) -> TapTarget? {
         let windows = candidateWindows(windowId: windowId)
+        guard !windows.isEmpty else { return nil }
         for ref in windows {
             var seenIds: [String: Int] = [:]
             if let view = findView(byListedId: id, in: ref.nativeWindow, containerId: nil, seenIds: &seenIds) {
@@ -648,7 +649,7 @@ final class ElementInventory {
                     type: entry.type,
                     label: entry.label,
                     value: nil,
-                    enabled: true,
+                    enabled: entry.enabled,
                     visible: !frame.isEmpty,
                     tappable: entry.isTappable,
                     frame: Self.makeFrame(frame),
