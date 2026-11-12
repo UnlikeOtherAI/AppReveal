@@ -25,7 +25,9 @@ Notes:
 - Discovery is AppReveal-specific. It browses mDNS for \`_appreveal._tcp\`.
 - The CLI prints all resolved IP addresses it can find.
 - "codes" in discovery output means any code-like metadata the target exposes now, such as build numbers,
-  version codes, or future TXT records like pairing codes, pins, or tokens.
+  or version codes. Credentials are redacted.
+- Set APPREVEAL_SESSION_URL from a private file to authenticate its exact endpoint (also the default target).
+- Any failed target makes the command exit nonzero. Screenshot results retain image content.
 - Any command that acts on targets can be narrowed with \`--platform\`.
 - Use \`--json\` whenever another tool or model will parse the output.
 `;

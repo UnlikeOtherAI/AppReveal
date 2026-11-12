@@ -1,4 +1,5 @@
-import { discoverServices, extractCodes, matchDiscoveryRecord, normalizeUrl, type DiscoveryRecord } from './discovery.js';
+import { registerSessionUrl, requestCredentials, redactSecrets } from './auth.js';
+import { discoverServices, extractCodes, matchDiscoveryRecord, type DiscoveryRecord } from './discovery.js';
 
 export interface RequestOptions {
   method: string;
@@ -71,7 +72,13 @@ export async function resolveTarget(selector: string, options: ResolveTargetOpti
 }
 
 export async function resolveTargets(options: ResolveTargetsOptions): Promise<ResolvedTarget[]> {
-  const selectors = [...new Set(options.selectors.map((selector) => selector.trim()).filter(Boolean))];
+  const selected = options.selectors.length === 0 && !options.all && process.env.APPREVEAL_SESSION_URL
+    ? [process.env.APPREVEAL_SESSION_URL]
+    : options.selectors;
+  // Register all credentials before discovery probes or platform filtering.
+  if (process.env.APPREVEAL_SESSION_URL) registerSessionUrl(process.env.APPREVEAL_SESSION_URL);
+  const selectors = [...new Set(selected.map((selector) => selector.trim()).filter(Boolean)
+    .map((selector) => /^https?:\/\//i.test(selector) ? registerSessionUrl(selector) : selector))];
   if (!options.all && selectors.length === 0) {
     throw new Error('Select at least one target with a positional selector, --target, or --all.');
   }
@@ -100,7 +107,7 @@ export async function resolveTargets(options: ResolveTargetsOptions): Promise<Re
 
   for (const selector of selectors) {
     if (/^https?:\/\//i.test(selector)) {
-      const url = normalizeUrl(selector);
+      const url = registerSessionUrl(selector);
       const discoveryMatch = discovered?.find((service) => service.url === url);
       resolvedByUrl.set(url, {
         selector,
@@ -135,7 +142,9 @@ export async function resolveTargets(options: ResolveTargetsOptions): Promise<Re
   }
 
   if (resolved.length === 0) {
-    throw new Error(`No AppReveal targets matched platform filter: ${(options.platformFilters ?? []).join(', ')}`);
+    throw new Error(options.platformFilters?.length
+      ? `No AppReveal targets matched platform filter: ${options.platformFilters.join(', ')}`
+      : 'No AppReveal targets discovered.');
   }
 
   return resolved;
@@ -143,10 +152,11 @@ export async function resolveTargets(options: ResolveTargetsOptions): Promise<Re
 
 export async function inspectTarget(
   selector: string,
-  options: { timeoutMs: number; includeDeviceInfo: boolean },
+  options: { timeoutMs: number; includeDeviceInfo: boolean; platformFilters?: string[] },
 ): Promise<InspectionResult> {
-  const target = await resolveTarget(selector, { timeoutMs: options.timeoutMs });
-  const initialize = await sendRequest(target.url, { method: 'initialize' });
+  const [target] = await resolveTargets({ selectors: [selector], all: false, timeoutMs: options.timeoutMs,
+    platformFilters: options.platformFilters, probeDiscovery: true });
+  const initialize = await sendRequest(target.url, { method: 'initialize', params: initializeParams() });
   const launchContext = await callTool(target.url, 'launch_context');
   const tools = await sendRequest(target.url, { method: 'tools/list' });
   const deviceInfo = options.includeDeviceInfo ? await callTool(target.url, 'device_info') : undefined;
@@ -180,6 +190,7 @@ export async function probeDiscoveryRecords(records: DiscoveryRecord[]): Promise
         deviceName: stringFromKnownKey(decoded, ['deviceName']),
         appName: stringFromKnownKey(decoded, ['appName']),
         platform: stringFromKnownKey(decoded, ['platform']),
+        frameworkType: stringFromKnownKey(decoded, ['frameworkType']),
         codes: extractCodes(record.txt, decoded),
       };
     } catch {
@@ -197,16 +208,19 @@ export async function filterTargetsByPlatform(
 
   await Promise.all(targets.map(async (target) => {
     let platform = target.discovery?.platform;
+    let framework = target.discovery?.frameworkType;
 
     if (!platform) {
       try {
         const launchContext = await callTool(target.url, 'launch_context');
         const decoded = plainObjectFromUnknown(launchContext.decoded);
         platform = stringFromKnownKey(decoded, ['platform']);
+        framework = stringFromKnownKey(decoded, ['frameworkType']);
 
         if (target.discovery) {
           target.discovery.launchContext = decoded;
           target.discovery.platform = platform;
+          target.discovery.frameworkType = framework;
           target.discovery.deviceName = target.discovery.deviceName ?? stringFromKnownKey(decoded, ['deviceName']);
           target.discovery.appName = target.discovery.appName ?? stringFromKnownKey(decoded, ['appName']);
           target.discovery.codes = extractCodes(target.discovery.txt, decoded);
@@ -216,7 +230,7 @@ export async function filterTargetsByPlatform(
       }
     }
 
-    if (platform && normalizedFilters.has(normalizePlatform(platform))) {
+    if ([platform, framework].some((value) => value && normalizedFilters.has(normalizePlatform(value)))) {
       kept.push(target);
     }
   }));
@@ -268,7 +282,7 @@ export function buildArguments(
       throw new Error(`Invalid --arg "${entry}". Key cannot be empty.`);
     }
 
-    base[key] = parseLooseValue(rawValue);
+    Object.defineProperty(base, key, { value: parseLooseValue(rawValue), enumerable: true, writable: true, configurable: true });
   }
 
   return base;
@@ -346,37 +360,85 @@ async function postRequest(
   options: { timeoutMs?: number } = {},
 ): Promise<JsonRpcResponse> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const { url, headers } = requestCredentials(targetUrl);
   let response: Response;
+  let responseText: string;
   try {
-    response = await fetch(normalizeUrl(targetUrl), {
+    response = await fetch(url, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...headers,
       },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(timeoutMs),
     });
+    responseText = await response.text();
   } catch (error) {
-    throw new Error(describeFetchFailure(error, targetUrl, payload.method, timeoutMs));
+    throw new Error(redactSecrets(describeFetchFailure(error, url, payload.method, timeoutMs)));
   }
 
-  const responseText = await response.text();
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} from ${targetUrl}: ${responseText}`);
+    const hint = response.status === 401 ? ' Supply the app session URL via APPREVEAL_SESSION_URL or --target.' : '';
+    throw new Error(redactSecrets(`HTTP ${response.status} from ${url}.${hint} ${redactSecrets(responseText).slice(0, 500)}`));
   }
 
-  let json: JsonRpcResponse;
+  let json: unknown;
   try {
-    json = JSON.parse(responseText) as JsonRpcResponse;
+    json = JSON.parse(responseText);
   } catch {
-    const preview = responseText.length > 160 ? `${responseText.slice(0, 160)}...` : responseText;
-    throw new Error(`Invalid JSON from ${targetUrl} for ${payload.method}: ${preview}`);
+    throw new Error(`Invalid JSON response from ${url} for ${payload.method}.`);
   }
-  if (json.error) {
-    throw new Error(`MCP error ${json.error.code}: ${json.error.message}`);
+  if (!isPlainObject(json) || json.jsonrpc !== '2.0' || json.id !== payload.id
+      || (Object.hasOwn(json, 'result') === Object.hasOwn(json, 'error'))) {
+    throw new Error(`Invalid JSON-RPC response from ${url} for ${payload.method}: expected version 2.0, matching id, and result or error.`);
   }
+  if (Object.hasOwn(json, 'error')) {
+    const error = json.error;
+    if (!isPlainObject(error) || typeof error.code !== 'number' || typeof error.message !== 'string') {
+      throw new Error(`Invalid JSON-RPC error from ${url}.`);
+    }
+    throw new Error(redactSecrets(`MCP error ${error.code}: ${error.message}`));
+  }
+  if (payload.method === 'tools/call') {
+    const result = json.result;
+    if (!isPlainObject(result) || !Array.isArray(result.content)) {
+      throw new Error(`Invalid MCP tool result from ${url}: content array required.`);
+    }
+    const decoded = decodeToolResult(result);
+    if (result.isError === true) {
+      throw new Error(redactSecrets(`MCP tool failed: ${JSON.stringify(decoded)}`));
+    }
+    assertToolSuccess(decoded);
+    if (payload.params?.name === 'batch' && isPlainObject(decoded) && Array.isArray(decoded.results)) {
+      for (const item of decoded.results) {
+        assertToolSuccess(item);
+        if (isPlainObject(item)) assertToolSuccess(decodeJsonText(item.result));
+      }
+    }
+  }
+  return json as JsonRpcResponse;
+}
 
-  return json;
+export function initializeParams(): Record<string, unknown> {
+  return { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'appreveal-cli', version: '0.10.1' } };
+}
+
+export function decodeJsonText(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+export function assertToolSuccess(value: unknown): void {
+  if (!isPlainObject(value)) return;
+  const hasError = typeof value.error === 'string'
+    ? value.error.trim().length > 0
+    : value.error !== undefined && value.error !== null && value.error !== false;
+  if (value.success === false || hasError) {
+    throw new Error(redactSecrets(`AppReveal tool failed: ${JSON.stringify(value)}`));
+  }
 }
 
 function describeFetchFailure(
@@ -407,20 +469,10 @@ function decodeToolResult(result: unknown): unknown {
   }
 
   const content = result.content;
-  if (!Array.isArray(content)) {
-    return result;
-  }
-
-  const textItem = content.find((item) => isPlainObject(item) && item.type === 'text' && typeof item.text === 'string');
-  if (!textItem || typeof textItem.text !== 'string') {
-    return result;
-  }
-
-  try {
-    return JSON.parse(textItem.text);
-  } catch {
-    return textItem.text;
-  }
+  // Preserve image/resource/audio blocks and multi-part content verbatim.
+  if (!Array.isArray(content) || content.length !== 1 || !isPlainObject(content[0])
+      || content[0].type !== 'text' || typeof content[0].text !== 'string') return result;
+  return result.structuredContent ?? decodeJsonText(content[0].text);
 }
 
 function plainObjectFromUnknown(value: unknown): Record<string, unknown> {

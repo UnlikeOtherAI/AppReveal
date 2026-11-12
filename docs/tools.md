@@ -2,6 +2,8 @@
 
 AppReveal exposes a shared MCP tool surface for native UI, state, network, diagnostics, WebView DOM, and batch operations. Desktop targets add `list_windows` plus menu/window tools, and native UI/WebView tools accept an optional `window_id` parameter for multi-window targeting where the platform supports it. Windows integrations use capability-aware registration: .NET advertises its functional UI Automation tools by default, while Tauri lists implemented built-ins, runtime-backed WebView/window/menu tools, and host-registered extensions.
 
+Use the running target’s `tools/list` as the authority for available tools and their input schemas. The examples below describe common response shapes, not a guarantee that every platform implements every tool or field.
+
 All current server implementations require a generated per-session token for MCP POST requests and expose `GET /health` as an unauthenticated liveness/diagnostics endpoint.
 
 ### `list_windows`
@@ -104,7 +106,7 @@ Dump the full view hierarchy with class, frame, properties, and accessibility in
 }
 ```
 
-Each node includes `safeAreaInsets` and `safeAreaLayoutGuideFrame` alongside the existing `frame` string so layout issues can be traced through the view hierarchy on every platform.
+Where implemented, nodes include `safeAreaInsets` and `safeAreaLayoutGuideFrame` alongside `frame`. Inspect the actual response before relying on platform-specific geometry fields.
 
 ---
 
@@ -498,7 +500,7 @@ React Native response mirrors iOS or Android depending on the host platform.
 
 ## WebView — DOM Access
 
-All WebView tools accept an optional `webview_id` parameter. If omitted, the first discovered WebView is used. Use `get_webviews` to list available WebViews and their IDs.
+Most WebView tools accept `webview_id`; check the advertised schema. Use `get_webviews` to list available IDs. Default WebView selection and window targeting depend on the platform.
 
 On iOS, React Native iOS, and Tauri desktop, `get_elements` includes visible interactive DOM controls inside discovered WebViews with DOM-backed IDs, selectors, labels, roles, actions, and frames. Those IDs work with `tap_element`, `tap_text`, `type_text`, and `clear_text`; Tauri also routes `tap_point` inside its WebView using `document.elementFromPoint(...)`. For richer DOM-level work, use `get_webviews`, then `get_dom_interactive`, `get_dom_forms`, `find_dom_text`, `web_click`, and `web_type` where the platform advertises those tools.
 
@@ -715,6 +717,9 @@ Call `screenshot` directly rather than inside `batch`; image content blocks cann
 batch's JSON results.
 
 **Response:**
+
+Batch entries may contain an object-valued `result` or a JSON-encoded result string (Apple implementations). A failed entry can carry `error` or `success: false`; inspect each entry, not just the HTTP status.
+
 ```json
 {
   "results": [

@@ -1,21 +1,74 @@
-name: Lint
+name: Checks
 
 on:
   pull_request:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  changes:
+    name: Detect changed build inputs
+    runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.paths.outputs.swift }}
+      android: ${{ steps.paths.outputs.android }}
+      flutter: ${{ steps.paths.outputs.flutter }}
+      windows: ${{ steps.paths.outputs.windows }}
+      tauri: ${{ steps.paths.outputs.tauri }}
+      reactnative: ${{ steps.paths.outputs.reactnative }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: paths
+        with:
+          predicate-quantifier: every
+          filters: |
+            swift:
+              - '{Package.swift,iOS/**,example/iOS/**,example/macOS/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            android:
+              - '{Android/**,example/Android/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            flutter:
+              - 'Flutter/**'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            windows:
+              - 'Windows/AppReveal.Windows/**'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            tauri:
+              - 'Windows/appreveal-tauri/**'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            reactnative:
+              - '{ReactNative/**,Android/gradlew*,Android/gradle/wrapper/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+
   swift:
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     name: Build, test, and lint (iOS/macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: brew install swiftlint
       - run: cd iOS && swiftlint lint --strict
-      - run: cd iOS && swift test
+      - run: swift test
+      - name: Compile iOS-only source
+        working-directory: iOS
+        run: xcodebuild -scheme AppReveal -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO build
 
   android:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     name: Build and lint (Android)
     runs-on: ubuntu-latest
     steps:
@@ -33,6 +86,8 @@ jobs:
       - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug
 
   flutter:
+    needs: changes
+    if: needs.changes.outputs.flutter == 'true'
     name: Analyze and test (Flutter)
     runs-on: ubuntu-latest
     steps:
@@ -44,6 +99,8 @@ jobs:
       - run: cd Flutter/appreveal && flutter test
 
   windows:
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
     name: Build (.NET Windows)
     runs-on: windows-latest
     steps:
@@ -51,17 +108,28 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj
+      - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj --configuration Debug
+      - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj --configuration Release
 
   tauri:
-    name: Test (Tauri/Rust)
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.tauri == 'true'
+    name: Test (Tauri/Rust, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml -- --test-threads=1
+      - run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml --features mdns -- --test-threads=1
+      - if: runner.os == 'Windows'
+        run: cargo check --manifest-path Windows/appreveal-tauri/Cargo.toml --features tauri
 
   reactnative:
-    name: ESLint (React Native)
+    needs: changes
+    if: needs.changes.outputs.reactnative == 'true'
+    name: Lint and typecheck (React Native)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -73,11 +141,31 @@ jobs:
           node-version: 20
           cache: pnpm
           cache-dependency-path: ReactNative/appreveal/pnpm-lock.yaml
-      - run: cd ReactNative/appreveal && pnpm install --frozen-lockfile && pnpm lint
+      - run: cd ReactNative/appreveal && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test
+
+  reactnative_android:
+    needs: changes
+    if: needs.changes.outputs.reactnative == 'true'
+    name: Build and test (React Native Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: chmod +x Android/gradlew && Android/gradlew -p ReactNative/appreveal/android testDebugUnitTest assembleDebug --max-workers=2 --console=plain
 
   cli:
-    name: ESLint (CLI)
-    runs-on: ubuntu-latest
+    name: CLI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -88,4 +176,12 @@ jobs:
           node-version: 20
           cache: pnpm
           cache-dependency-path: CLI/pnpm-lock.yaml
-      - run: cd CLI && pnpm install --frozen-lockfile && pnpm lint
+      - run: pnpm install --frozen-lockfile
+        working-directory: CLI
+      - run: pnpm lint
+        working-directory: CLI
+      - run: pnpm typecheck
+        working-directory: CLI
+      # test builds dist first and drives the actual executable over HTTP.
+      - run: pnpm test
+        working-directory: CLI

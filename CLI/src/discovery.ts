@@ -21,6 +21,7 @@ export interface DiscoveryRecord {
   deviceName?: string;
   appName?: string;
   platform?: string;
+  frameworkType?: string;
 }
 
 interface BonjourServiceLike {
@@ -39,7 +40,7 @@ export function extractCodes(
   const codes: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(txt)) {
-    if (/(code|pin|token|pair)/i.test(key) && value !== '') {
+    if (/^(build|versionCode|versionName)$/i.test(key) && value !== '') {
       codes[key] = value;
     }
   }
@@ -148,6 +149,10 @@ function toStringRecord(record: Record<string, unknown>): Record<string, string>
   const stringRecord: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(record)) {
+    if (/(token|password|secret|pin|pair|authorization|cookie)/i.test(key)) {
+      stringRecord[key] = '[REDACTED]';
+      continue;
+    }
     if (Buffer.isBuffer(value)) {
       stringRecord[key] = value.toString('utf8');
       continue;

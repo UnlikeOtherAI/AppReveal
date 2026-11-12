@@ -1,20 +1,21 @@
+import { redactSecrets } from './auth.js';
 import type { DiscoveryRecord } from './discovery.js';
 import type { InspectionResult, ToolCallResult } from './mcp.js';
 import type { FanOutResult } from './workflows.js';
 
 export function printJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 export function printDiscovery(records: DiscoveryRecord[]): void {
   if (records.length === 0) {
-    process.stdout.write('No AppReveal targets discovered.\n');
+    write('No AppReveal targets discovered.\n');
     return;
   }
 
   for (const [index, record] of records.entries()) {
     if (index > 0) {
-      process.stdout.write('\n');
+      write('\n');
     }
 
     printLine('Name', record.name);
@@ -42,23 +43,23 @@ export function printInspection(result: InspectionResult): void {
     printLine('Codes', formatRecord(result.target.discovery.codes));
   }
 
-  process.stdout.write('\nLaunch Context\n');
-  process.stdout.write(`${formatValue(result.launchContext?.decoded ?? {})}\n`);
+  write('\nLaunch Context\n');
+  write(`${formatValue(result.launchContext?.decoded ?? {})}\n`);
 
   if (result.deviceInfo) {
-    process.stdout.write('\nDevice Info\n');
-    process.stdout.write(`${formatValue(result.deviceInfo.decoded)}\n`);
+    write('\nDevice Info\n');
+    write(`${formatValue(result.deviceInfo.decoded)}\n`);
   }
 
-  process.stdout.write('\nInitialize\n');
-  process.stdout.write(`${formatValue(result.initialize.result ?? {})}\n`);
+  write('\nInitialize\n');
+  write(`${formatValue(result.initialize.result ?? {})}\n`);
 
-  process.stdout.write('\nTools\n');
-  process.stdout.write(`${formatValue(result.tools.result ?? {})}\n`);
+  write('\nTools\n');
+  write(`${formatValue(result.tools.result ?? {})}\n`);
 }
 
 export function printToolResult(result: ToolCallResult): void {
-  process.stdout.write(`${formatValue(result.decoded)}\n`);
+  write(`${formatValue(result.decoded)}\n`);
 }
 
 export function printFanOutResults<T>(
@@ -66,13 +67,13 @@ export function printFanOutResults<T>(
   formatter: (result: T) => string,
 ): void {
   if (results.length === 0) {
-    process.stdout.write('No targets selected.\n');
+    write('No targets selected.\n');
     return;
   }
 
   for (const [index, item] of results.entries()) {
     if (index > 0) {
-      process.stdout.write('\n');
+      write('\n');
     }
 
     printLine('Target', item.target.discovery?.name ?? item.target.selector);
@@ -86,17 +87,17 @@ export function printFanOutResults<T>(
 
     if (!item.ok) {
       printLine('Status', 'error');
-      process.stdout.write(`${item.error}\n`);
+      write(`${item.error}\n`);
       continue;
     }
 
     printLine('Status', 'ok');
-    process.stdout.write(`${formatter(item.result as T)}\n`);
+    write(`${formatter(item.result as T)}\n`);
   }
 }
 
 function printLine(label: string, value: string): void {
-  process.stdout.write(`${label.padEnd(12)} ${value}\n`);
+  write(`${label.padEnd(12)} ${value}\n`);
 }
 
 function formatRecord(record: Record<string, string>): string {
@@ -114,4 +115,8 @@ function formatValue(value: unknown): string {
   }
 
   return JSON.stringify(value, null, 2);
+}
+
+function write(text: string): void {
+  process.stdout.write(redactSecrets(text));
 }
