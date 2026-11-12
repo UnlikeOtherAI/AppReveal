@@ -70,8 +70,14 @@ $batch = Call 'batch' @{stop_on_error=$true;actions=@(@{tool='tap_element';argum
 Assert ($batch.success -eq $false -and $batch.results.Count -eq 1) 'batch stops on DOM failure'
 Call 'tap_element' @{id=$counter} | Out-Null
 Assert ((State).clicks -eq 3) 'WebView recovers after rejected actions'
+Call 'tap_element' @{id='detach'} | Out-Null
+Assert (-not ((Call 'get_elements').elements | Where-Object domId -eq 'counter')) 'detached node is absent from inventory'
+Call 'tap_element' @{id='reattach'} | Out-Null
+Assert (((Call 'get_elements').elements | Where-Object domId -eq 'counter').id -eq $counter) 'reinserted node retains its original ID'
+Call 'tap_element' @{id=$counter} | Out-Null
+Assert ((State).clicks -eq 4) 'reinserted node ID still activates the same control'
 $snapshot = Call 'get_elements'
 $rect = ($snapshot.elements | Where-Object domId -eq 'counter').rect
 Call 'tap_point' @{x=($rect.x+$rect.width/2);y=($rect.y+$rect.height/2)} | Out-Null
-Assert ((State).clicks -eq 4) 'screen point from inventory taps expected control'
+Assert ((State).clicks -eq 5) 'screen point from inventory taps expected control'
 Write-Output "PASS $script:checks real Tauri WebView/MCP checks"

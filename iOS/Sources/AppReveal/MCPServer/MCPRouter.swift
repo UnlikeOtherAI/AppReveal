@@ -91,7 +91,7 @@ final class MCPRouter {
                 let result = try await tool.handler(arguments)
                 return MCPResponse(
                     id: request.id,
-                    result: try makeToolCallResult(result, outputKind: tool.outputKind)
+                    result: try makeToolCallResult(result, outputKind: tool.outputKind, toolName: toolName)
                 )
             } catch {
                 return MCPResponse(id: request.id, error: .internalError(error.localizedDescription))
@@ -104,11 +104,12 @@ final class MCPRouter {
 
     private func makeToolCallResult(
         _ result: AnyCodable,
-        outputKind: MCPToolOutputKind
+        outputKind: MCPToolOutputKind,
+        toolName: String
     ) throws -> AnyCodable {
         switch outputKind {
         case .jsonText:
-            return try makeTextToolCallResult(result, isError: result.isToolFailure)
+            return try makeTextToolCallResult(result, isError: result.isToolFailure(for: toolName))
         case .image:
             return try makeImageToolCallResult(result)
         }
@@ -183,9 +184,15 @@ final class MCPRouter {
 #if DEBUG
 extension AnyCodable {
     var isToolFailure: Bool {
+        isToolFailure(for: nil)
+    }
+
+    func isToolFailure(for toolName: String?) -> Bool {
         guard let payload = dictionaryValue else { return false }
-        return payload["error"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
-            payload["success"]?.boolValue == false || payload["isError"]?.boolValue == true
+        if payload["success"]?.boolValue == false || payload["isError"]?.boolValue == true { return true }
+        if toolName == "get_network_call_detail",
+           ["id", "method", "url"].allSatisfy({ payload[$0]?.stringValue != nil }) { return false }
+        return payload["error"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 }
 #endif

@@ -242,7 +242,7 @@ function parseBatchToolResults(decoded: unknown, required: string[]): Map<string
     }
     assertToolSuccess(item);
     const value = decodeJsonText(item.result);
-    assertToolSuccess(value);
+    assertToolSuccess(value, item.tool);
     result.set(item.tool, value);
   }
   for (const tool of required) {

@@ -1016,11 +1016,11 @@ internal fun registerBuiltInTools() {
                             JsonObject().apply {
                                 addProperty("index", index)
                                 addProperty("tool", toolName)
-                                addProperty("success", !result.isToolFailure())
+                                addProperty("success", !result.isToolFailure(toolName))
                                 addProperty("result", resultJson)
                             },
                         )
-                        if (stopOnError && result.isToolFailure()) break
+                        if (stopOnError && result.isToolFailure(toolName)) break
                     } catch (e: Exception) {
                         results.add(
                             JsonObject().apply {

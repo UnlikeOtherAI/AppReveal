@@ -214,3 +214,28 @@ test('the live probe never echoes a malformed private session file', async (t) =
     return true;
   });
 });
+
+test('captured network failures remain inspectable directly and in batches', async (t) => {
+  const detail = { id: 'request-1', method: 'GET', url: 'https://example.test', error: 'Request timed out' };
+  const server = await startServer((rpc) => textResult(rpc.params?.name === 'batch'
+    ? { results: [{ tool: 'get_network_call_detail', result: JSON.stringify(detail) }], success: true }
+    : detail));
+  t.after(server.close);
+  const single = await runCli(['call', server.url, 'get_network_call_detail', '--arg', 'id=request-1', '--json']);
+  assert.equal(single.code, 0, single.stdout + single.stderr);
+  assert.deepEqual(JSON.parse(single.stdout)[0].result, detail);
+  const batch = await runCli(['call', server.url, 'batch', '--arg', 'actions=[]', '--json']);
+  assert.equal(batch.code, 0, batch.stdout + batch.stderr);
+  assert.match(batch.stdout, /Request timed out/);
+});
+
+test('network lookup errors and explicit failures are never treated as capture data', async (t) => {
+  for (const value of [
+    { error: 'Network call not found' },
+    { id: 'request-1', method: 'GET', url: 'https://example.test', error: 'Failure', success: false },
+  ]) {
+    const server = await startServer(() => textResult(value)); t.after(server.close);
+    const result = await runCli(['call', server.url, 'get_network_call_detail', '--arg', 'id=request-1', '--json']);
+    assert.equal(result.code, 1);
+  }
+});

@@ -411,11 +411,11 @@ async function postRequest(
     if (result.isError === true) {
       throw new Error(redactSecrets(`MCP tool failed: ${JSON.stringify(decoded)}`));
     }
-    assertToolSuccess(decoded);
+    assertToolSuccess(decoded, typeof payload.params?.name === 'string' ? payload.params.name : undefined);
     if (payload.params?.name === 'batch' && isPlainObject(decoded) && Array.isArray(decoded.results)) {
       for (const item of decoded.results) {
         assertToolSuccess(item);
-        if (isPlainObject(item)) assertToolSuccess(decodeJsonText(item.result));
+        if (isPlainObject(item)) assertToolSuccess(decodeJsonText(item.result), typeof item.tool === 'string' ? item.tool : undefined);
       }
     }
   }
@@ -431,12 +431,15 @@ export function decodeJsonText(value: unknown): unknown {
   try { return JSON.parse(value); } catch { return value; }
 }
 
-export function assertToolSuccess(value: unknown): void {
+export function assertToolSuccess(value: unknown, toolName?: string): void {
   if (!isPlainObject(value)) return;
   const hasError = typeof value.error === 'string'
     ? value.error.trim().length > 0
     : value.error !== undefined && value.error !== null && value.error !== false;
-  if (value.success === false || hasError) {
+  // A successfully retrieved capture can describe a failed network request.
+  const capturedRequest = toolName === 'get_network_call_detail'
+    && ['id', 'method', 'url'].every((key) => typeof value[key] === 'string');
+  if (value.success === false || value.isError === true || (hasError && !capturedRequest)) {
     throw new Error(redactSecrets(`AppReveal tool failed: ${JSON.stringify(value)}`));
   }
 }

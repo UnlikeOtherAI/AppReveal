@@ -3,6 +3,8 @@
 <button id="counter">Count</button>
 <button id="literal">button</button>
 <button id="insert">Insert before counter</button>
+<button id="detach">Detach counter</button>
+<button id="reattach">Reattach counter</button>
 <button id="disabled" disabled>Disabled</button>
 <fieldset disabled><input id="inherited-disabled" value="fixed"></fieldset>
 <label for="edit">Unicode editor</label><input id="edit">
@@ -16,6 +18,9 @@
 let clicks=0,literalClicks=0,inserted=false;
 const $=id=>document.getElementById(id);
 const render=()=>{$('state').textContent=JSON.stringify({clicks,literalClicks,inserted,text:$('edit').value,checked:$('checkbox').checked,choice:$('select').value,rich:$('rich').textContent})};
+const counterNode=$('counter');
+$('detach').onclick=()=>counterNode.remove();
+$('reattach').onclick=()=>document.body.prepend(counterNode);
 $('counter').onclick=()=>{clicks++;render()};
 $('literal').onclick=()=>{literalClicks++;render()};
 $('insert').onclick=()=>{const button=document.createElement('button');button.textContent='Inserted';document.body.prepend(button);inserted=true;render()};

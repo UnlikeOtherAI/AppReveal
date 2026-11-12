@@ -17,9 +17,8 @@ included #57–#61 (SwiftUI input/lazy grids, Bonjour, release and Flutter looku
 
 The coordinated native/portable run used validation snapshot
 `8720e9fcd74ffd568a02d5bcf5756ad2daa32602`, tree
-`64e539149c0a005ac1c1e8abcbbcb6a3920333a7`. Apple, Android, Flutter and
-Windows source directories in that snapshot match the delivered implementation.
-The subsequent RN Swift scalar-result correction was compiled and its Foundation
+`64e539149c0a005ac1c1e8abcbbcb6a3920333a7`. This exercised all integrated components before the bounded review corrections
+recorded below. The subsequent RN Swift scalar-result correction was compiled and its Foundation
 contracts rerun on dictator. Windows CI then exposed Node 20 glob handling in
 the CLI test command. Naming the two test files explicitly fixed discovery;
 Maxis lint, typecheck, build and all 24 tests passed with Node 20.20.2 against
@@ -88,3 +87,34 @@ Reproduction links and platform-specific boundaries are in
 [maintenance verification](../maintenance-verification.md). Sanitized run logs
 and manifests are retained separately from disposable worktrees. Session URLs
 and launch logs containing credentials are excluded from published evidence.
+
+## Review corrections and affected checks
+
+The captured request's nonempty `error` field is diagnostic data when
+`get_network_call_detail` successfully finds a record. Apple, Android and CLI
+classification now uses the tool context and record identity; missing records,
+explicit failure flags and unrelated tool errors still fail. Other current
+platform implementations expose network lists, not this detail tool.
+
+Tauri inventory now restores the reverse mapping for a previously detached DOM
+node. The real fixture detaches the counter, inspects its absence, reinserts the
+same node, checks its original ID and activates it using that ID.
+
+Validation snapshots: `92e4be37bc98dfee34feda43c8c1e58035a610da` (Apple, CLI,
+Tauri) and `3049413e2e0ff60c16d480881ddfb317a34122fb` (Android; only its test
+fixture differs). Results on the same environments:
+
+- dictator: 43 macOS and 28 iOS package tests, strict SwiftLint and both example
+  rebuilds passed; 51 macOS and 96 iOS authenticated calls passed again. Existing
+  screenshot coverage was retained; these reruns captured no additional images.
+- Ubuntu: 12 Android tests, ktlint/lint/debug AAR and example debug/release builds
+  passed; 108 native/Compose/WebView HTTP calls passed without new screenshots.
+- Maxis with Node 20.20.2: CLI lint/typecheck/build and 26 tests passed, including
+  successful failed-request inspection, batch decoding and missing-record errors.
+  The rebuilt macOS app also passed the live network-detail/batch/recovery probe.
+- Maxis: 37 Tauri-feature Rust tests, fixture build and 33 real WebView2 HTTP
+  checks passed, including the detach/reinsert regression.
+
+The failed-request records in new transport regressions are controlled fixtures;
+example live probes verify normal detail inspection and missing-record recovery.
+No live external network timeout is claimed.

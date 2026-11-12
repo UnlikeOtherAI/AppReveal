@@ -192,6 +192,34 @@ final class MCPRouterTests: XCTestCase {
         }
     }
 
+    func testFailedNetworkCaptureIsDataAndDoesNotStopBatch() async throws {
+        registerBuiltInTools()
+        NetworkObserverService.shared.addCall(CapturedRequest(
+            id: "failed-request", method: "GET", url: "https://example.test", error: "Request timed out"
+        ))
+        let response = await MCPRouter.shared.handle(toolRequest(
+            name: "get_network_call_detail", arguments: ["id": "failed-request"]
+        ))
+        XCTAssertNil(try resultObject(from: response)["isError"])
+        let tool = try XCTUnwrap(MCPRouter.shared.tool(named: "get_network_call_detail"))
+        let detail = try await tool.handler(["id": AnyCodable("failed-request")])
+        XCTAssertEqual(detail.dictionaryValue?["error"]?.stringValue, "Request timed out")
+        let batch = try XCTUnwrap(MCPRouter.shared.tool(named: "batch"))
+        let result = try await batch.handler([
+            "actions": AnyCodable([
+                ["tool": "get_network_call_detail", "arguments": ["id": "failed-request"]],
+                ["tool": "get_state"]
+            ] as [[String: Any]]),
+            "stop_on_error": AnyCodable(true)
+        ])
+        XCTAssertEqual(result.dictionaryValue?["count"]?.intValue, 2)
+        XCTAssertFalse(result.isToolFailure)
+        let missing = await MCPRouter.shared.handle(toolRequest(
+            name: "get_network_call_detail", arguments: ["id": "absent"]
+        ))
+        XCTAssertEqual(try resultObject(from: missing)["isError"] as? Bool, true)
+    }
+
     func testBlankErrorDoesNotFailToolOrStopBatch() async throws {
         registerBuiltInTools()
         for error in ["", " \n\t"] {

@@ -4,6 +4,10 @@ Use the running target's `tools/list` as the contract. A tool name shared by
 several platforms does not imply every host framework implements it. Failed
 operations return MCP `isError`; batches also report `success: false` if any
 action fails. Empty or whitespace-only diagnostic `error` strings are not failures.
+A successfully retrieved network detail record can contain a nonempty request
+`error`; it remains data, including inside a batch. Missing records and explicit
+failure flags still fail. This detail tool is implemented by Apple and Android;
+other current targets return network records inside lists.
 Missing DOM roots fail instead of silently inspecting the whole page.
 
 | Target | Repeatable verification | Boundary |

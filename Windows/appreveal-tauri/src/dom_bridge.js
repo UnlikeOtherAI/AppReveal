@@ -6,9 +6,10 @@
     if (!state.ids.has(element)) {
       const id = state.nextId++;
       state.ids.set(element, id);
-      state.elements.set(id, new WeakRef(element));
     }
-    return state.ids.get(element);
+    const id = state.ids.get(element);
+    state.elements.set(id, new WeakRef(element));
+    return id;
   };
   const visible = element => {
     if (!(element instanceof Element) || !element.isConnected) return false;

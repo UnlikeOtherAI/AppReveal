@@ -454,8 +454,8 @@ func registerBuiltInTools() {
                     let result = try await tool.handler(arguments)
                     let resultData = try JSONEncoder().encode(result)
                     let resultString = String(data: resultData, encoding: .utf8) ?? "{}"
-                    results.append(["index": index, "tool": toolName, "result": resultString, "success": !result.isToolFailure])
-                    if stopOnError && result.isToolFailure { break }
+                    results.append(["index": index, "tool": toolName, "result": resultString, "success": !result.isToolFailure(for: toolName)])
+                    if stopOnError && result.isToolFailure(for: toolName) { break }
                 } catch {
                     results.append(["index": index, "tool": toolName, "error": error.localizedDescription])
                     if stopOnError { break }

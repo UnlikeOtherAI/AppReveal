@@ -186,6 +186,47 @@ class MCPRouterTest {
         assertFalse(callTool("get_network_call_detail").has("isError"))
     }
 
+    @Test
+    fun failedNetworkCaptureIsDataAndDoesNotStopBatch() {
+        registerBuiltInTools()
+        NetworkObserverService.addCall(
+            CapturedRequest(id = "failed-request", method = "GET", url = "https://example.test", error = "Request timed out"),
+        )
+        val args = JsonObject().apply { addProperty("id", "failed-request") }
+        val result = callTool("get_network_call_detail", args)
+        assertFalse(result.has("isError"))
+        val payload = MCPGson.gson.fromJson(result.getAsJsonArray("content")[0].asJsonObject.get("text").asString, JsonObject::class.java)
+        assertEquals("Request timed out", payload.get("error").asString)
+        var subsequentCalls = 0
+        registerTool("after_network_lookup") {
+            subsequentCalls++
+            JsonObject()
+        }
+        val actions =
+            JsonArray().apply {
+                add(
+                    JsonObject().apply {
+                        addProperty("tool", "get_network_call_detail")
+                        add("arguments", args)
+                    },
+                )
+                add(JsonObject().apply { addProperty("tool", "after_network_lookup") })
+            }
+        val batch =
+            callTool(
+                "batch",
+                JsonObject().apply {
+                    add("actions", actions)
+                    addProperty("stop_on_error", true)
+                },
+            )
+        assertFalse(batch.has("isError"))
+        val batchPayload = MCPGson.gson.fromJson(batch.getAsJsonArray("content")[0].asJsonObject.get("text").asString, JsonObject::class.java)
+        assertEquals(2, batchPayload.get("count").asInt)
+        assertEquals(1, subsequentCalls)
+        assertTrue(callTool("get_network_call_detail", JsonObject().apply { addProperty("id", "absent") }).get("isError").asBoolean)
+    }
+
     private fun registerTool(
         name: String,
         handler: () -> JsonObject,
