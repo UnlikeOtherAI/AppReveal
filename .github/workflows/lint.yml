@@ -59,12 +59,43 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: brew install swiftlint
+      - run: brew install swiftlint xcodegen
       - run: cd iOS && swiftlint lint --strict
       - run: swift test
       - name: Compile iOS-only source
         working-directory: iOS
         run: xcodebuild -scheme AppReveal -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO build
+      - name: Select an existing iPhone simulator
+        run: |
+          simulator_id="$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          candidates = [device for runtime, devices in json.load(sys.stdin)["devices"].items()
+                        if "iOS-" in runtime and int(runtime.split("iOS-")[1].split("-")[0]) >= 16
+                        for device in devices if device.get("isAvailable") and ".iPhone-" in device.get("deviceTypeIdentifier", "")]
+          if not candidates:
+              sys.exit("No compatible existing iPhone simulator is available")
+          print(sorted(candidates, key=lambda device: device["state"] != "Booted")[0]["udid"])
+          ')"
+          echo "APPREVEAL_TEST_SIMULATOR=$simulator_id" >> "$GITHUB_ENV"
+      - name: Generate hosted iOS test project
+        run: xcodegen generate --spec example/iOS/AppRevealExample/project.yml
+      - name: Test UIKit and SwiftUI in the example app
+        run: |
+          xcodebuild \
+            -project example/iOS/AppRevealExample/AppRevealExample.xcodeproj \
+            -scheme AppRevealExample \
+            -destination "id=$APPREVEAL_TEST_SIMULATOR" \
+            -derivedDataPath .build/ci/ios-hosted \
+            -resultBundlePath .build/ci/ios-hosted-tests.xcresult \
+            -jobs 4 -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO test
+      - name: Preserve hosted test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-hosted-test-results
+          path: .build/ci/ios-hosted-tests.xcresult
+          if-no-files-found: ignore
 
   android:
     needs: changes
@@ -83,7 +114,7 @@ jobs:
           # sdkmanager releases no longer provide.
           packages: platform-tools
       - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck :appreveal:testDebugUnitTest :appreveal:assembleDebug :appreveal:lintDebug
-      - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug
+      - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug :app:assembleRelease
 
   flutter:
     needs: changes
@@ -157,7 +188,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - run: chmod +x Android/gradlew && Android/gradlew -p ReactNative/appreveal/android testDebugUnitTest assembleDebug --max-workers=2 --console=plain
+      - run: chmod +x Android/gradlew && Android/gradlew -p ReactNative/appreveal/android testDebugUnitTest assembleDebug lintDebug --max-workers=2 --console=plain
 
   cli:
     name: CLI (${{ matrix.os }})
