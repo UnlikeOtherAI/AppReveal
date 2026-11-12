@@ -17,10 +17,14 @@ included #57–#61 (SwiftUI input/lazy grids, Bonjour, release and Flutter looku
 
 The coordinated native/portable run used validation snapshot
 `8720e9fcd74ffd568a02d5bcf5756ad2daa32602`, tree
-`64e539149c0a005ac1c1e8abcbbcb6a3920333a7`. Apple, Android, Flutter, CLI and
+`64e539149c0a005ac1c1e8abcbbcb6a3920333a7`. Apple, Android, Flutter and
 Windows source directories in that snapshot match the delivered implementation.
 The subsequent RN Swift scalar-result correction was compiled and its Foundation
-contracts rerun on dictator. Documentation, evidence and CI additions do not
+contracts rerun on dictator. Windows CI then exposed Node 20 glob handling in
+the CLI test command. Naming the two test files explicitly fixed discovery;
+Maxis lint, typecheck, build and all 24 tests passed with Node 20.20.2 against
+validation snapshot `a8d8b6ab5d77d158eeaaf2ebabb8860331633b98`. CLI runtime
+source is unchanged from the coordinated native probe. Documentation, evidence and CI additions do not
 change those native build inputs. The PR identifies the final integration head.
 
 - **dictator:** macOS 27.0 / 26A5378j, Xcode 27.2 / 27B52; existing iPhone
