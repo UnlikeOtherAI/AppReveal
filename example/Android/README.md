@@ -86,3 +86,28 @@ The complete protocol regression can be run against a booted emulator with:
 ```bash
 ANDROID_SERIAL=emulator-5554 ./verify-compose-mcp.sh
 ```
+
+## Maintenance regression walkthrough
+
+With JDK 17, `ANDROID_HOME`, and an existing emulator selected by `ANDROID_SERIAL`:
+
+```bash
+./gradlew :app:assembleDebug :app:assembleRelease --max-workers=2
+"$ANDROID_HOME/platform-tools/adb" -s "$ANDROID_SERIAL" install -r app/build/outputs/apk/debug/app-debug.apk
+python3 verification/verify_mcp.py
+```
+
+The walkthrough reads the runtime session credential into memory and uses
+authenticated MCP HTTP calls. It exercises login failure/recovery, native typing,
+clicks, switch state, scrolling, navigation, state and diagnostics, WebView DOM
+reads/mutations/errors, batch stopping, and Compose interaction state. It temporarily
+reduces the emulator viewport to verify Compose scrolling and restores the previous
+size afterward. It force-stops only `com.appreveal.example` between native and
+Compose runs. Example network traffic uses the app's deterministic OkHttp fixture,
+not an external account.
+
+Pass `--screenshots` to validate full-window PNG/JPEG and a Compose element crop
+(three captures). Set `APPREVEAL_EVIDENCE_DIR` to capture the restored calibration
+screen once more. No credentials are written to the evidence directory. The
+calibration destination had no working base implementation; the new screen repairs
+the Settings entry that previously navigated to a missing fragment.

@@ -316,23 +316,12 @@ final class WebViewBridge {
         }
 
         let result = try await webView.evaluateJavaScript(js)
-        if let string = result as? String {
-            return string
-        }
-        // For non-string results, convert to JSON
-        let data = try JSONSerialization.data(withJSONObject: result, options: [])
-        return String(data: data, encoding: .utf8) ?? "null"
+        return try appRevealWebResultString(result)
     }
 
     private func interactivePayload(for webView: WKWebView) async throws -> [String: Any] {
         let result = try await webView.evaluateJavaScript(DOMSerializer.interactiveJS())
-        let json: String
-        if let string = result as? String {
-            json = string
-        } else {
-            let data = try JSONSerialization.data(withJSONObject: result, options: [])
-            json = String(data: data, encoding: .utf8) ?? "{}"
-        }
+        let json = try appRevealWebResultString(result)
         guard let data = json.data(using: .utf8),
               let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]

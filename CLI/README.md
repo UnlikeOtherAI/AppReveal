@@ -8,7 +8,7 @@ It is built around target sets, not just a single device. The same command can f
 
 If an LLM is the first thing touching this interface, the operating model should be:
 
-1. Run `appreveal discover --json` to enumerate all reachable AppReveal targets.
+1. Run `appreveal discover --json` to enumerate advertised AppReveal targets. Discovery alone does not authenticate or prove reachability.
 2. Pick a target by service name, bundle ID, hostname, IP address, or full URL.
 3. Use `--all`, repeated `--target`, or `--platform` when you need several devices at once.
 4. Run `appreveal snapshot`, `find`, `tap`, and `type` for common UI-control flows.
@@ -40,7 +40,41 @@ Include in the report: platform (iOS/macOS/Android/Flutter/React Native), AppRev
 - Transport
 - `codes`
 
-`codes` is deliberately broad. Today it includes any code-like TXT metadata the service exposes plus app build identifiers such as `build` or `versionCode` when available. If AppReveal later publishes pairing pins or tokens, they will fit in the same field without changing the CLI shape.
+`codes` contains build/version metadata only. Credential-like TXT fields are redacted; session tokens are never taken from discovery.
+
+## Authentication and failures
+
+MCP calls require the session URL issued by the running debug app. Set
+`APPREVEAL_SESSION_URL` from a private file to avoid putting the token in shell
+history or process arguments:
+
+```bash
+export APPREVEAL_SESSION_URL="$(cat /private/path/appreveal-session-url)"
+appreveal inspect --json
+appreveal snapshot --json
+appreveal call get_state --json
+```
+
+The environment URL is the default target when none is supplied. Its credential
+applies only to that exact endpoint (including path), never to other discovered
+devices. For LAN access, use the app's LAN address in the private session URL.
+Explicit session URLs also work with `--target` for separate authenticated targets.
+The CLI removes the token from target records and request URLs, sends it in the
+Authorization header, redacts it in output, and refuses HTTP redirects.
+
+Discovery cannot retrieve a token. Without a matching session URL, authenticated
+probes fail and device/platform details may be unavailable. `--no-probe` only
+browses mDNS; a platform filter still requires authenticated metadata.
+
+Target commands exit nonzero if **any** selected target fails, including HTTP,
+JSON-RPC, MCP `isError`, AppReveal action errors, and failed batch actions. Fleet
+JSON keeps each target's `ok` and error/result, including successful targets.
+`call screenshot` preserves the complete MCP content envelope, including image
+bytes; ordinary single-text results are decoded as before. `request` returns the
+raw MCP result and also fails on tool errors.
+
+This is an AppReveal JSON-over-HTTP client, not a general SSE/sessionful MCP client.
+`--timeout` controls mDNS discovery only; HTTP requests have a 15-second deadline.
 
 ## Target selection model
 
@@ -50,7 +84,7 @@ Any target-aware command can work in one of three ways:
 - Repeated `--target <selector>` for an explicit fleet
 - `--all` to select everything discovered on the LAN
 
-You can add `--platform ios`, `--platform macos`, `--platform android`, `--platform flutter`, or `--platform reactnative` to narrow the set further.
+Use `--platform` with an OS (`ios`, `macos`, `android`, `windows`, `linux`) or a reported `frameworkType` (`flutter`, `reactnative`, `tauri`). Older servers that omit framework metadata can only be filtered by their reported OS.
 
 Selectors can be:
 
@@ -149,7 +183,7 @@ Find a single visible element and tap it. If several matches tie for best score,
 
 ```bash
 appreveal tap "login.submit" --all
-appreveal tap "Continue" --platform ios --field label --exact
+appreveal tap "Continue" --all --platform ios --field label --exact
 ```
 
 ### `type`
@@ -175,7 +209,7 @@ Fleet form:
 
 ```bash
 appreveal call get_screen --all
-appreveal call batch --platform ios --args '{"actions":[{"tool":"get_screen"},{"tool":"get_elements"}]}'
+appreveal call batch --all --platform ios --args '{"actions":[{"tool":"get_screen"},{"tool":"get_elements"}]}'
 appreveal call batch --target http://192.168.1.24:49152/ --args '{"actions":[{"tool":"get_screen"},{"tool":"get_elements"}]}'
 ```
 
@@ -209,7 +243,14 @@ Every command that accepts a target uses the same resolution logic:
 
 ```bash
 cd CLI
+pnpm lint
 pnpm typecheck
-pnpm test
-pnpm build
+pnpm test # builds dist, then runs unit and real HTTP/CLI fixture tests
 ```
+
+The HTTP fixture tests cover authenticated success, rejection/recovery, resulting
+interaction state, both batch encodings, partial fleet failure, ambiguous/disabled
+elements, image preservation, malformed protocol responses, redirects, and timeouts.
+They do not prove a native app's UI behavior. For a running native example, use
+[`scripts/verify-cli-mcp.mjs`](../scripts/verify-cli-mcp.mjs) with the same private
+session file; see [`docs/cli-verification.md`](../docs/cli-verification.md).

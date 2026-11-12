@@ -23,7 +23,6 @@ final class NetworkObserverService {
         let method = dict["method"] as? String ?? "GET"
         let url = dict["url"] as? String ?? ""
         let statusCode = dict["statusCode"] as? Int
-        let duration = dict["duration"] as? TimeInterval
         let requestBodySize = dict["requestBodySize"] as? Int
         let responseBodySize = dict["responseBodySize"] as? Int
         let error = dict["error"] as? String
@@ -33,7 +32,9 @@ final class NetworkObserverService {
 
         // Parse timestamps — accept ISO8601 strings or epoch doubles
         let startTime: Date
-        if let ts = dict["startTime"] as? TimeInterval {
+        if let ts = dict["requestTimestamp"] as? TimeInterval {
+            startTime = Date(timeIntervalSince1970: ts / 1000)
+        } else if let ts = dict["startTime"] as? TimeInterval {
             startTime = Date(timeIntervalSince1970: ts)
         } else if let tsStr = dict["startTime"] as? String,
                   let parsed = ISO8601DateFormatter().date(from: tsStr) {
@@ -43,7 +44,9 @@ final class NetworkObserverService {
         }
 
         let endTime: Date?
-        if let ts = dict["endTime"] as? TimeInterval {
+        if let ts = dict["responseTimestamp"] as? TimeInterval {
+            endTime = Date(timeIntervalSince1970: ts / 1000)
+        } else if let ts = dict["endTime"] as? TimeInterval {
             endTime = Date(timeIntervalSince1970: ts)
         } else if let tsStr = dict["endTime"] as? String,
                   let parsed = ISO8601DateFormatter().date(from: tsStr) {
@@ -59,7 +62,7 @@ final class NetworkObserverService {
             statusCode: statusCode,
             startTime: startTime,
             endTime: endTime,
-            duration: duration,
+            duration: endTime.map { max(0, $0.timeIntervalSince(startTime)) } ?? (dict["duration"] as? TimeInterval),
             requestHeaders: requestHeaders,
             responseHeaders: responseHeaders,
             requestBodySize: requestBodySize,
@@ -77,7 +80,7 @@ final class NetworkObserverService {
     // MARK: - Queries
 
     func recentCalls(limit: Int = 50) -> [CapturedRequest] {
-        Array(capturedRequests.suffix(limit))
+        Array(capturedRequests.suffix(max(0, limit)))
     }
 
     func callDetail(id: String) -> CapturedRequest? {

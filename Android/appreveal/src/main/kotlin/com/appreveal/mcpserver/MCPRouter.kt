@@ -104,7 +104,7 @@ internal object MCPRouter {
         handlerResult: JsonElement,
     ): JsonObject {
         if (toolName != "screenshot" || !handlerResult.isJsonObject) {
-            return textToolResult(handlerResult)
+            return textToolResult(handlerResult, isError = handlerResult.isToolFailure(toolName))
         }
 
         val screenshot = handlerResult.asJsonObject
@@ -158,4 +158,21 @@ internal object MCPRouter {
             )
             if (isError) addProperty("isError", true)
         }
+}
+
+internal fun JsonElement.isToolFailure(toolName: String? = null): Boolean {
+    if (!isJsonObject) return false
+    val payload = asJsonObject
+    val success = payload.get("success")
+    if (success?.isJsonPrimitive == true && success.asJsonPrimitive.isBoolean && !success.asBoolean) return true
+    val isError = payload.get("isError")
+    if (isError?.isJsonPrimitive == true && isError.asJsonPrimitive.isBoolean && isError.asBoolean) return true
+    if (
+        toolName == "get_network_call_detail" &&
+        listOf("id", "method", "url").all { payload.get(it)?.asStringOrNull() != null }
+    ) {
+        return false
+    }
+    val error = payload.get("error") ?: return false
+    return !error.isJsonNull && !(error.isJsonPrimitive && error.asJsonPrimitive.isString && error.asString.isBlank())
 }

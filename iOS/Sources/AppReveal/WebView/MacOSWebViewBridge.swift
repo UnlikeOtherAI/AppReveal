@@ -79,8 +79,8 @@ final class MacOSWebViewBridge {
         if let string = result as? String {
             return string
         }
-        // For non-string results, convert to JSON
-        let data = try JSONSerialization.data(withJSONObject: result, options: [])
+        guard let result else { return "null" }
+        let data = try JSONSerialization.data(withJSONObject: result, options: [.fragmentsAllowed])
         return String(data: data, encoding: .utf8) ?? "null"
     }
 }

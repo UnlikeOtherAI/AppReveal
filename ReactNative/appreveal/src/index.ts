@@ -4,8 +4,8 @@ import type { CapturedRequest } from './types';
 
 // Minimal type for React Navigation state — avoids a hard dep on @react-navigation/native
 interface NavigationState {
-  index: number;
-  routes: Array<{ name: string; state?: NavigationState }>;
+  index?: number;
+  routes: ReadonlyArray<{ name: string; state?: NavigationState }>;
 }
 
 export type { CapturedRequest };
@@ -17,6 +17,7 @@ export class AppReveal {
 
   static start(port: number = 0): void {
     if (!__DEV__) return;
+    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('port must be an integer between 0 and 65535');
     NativeAppReveal.start(port);
   }
 
@@ -82,7 +83,8 @@ export class AppReveal {
 
 function getActiveRouteName(state: NavigationState | undefined): string {
   if (!state) return '';
-  const route = state.routes[state.index];
+  const route = state.routes[state.index ?? 0];
+  if (!route) return '';
   if (route.state) {
     return getActiveRouteName(route.state as NavigationState);
   }
@@ -151,6 +153,12 @@ export function useAppRevealScreen(
 
 let _fetchPatched = false;
 
+// Debug instrumentation must not turn a successful fetch into a rejection or
+// replace the original network error if the native module is unavailable.
+function captureSafely(call: CapturedRequest): void {
+  try { AppReveal.captureNetworkCall(call); } catch { /* preserve fetch semantics */ }
+}
+
 export class AppRevealFetchInterceptor {
   private constructor() {}
 
@@ -191,11 +199,12 @@ export class AppRevealFetchInterceptor {
       const requestTimestamp = Date.now();
 
       let requestHeaders: Record<string, string> | undefined;
-      if (init?.headers) {
-        const h = init.headers;
+      const headers = init?.headers ?? (typeof input !== 'string' && !(input instanceof URL) ? input.headers : undefined);
+      if (headers) {
+        const h = headers;
         if (h instanceof Headers) {
           requestHeaders = {};
-          h.forEach((v, k) => { requestHeaders![k] = v; });
+          h.forEach((v: string, k: string) => { requestHeaders![k] = v; });
         } else if (Array.isArray(h)) {
           requestHeaders = Object.fromEntries(h);
         } else {
@@ -215,7 +224,7 @@ export class AppRevealFetchInterceptor {
           });
         }
 
-        AppReveal.captureNetworkCall({
+        captureSafely({
           id,
           method: method.toUpperCase(),
           url,
@@ -230,11 +239,13 @@ export class AppRevealFetchInterceptor {
       } catch (err: unknown) {
         const message =
           err instanceof Error ? err.message : String(err);
-        AppReveal.captureNetworkCall({
+        captureSafely({
           id,
           method: method.toUpperCase(),
           url,
           requestTimestamp,
+          responseTimestamp: Date.now(),
+          requestHeaders,
           error: message,
         });
         throw err;

@@ -40,7 +40,7 @@ public struct CapturedRequest: Codable {
         self.endTime = endTime
         self.duration = duration
         self.requestHeaders = CapturedRequest.redactSensitiveHeaders(requestHeaders)
-        self.responseHeaders = responseHeaders
+        self.responseHeaders = responseHeaders.map(Self.redactSensitiveHeaders)
         self.requestBodySize = requestBodySize
         self.responseBodySize = responseBodySize
         self.error = error
@@ -54,10 +54,8 @@ public struct CapturedRequest: Codable {
     ]
 
     private static func redactSensitiveHeaders(_ headers: [String: String]) -> [String: String] {
-        headers.mapValues { value in
-            headers.keys.contains(where: { sensitiveHeaders.contains($0.lowercased()) })
-                ? "[REDACTED]"
-                : value
-        }
+        headers.map { key, value in
+            (key, sensitiveHeaders.contains(key.lowercased()) ? "[REDACTED]" : value)
+        }.reduce(into: [String: String]()) { $0[$1.0] = $1.1 }
     }
 }

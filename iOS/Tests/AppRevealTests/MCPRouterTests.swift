@@ -10,6 +10,17 @@ final class MCPRouterTests: XCTestCase {
         super.tearDown()
     }
 
+    #if os(macOS)
+    func testUnhandledDeepLinkFailsWithoutOpeningSystemChooser() async throws {
+        registerBuiltInTools()
+        let response = await MCPRouter.shared.handle(toolRequest(
+            name: "open_deeplink",
+            arguments: ["url": "appreveal-maintenance-invalid://unhandled"]
+        ))
+        XCTAssertEqual(try resultObject(from: response)["isError"] as? Bool, true)
+    }
+    #endif
+
     func testImageToolReturnsMCPImageBlockAndMetadata() async throws {
         let imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
         let toolName = "test_image_result"
@@ -154,6 +165,86 @@ final class MCPRouterTests: XCTestCase {
         let sseEvents = try XCTUnwrap(detail["sseEvents"] as? [[String: Any]])
         XCTAssertEqual(sseEvents.first?["data"] as? String, "hello")
         XCTAssertEqual(detail["sseEventCount"] as? Int, 1)
+    }
+
+    func testToolFailureIsReportedAndStopsBatchWithoutRunningNextAction() async throws {
+        registerBuiltInTools()
+        for failure in [["error": "Disabled control"] as [String: Any], ["success": false]] {
+            var subsequentCalls = 0
+            MCPRouter.shared.register(MCPToolDefinition(
+                name: "test_returned_failure", description: "Failure", inputSchema: emptySchema,
+                handler: { _ in AnyCodable(failure) }
+            ))
+            MCPRouter.shared.register(MCPToolDefinition(
+                name: "test_after_failure", description: "Next", inputSchema: emptySchema,
+                handler: { _ in subsequentCalls += 1; return AnyCodable(["success": true]) }
+            ))
+            let response = await MCPRouter.shared.handle(toolRequest(name: "test_returned_failure"))
+            XCTAssertEqual(try resultObject(from: response)["isError"] as? Bool, true)
+            let batch = try XCTUnwrap(MCPRouter.shared.tool(named: "batch"))
+            let actions = [["tool": "test_returned_failure"], ["tool": "test_after_failure"]]
+            let result = try await batch.handler(["actions": AnyCodable(actions), "stop_on_error": AnyCodable(true)])
+            XCTAssertEqual(result.dictionaryValue?["count"]?.intValue, 1)
+            XCTAssertTrue(result.isToolFailure)
+            XCTAssertEqual(subsequentCalls, 0)
+            _ = try await batch.handler(["actions": AnyCodable(actions), "stop_on_error": AnyCodable(false)])
+            XCTAssertEqual(subsequentCalls, 1)
+        }
+    }
+
+    func testFailedNetworkCaptureIsDataAndDoesNotStopBatch() async throws {
+        registerBuiltInTools()
+        NetworkObserverService.shared.addCall(CapturedRequest(
+            id: "failed-request", method: "GET", url: "https://example.test", error: "Request timed out"
+        ))
+        let response = await MCPRouter.shared.handle(toolRequest(
+            name: "get_network_call_detail", arguments: ["id": "failed-request"]
+        ))
+        XCTAssertNil(try resultObject(from: response)["isError"])
+        let tool = try XCTUnwrap(MCPRouter.shared.tool(named: "get_network_call_detail"))
+        let detail = try await tool.handler(["id": AnyCodable("failed-request")])
+        XCTAssertEqual(detail.dictionaryValue?["error"]?.stringValue, "Request timed out")
+        let batch = try XCTUnwrap(MCPRouter.shared.tool(named: "batch"))
+        let result = try await batch.handler([
+            "actions": AnyCodable([
+                ["tool": "get_network_call_detail", "arguments": ["id": "failed-request"]],
+                ["tool": "get_state"]
+            ] as [[String: Any]]),
+            "stop_on_error": AnyCodable(true)
+        ])
+        XCTAssertEqual(result.dictionaryValue?["count"]?.intValue, 2)
+        XCTAssertFalse(result.isToolFailure)
+        let missing = await MCPRouter.shared.handle(toolRequest(
+            name: "get_network_call_detail", arguments: ["id": "absent"]
+        ))
+        XCTAssertEqual(try resultObject(from: missing)["isError"] as? Bool, true)
+    }
+
+    func testBlankErrorDoesNotFailToolOrStopBatch() async throws {
+        registerBuiltInTools()
+        for error in ["", " \n\t"] {
+            MCPRouter.shared.register(MCPToolDefinition(
+                name: "test_blank_error", description: "Network success", inputSchema: emptySchema,
+                handler: { _ in AnyCodable(["error": error, "statusCode": 200] as [String: Any]) }
+            ))
+            let response = await MCPRouter.shared.handle(toolRequest(name: "test_blank_error"))
+            XCTAssertNil(try resultObject(from: response)["isError"])
+            let batch = try XCTUnwrap(MCPRouter.shared.tool(named: "batch"))
+            let result = try await batch.handler([
+                "actions": AnyCodable([["tool": "test_blank_error"], ["tool": "get_state"]]),
+                "stop_on_error": AnyCodable(true)
+            ])
+            XCTAssertEqual(result.dictionaryValue?["count"]?.intValue, 2)
+            XCTAssertFalse(result.isToolFailure)
+        }
+    }
+
+    func testNegativeDiagnosticLimitAndOversizedIntegerDoNotTrap() async throws {
+        XCTAssertTrue(NetworkObserverService.shared.recentCalls(limit: -1).isEmpty)
+        XCTAssertTrue(DiagnosticsBridge.shared.getRecentErrors(limit: -1).isEmpty)
+        XCTAssertTrue(DiagnosticsBridge.shared.getRecentLogs(limit: 0).isEmpty)
+        XCTAssertNil(AnyCodable(1e100).intValue)
+        XCTAssertNil(AnyCodable(Double.infinity).intValue)
     }
 
     private var emptySchema: [String: AnyCodable] {

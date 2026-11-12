@@ -5,45 +5,58 @@ import android.view.ViewGroup
 import android.webkit.WebView
 import com.appreveal.screen.ScreenResolver
 import com.appreveal.shared.MainThreadExecutor
+import com.google.gson.JsonParser
+import com.google.gson.Gson
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 /**
  * Discovers WebView instances and evaluates JavaScript in them.
- * Uses reactContext.currentActivity for activity access in React Native.
  */
 internal object WebViewBridge {
-
     /**
      * Find all WebView instances in the current activity's view tree.
      */
     fun findWebViews(): List<Pair<String, WebView>> {
         return MainThreadExecutor.runBlocking {
-            val decorView = ScreenResolver.currentActivity?.window?.decorView
-                ?: return@runBlocking emptyList()
+            val decorView =
+                ScreenResolver.currentActivity?.window?.decorView
+                    ?: return@runBlocking emptyList()
             val results = mutableListOf<Pair<String, WebView>>()
-            var counter = 0
-            collectWebViews(decorView, results, counter)
+            collectWebViews(decorView, results)
             results
         }
     }
 
-    private fun collectWebViews(view: View, results: MutableList<Pair<String, WebView>>, counter: Int) {
-        var idx = counter
+    private fun collectWebViews(
+        view: View,
+        results: MutableList<Pair<String, WebView>>,
+    ) {
         if (view is WebView) {
-            val id = view.contentDescription?.toString()
-                ?: (if (view.id != View.NO_ID) {
-                    try { view.resources.getResourceEntryName(view.id) } catch (_: Exception) { null }
-                } else null)
-                ?: "webview_$idx"
-            results.add(Pair(id, view))
-            idx++
+            val id =
+                view.contentDescription?.toString()
+                    ?: (
+                        if (view.id != View.NO_ID) {
+                            try {
+                                view.resources.getResourceEntryName(view.id)
+                            } catch (_: Exception) {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                    )
+                    ?: "webview_${results.size}"
+            var uniqueId = id
+            var suffix = 1
+            while (results.any { it.first == uniqueId }) uniqueId = "${id}_${suffix++}"
+            results.add(Pair(uniqueId, view))
         }
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 val child = view.getChildAt(i)
                 if (child.visibility != View.GONE) {
-                    collectWebViews(child, results, idx)
+                    collectWebViews(child, results)
                 }
             }
         }
@@ -63,8 +76,8 @@ internal object WebViewBridge {
     /**
      * Get metadata about all discovered WebViews.
      */
-    fun webViewInfo(): List<Map<String, Any>> {
-        return MainThreadExecutor.runBlocking {
+    fun webViewInfo(): List<Map<String, Any>> =
+        MainThreadExecutor.runBlocking {
             val webViews = findWebViews()
             webViews.map { (id, webView) ->
                 val location = IntArray(2)
@@ -76,40 +89,42 @@ internal object WebViewBridge {
                     "loading" to (webView.progress < 100),
                     "canGoBack" to webView.canGoBack(),
                     "canGoForward" to webView.canGoForward(),
-                    "frame" to "${location[0]},${location[1]},${webView.width},${webView.height}"
+                    "frame" to "${location[0]},${location[1]},${webView.width},${webView.height}",
                 )
             }
         }
-    }
 
     /**
      * Evaluate JavaScript in a WebView.
      * Handles Android-specific issue where evaluateJavascript returns JSON-encoded strings
      * (strips surrounding quotes if the result is a JSON string).
      */
-    fun evaluate(js: String, webViewId: String?): String {
+    fun evaluate(
+        js: String,
+        webViewId: String?,
+    ): String {
         val future = CompletableFuture<String>()
 
         MainThreadExecutor.runBlocking {
-            val webView = resolveWebView(webViewId)
-                ?: throw WebViewError.NotFound(webViewId ?: "default")
+            val webView =
+                resolveWebView(webViewId)
+                    ?: throw WebViewError.NotFound(webViewId ?: "default")
 
-            webView.evaluateJavascript(js) { rawResult ->
-                if (rawResult == null || rawResult == "null") {
-                    future.complete("null")
-                } else if (rawResult.startsWith("\"") && rawResult.endsWith("\"")) {
-                    // Android evaluateJavascript JSON-encodes string results.
-                    // Decode the JSON string to get the actual value.
-                    val decoded = rawResult
-                        .substring(1, rawResult.length - 1)
-                        .replace("\\\"", "\"")
-                        .replace("\\\\", "\\")
-                        .replace("\\n", "\n")
-                        .replace("\\r", "\r")
-                        .replace("\\t", "\t")
-                    future.complete(decoded)
-                } else {
-                    future.complete(rawResult)
+            // evaluateJavascript reports thrown JS errors as null. Catch inside the page so
+            // invalid selectors/scripts cannot masquerade as a successful null result.
+            val source = Gson().toJson(js)
+            val wrapped = "(function(){try{return JSON.stringify({ok:true,value:(0,eval)($source)});}catch(e){return JSON.stringify({ok:false,error:String(e)});}})()"
+            webView.evaluateJavascript(wrapped) { rawResult ->
+                try {
+                    val envelope = JsonParser.parseString(JsonParser.parseString(rawResult).asString).asJsonObject
+                    if (!envelope.get("ok").asBoolean) {
+                        future.completeExceptionally(WebViewError.EvaluationFailed(envelope.get("error").asString))
+                    } else {
+                        val value = envelope.get("value")
+                        future.complete(if (value == null || value.isJsonNull) "null" else if (value.isJsonPrimitive && value.asJsonPrimitive.isString) value.asString else value.toString())
+                    }
+                } catch (error: Exception) {
+                    future.completeExceptionally(WebViewError.EvaluationFailed(error.message ?: "Invalid JavaScript result"))
                 }
             }
         }
@@ -121,7 +136,14 @@ internal object WebViewBridge {
 /**
  * WebView errors.
  */
-sealed class WebViewError(message: String) : Exception(message) {
-    class NotFound(id: String) : WebViewError("WebView not found: $id")
-    class EvaluationFailed(msg: String) : WebViewError("JS evaluation failed: $msg")
+sealed class WebViewError(
+    message: String,
+) : Exception(message) {
+    class NotFound(
+        id: String,
+    ) : WebViewError("WebView not found: $id")
+
+    class EvaluationFailed(
+        msg: String,
+    ) : WebViewError("JS evaluation failed: $msg")
 }

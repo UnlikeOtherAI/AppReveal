@@ -4,9 +4,26 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "react-native-appreveal": ["../appreveal/src/index"]
-    }
+      "react-native-appreveal": [
+        "../appreveal/src/index"
+      ],
+      "react": [
+        "./node_modules/@types/react"
+      ],
+      "react-native": [
+        "./node_modules/react-native"
+      ]
+    },
+    "types": [
+      "react",
+      "react-native"
+    ]
   },
-  "include": ["src", "index.js"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src",
+    "index.js"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

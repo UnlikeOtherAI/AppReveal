@@ -142,7 +142,7 @@ internal fun registerBuiltInTools() {
                     }
                 } catch (e: Exception) {
                     // Try text-based resolution as fallback
-                    val textResult = InteractionEngine.tapByText(elementId, "contains")
+                    val textResult = if (ElementInventory.listElements().any { it.id == elementId }) mapOf("success" to false) else InteractionEngine.tapByText(elementId, "contains")
                     val success = textResult["success"] as? Boolean ?: false
                     if (success) {
                         JsonObject().apply {
@@ -331,7 +331,7 @@ internal fun registerBuiltInTools() {
     router.register(
         MCPToolDefinition(
             name = "scroll_to_element",
-            description = "Scroll until an element is visible",
+            description = "Scroll until a native View element is visible. Compose targets are not supported by this tool.",
             inputSchema =
                 jsonSchema(
                     "element_id" to jsonProp("string"),
@@ -1016,9 +1016,11 @@ internal fun registerBuiltInTools() {
                             JsonObject().apply {
                                 addProperty("index", index)
                                 addProperty("tool", toolName)
+                                addProperty("success", !result.isToolFailure(toolName))
                                 addProperty("result", resultJson)
                             },
                         )
+                        if (stopOnError && result.isToolFailure(toolName)) break
                     } catch (e: Exception) {
                         results.add(
                             JsonObject().apply {
@@ -1032,6 +1034,7 @@ internal fun registerBuiltInTools() {
                 }
 
                 JsonObject().apply {
+                    addProperty("success", results.none { it.isToolFailure() })
                     add("results", results)
                     addProperty("count", results.size())
                 }

@@ -148,6 +148,85 @@ class MCPRouterTest {
         assertEquals("hello", detailJson.getAsJsonArray("sseEvents")[0].asJsonObject.get("data").asString)
     }
 
+    @Test
+    fun handlerErrorsAreMarkedAndStopBatchBeforeSideEffects() {
+        registerBuiltInTools()
+        var executed = false
+        registerTool("fail") { JsonObject().apply { addProperty("error", "rejected") } }
+        registerTool("later") {
+            executed = true
+            JsonObject()
+        }
+        assertTrue(callTool("fail").get("isError").asBoolean)
+        val args =
+            JsonObject().apply {
+                addProperty("stop_on_error", true)
+                add(
+                    "actions",
+                    JsonArray().apply {
+                        add(JsonObject().apply { addProperty("tool", "fail") })
+                        add(JsonObject().apply { addProperty("tool", "later") })
+                    },
+                )
+            }
+        val result = callTool("batch", args)
+        val payload = MCPGson.gson.fromJson(result.getAsJsonArray("content")[0].asJsonObject.get("text").asString, JsonObject::class.java)
+        assertTrue(result.get("isError").asBoolean)
+        assertFalse(payload.get("success").asBoolean)
+        assertEquals(1, payload.get("count").asInt)
+        assertFalse(executed)
+        args.addProperty("stop_on_error", false)
+        callTool("batch", args)
+        assertTrue(executed)
+    }
+
+    @Test
+    fun emptyNetworkErrorIsNotAToolFailure() {
+        registerTool("get_network_call_detail") { JsonObject().apply { addProperty("error", "") } }
+        assertFalse(callTool("get_network_call_detail").has("isError"))
+    }
+
+    @Test
+    fun failedNetworkCaptureIsDataAndDoesNotStopBatch() {
+        registerBuiltInTools()
+        NetworkObserverService.addCall(
+            CapturedRequest(id = "failed-request", method = "GET", url = "https://example.test", error = "Request timed out"),
+        )
+        val args = JsonObject().apply { addProperty("id", "failed-request") }
+        val result = callTool("get_network_call_detail", args)
+        assertFalse(result.has("isError"))
+        val payload = MCPGson.gson.fromJson(result.getAsJsonArray("content")[0].asJsonObject.get("text").asString, JsonObject::class.java)
+        assertEquals("Request timed out", payload.get("error").asString)
+        var subsequentCalls = 0
+        registerTool("after_network_lookup") {
+            subsequentCalls++
+            JsonObject()
+        }
+        val actions =
+            JsonArray().apply {
+                add(
+                    JsonObject().apply {
+                        addProperty("tool", "get_network_call_detail")
+                        add("arguments", args)
+                    },
+                )
+                add(JsonObject().apply { addProperty("tool", "after_network_lookup") })
+            }
+        val batch =
+            callTool(
+                "batch",
+                JsonObject().apply {
+                    add("actions", actions)
+                    addProperty("stop_on_error", true)
+                },
+            )
+        assertFalse(batch.has("isError"))
+        val batchPayload = MCPGson.gson.fromJson(batch.getAsJsonArray("content")[0].asJsonObject.get("text").asString, JsonObject::class.java)
+        assertEquals(2, batchPayload.get("count").asInt)
+        assertEquals(1, subsequentCalls)
+        assertTrue(callTool("get_network_call_detail", JsonObject().apply { addProperty("id", "absent") }).get("isError").asBoolean)
+    }
+
     private fun registerTool(
         name: String,
         handler: () -> JsonObject,

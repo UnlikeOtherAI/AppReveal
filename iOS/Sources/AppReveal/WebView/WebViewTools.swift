@@ -53,7 +53,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["dom": result] as [String: Any])
+                return webViewToolResult(result, key: "dom")
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -77,7 +77,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -107,7 +107,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -137,7 +137,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -166,7 +166,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -198,7 +198,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -229,7 +229,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -260,7 +260,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -289,7 +289,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -317,7 +317,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -418,7 +418,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.linksJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -443,7 +443,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: js, webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -466,7 +466,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.formsJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -489,7 +489,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.headingsJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -512,7 +512,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.imagesJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -535,7 +535,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.tablesJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }
@@ -558,7 +558,7 @@ func registerWebViewTools() {
             let windowId = params?["window_id"]?.stringValue
             do {
                 let result = try await bridge.evaluate(js: DOMSerializer.summaryJS(), webViewId: params?["webview_id"]?.stringValue, windowId: windowId)
-                return AnyCodable(["result": result] as [String: Any])
+                return webViewToolResult(result)
             } catch {
                 return AnyCodable(["error": error.localizedDescription])
             }

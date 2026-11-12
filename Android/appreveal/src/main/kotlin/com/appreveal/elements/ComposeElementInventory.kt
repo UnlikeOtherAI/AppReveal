@@ -50,7 +50,7 @@ internal object ComposeElementInventory {
         seenIds: MutableMap<String, Int>,
     ): Boolean? {
         val handle = snapshot(root, seenIds).firstOrNull { it.elementInfo.id == id } ?: return null
-        if (!handle.clickable) return false
+        if (!handle.clickable || !handle.elementInfo.enabled) return false
         if (invokeSemanticsAction(handle.clickAction)) return true
         return handle.provider?.performAction(handle.semanticsId, AccessibilityNodeInfo.ACTION_CLICK, null) ?: false
     }
@@ -80,8 +80,8 @@ internal object ComposeElementInventory {
 
             ComposeTextMatch(
                 matchedText = matchedText,
-                action = actionHandle?.clickAction,
-                provider = actionHandle?.provider,
+                action = actionHandle?.takeIf { it.elementInfo.enabled }?.clickAction,
+                provider = actionHandle?.takeIf { it.elementInfo.enabled }?.provider,
                 actionNodeId = actionHandle?.semanticsId,
             )
         }
@@ -119,6 +119,39 @@ internal object ComposeElementInventory {
         return setText(handle, text, append)
     }
 
+    fun scroll(
+        root: View,
+        id: String?,
+        direction: String,
+        seenIds: MutableMap<String, Int>,
+    ): Boolean? {
+        val handle =
+            snapshot(root, seenIds).firstOrNull {
+                if (id == null) it.scrollAction != null else it.elementInfo.id == id
+            } ?: return null
+        if (!handle.elementInfo.enabled) return false
+        val frame = handle.elementInfo.frame
+        val dx =
+            when (direction) {
+                "left" -> -frame.width * 0.8
+                "right" -> frame.width * 0.8
+                else -> 0.0
+            }.toFloat()
+        val dy =
+            when (direction) {
+                "up" -> -frame.height * 0.8
+                "down" -> frame.height * 0.8
+                else -> 0.0
+            }.toFloat()
+        val action = handle.scrollAction ?: return false
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            (action as? Function2<Float, Float, Boolean>)?.invoke(dx, dy) ?: false
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
     fun dumpTreeForComposeView(
         composeView: View,
         depth: Int,
@@ -147,6 +180,7 @@ internal object ComposeElementInventory {
         val editableTextTemplate: Any?,
         val clickAction: Any?,
         val setTextAction: Any?,
+        val scrollAction: Any?,
     )
 
     private data class SemanticsProperties(
@@ -164,6 +198,8 @@ internal object ComposeElementInventory {
         var editableTextTemplate: Any? = null,
         var clickAction: Any? = null,
         var setTextAction: Any? = null,
+        var scrollAction: Any? = null,
+        var toggleState: String? = null,
     ) {
         val searchableTexts: List<String>
             get() = (contentDescriptions + visibleText + listOfNotNull(editableText)).filter { it.isNotBlank() }.distinct()
@@ -216,7 +252,7 @@ internal object ComposeElementInventory {
         val currentText =
             properties.editableText
                 ?: accessibilityInfo?.text?.toString()?.takeIf { it.isNotBlank() }
-        val shouldList = visible && !bounds.isEmpty && (properties.testTag != null || label != null || clickable || editable)
+        val shouldList = visible && !bounds.isEmpty && (properties.testTag != null || label != null || clickable || editable || properties.scrollable)
 
         var currentContainerId = containerId
         if (shouldList) {
@@ -231,10 +267,10 @@ internal object ComposeElementInventory {
                     id = finalId,
                     type = classifyNode(properties, accessibilityInfo, editable, clickable),
                     label = label,
-                    value = currentText?.takeIf { it != label },
+                    value = if (editable) currentText.orEmpty() else properties.toggleState ?: currentText?.takeIf { it != label },
                     enabled = enabled,
                     visible = visible,
-                    tappable = clickable,
+                    tappable = enabled && clickable,
                     frame = frame,
                     safeAreaInsets = safeAreaInsets(composeView, systemInsets),
                     safeAreaLayoutGuideFrame = safeAreaLayoutGuideFrame(frame, composeView, systemInsets),
@@ -256,6 +292,7 @@ internal object ComposeElementInventory {
                     editableTextTemplate = properties.editableTextTemplate,
                     clickAction = properties.clickAction,
                     setTextAction = properties.setTextAction,
+                    scrollAction = properties.scrollAction,
                 ),
             )
             currentContainerId = finalId
@@ -279,7 +316,7 @@ internal object ComposeElementInventory {
         text: String,
         append: Boolean,
     ): ComposeTextActionResult {
-        if (!handle.editable) return ComposeTextActionResult.NOT_EDITABLE
+        if (!handle.editable || !handle.elementInfo.enabled) return ComposeTextActionResult.NOT_EDITABLE
         val replacement = if (append) handle.currentText.orEmpty() + text else text
         val annotatedString = annotatedString(handle.editableTextTemplate, replacement)
         if (annotatedString != null && invokeSemanticsAction(handle.setTextAction, annotatedString)) {
@@ -352,7 +389,18 @@ internal object ComposeElementInventory {
                 "Disabled" -> properties.disabled = true
                 "Focused" -> properties.focused = value as? Boolean ?: false
                 "InvisibleToUser", "HideFromAccessibility" -> properties.invisibleToUser = true
-                "ScrollBy", "ScrollToIndex", "HorizontalScrollAxisRange", "VerticalScrollAxisRange" -> {
+                "ToggleableState" ->
+                    properties.toggleState =
+                        when (value.toString()) {
+                            "On" -> "true"
+                            "Off" -> "false"
+                            else -> "indeterminate"
+                        }
+                "ScrollBy" -> {
+                    properties.scrollable = true
+                    properties.scrollAction = accessibilityAction(value)
+                }
+                "ScrollToIndex", "HorizontalScrollAxisRange", "VerticalScrollAxisRange" -> {
                     properties.scrollable = true
                 }
             }
@@ -497,6 +545,7 @@ internal object ComposeElementInventory {
         val className = accessibilityInfo?.className?.toString().orEmpty()
         val role = properties.role.orEmpty()
         return when {
+            properties.scrollable -> ElementType.SCROLL_VIEW
             editable || className.contains("EditText") -> ElementType.TEXT_FIELD
             role.contains("Switch", ignoreCase = true) ||
                 role.contains("Checkbox", ignoreCase = true) ||
@@ -517,6 +566,7 @@ internal object ComposeElementInventory {
         editable: Boolean,
     ): List<String> {
         val actions = mutableListOf<String>()
+        if (properties.disabled || accessibilityInfo?.isEnabled == false) return actions
         if (clickable) actions.add("tap")
         if (accessibilityInfo?.isLongClickable == true) actions.add("longPress")
         if (editable) {

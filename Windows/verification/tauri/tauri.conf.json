@@ -1,0 +1,8 @@
+{
+  "productName": "AppReveal verification",
+  "version": "0.0.0",
+  "identifier": "ai.unlikeother.appreveal.verification",
+  "build": { "frontendDist": "ui" },
+  "app": { "windows": [{ "label": "main_test", "title": "AppReveal Tauri verification", "width": 800, "height": 700 }] },
+  "bundle": { "active": false }
+}

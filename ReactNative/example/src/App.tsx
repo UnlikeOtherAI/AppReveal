@@ -135,8 +135,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer
-        ref={navListener.ref}
-        onStateChange={navListener.onStateChange}>
+        onStateChange={navListener}>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Auth" component={LoginScreen} />
           <RootStack.Screen name="Main" component={TabNavigator} />

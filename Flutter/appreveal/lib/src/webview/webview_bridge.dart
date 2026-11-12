@@ -1,5 +1,8 @@
 // WebView registry and JavaScript execution bridge.
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:webview_flutter/webview_flutter.dart';
 
 class WebViewEntry {
@@ -74,17 +77,24 @@ class WebViewBridge {
 
   Future<String> evaluate({required String js, String? webViewId}) async {
     final controller = resolve(id: webViewId);
-    if (controller == null) throw Exception('WebView not found${webViewId != null ? ': $webViewId' : ''}');
+    if (controller == null) {
+      throw Exception(
+          'WebView not found${webViewId != null ? ': $webViewId' : ''}');
+    }
     final result = await controller.runJavaScriptReturningResult(js);
-    // webview_flutter returns the JSON-encoded string result — unwrap it
+    return decodeResult(result, jsonEncodedString: Platform.isAndroid);
+  }
+
+  /// Android can return a JSON-quoted JS string; iOS returns the string itself.
+  /// Decode once so escaped backslashes, tabs and Unicode survive unchanged.
+  static String decodeResult(Object result, {bool jsonEncodedString = false}) {
     final raw = result.toString();
-    if (raw.startsWith('"') && raw.endsWith('"')) {
-      return raw
-          .substring(1, raw.length - 1)
-          .replaceAll('\\"', '"')
-          .replaceAll('\\\\', '\\')
-          .replaceAll('\\n', '\n')
-          .replaceAll('\\r', '\r');
+    if (!jsonEncodedString) return raw;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is String) return decoded;
+    } on FormatException {
+      // Arbitrary web_evaluate output need not be JSON.
     }
     return raw;
   }

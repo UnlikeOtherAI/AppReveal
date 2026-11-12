@@ -269,7 +269,7 @@ Element `testID` props map to `accessibilityIdentifier` on iOS and content descr
 
 ## Example app
 
-The `example/` directory contains a full React Native app demonstrating all framework features:
+The `example/` directory contains React Native screens and JavaScript configuration demonstrating the framework:
 
 - 8 screens with `testID` on all interactive elements
 - React Navigation v7 with bottom tabs and nested stacks
@@ -277,16 +277,32 @@ The `example/` directory contains a full React Native app demonstrating all fram
 - Feature flags, state, and navigation stack reporting
 - WebView with `react-native-webview`
 
-### Run
+### Verification and native host setup
+
+The example does not yet contain native `android/` or `ios/` host projects. Its
+TypeScript check and the library AAR build do not establish native example runtime
+coverage. Running it on a device requires React Native 0.76.5 host scaffolding,
+autolinking, and native dependency installation.
 
 ```bash
-cd example
-npm install
-cd ios && pod install && cd ..
-npx react-native run-ios
-# or
-npx react-native run-android
+cd ReactNative/appreveal
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm lint
+pnpm test
+cd ../example
+pnpm install --lockfile=false
+pnpm typecheck
 ```
+
+From the repository root, with JDK 17 and `ANDROID_HOME` set:
+
+```bash
+./Android/gradlew -p ReactNative/appreveal/android testDebugUnitTest assembleDebug lintDebug --max-workers=2
+```
+
+See [verification notes](VERIFICATION.md) for the Apple bridge regression harness
+and the limits of these checks.
 
 ## Security
 

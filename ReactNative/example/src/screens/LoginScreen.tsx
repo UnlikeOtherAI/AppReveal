@@ -35,7 +35,7 @@ export function LoginScreen({ navigation }: Props) {
     );
 
     // Simulate a small delay
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 600));
 
     ExampleState.instance.isLoggedIn = true;
     ExampleState.instance.userEmail =

@@ -1,5 +1,5 @@
 import type { ResolvedTarget } from './mcp.js';
-import { callTool } from './mcp.js';
+import { callTool, assertToolSuccess, decodeJsonText } from './mcp.js';
 
 export interface FanOutResult<T> {
   target: ResolvedTarget;
@@ -41,11 +41,11 @@ export interface ElementRecord {
   type?: string;
   label?: string;
   value?: string;
-  enabled?: string;
-  visible?: string;
-  tappable?: string;
+  enabled?: string | boolean;
+  visible?: string | boolean;
+  tappable?: string | boolean;
   frame?: string;
-  actions?: string;
+  actions?: string | string[];
   source?: string;
   [key: string]: unknown;
 }
@@ -91,7 +91,7 @@ export async function snapshotTargets(
       ],
     });
 
-    const byTool = parseBatchToolResults(batch.decoded);
+    const byTool = parseBatchToolResults(batch.decoded, ['launch_context', 'get_screen', 'get_elements', 'get_view_tree']);
     const elements = mergeInteractiveTargets(
       extractElements(byTool.get('get_elements')),
       extractInteractiveViewNodes(byTool.get('get_view_tree')),
@@ -220,7 +220,7 @@ async function fetchScreenAndElements(target: ResolvedTarget): Promise<{
       { tool: 'get_view_tree', arguments: { max_depth: 12 } },
     ],
   });
-  const byTool = parseBatchToolResults(batch.decoded);
+  const byTool = parseBatchToolResults(batch.decoded, ['get_screen', 'get_elements', 'get_view_tree']);
 
   return {
     screen: toRecord(byTool.get('get_screen')),
@@ -231,40 +231,30 @@ async function fetchScreenAndElements(target: ResolvedTarget): Promise<{
   };
 }
 
-function parseBatchToolResults(decoded: unknown): Map<string, unknown> {
+function parseBatchToolResults(decoded: unknown, required: string[]): Map<string, unknown> {
   const result = new Map<string, unknown>();
-  const record = toRecord(decoded);
-  const items = Array.isArray(record.results) ? record.results : [];
-
-  for (const item of items) {
-    if (!isRecord(item)) {
-      continue;
-    }
-
-    const tool = typeof item.tool === 'string' ? item.tool : undefined;
-    if (!tool) {
-      continue;
-    }
-
-    const rawResult = typeof item.result === 'string' ? item.result : undefined;
-    if (!rawResult) {
-      result.set(tool, item);
-      continue;
-    }
-
-    try {
-      result.set(tool, JSON.parse(rawResult));
-    } catch {
-      result.set(tool, rawResult);
-    }
+  if (!isRecord(decoded) || !Array.isArray(decoded.results)) {
+    throw new Error('Invalid batch response: results array required.');
   }
-
+  for (const item of decoded.results) {
+    if (!isRecord(item) || typeof item.tool !== 'string' || !Object.hasOwn(item, 'result')) {
+      throw new Error('Invalid or failed batch action.');
+    }
+    assertToolSuccess(item);
+    const value = decodeJsonText(item.result);
+    assertToolSuccess(value, item.tool);
+    result.set(item.tool, value);
+  }
+  for (const tool of required) {
+    if (!isRecord(result.get(tool))) throw new Error(`Missing or invalid batch result for ${tool}.`);
+  }
   return result;
 }
 
 function extractElements(value: unknown): ElementRecord[] {
   const record = toRecord(value);
-  const elements = Array.isArray(record.elements) ? record.elements : [];
+  if (!Array.isArray(record.elements)) throw new Error('Invalid get_elements response: elements array required.');
+  const elements = record.elements;
   return elements.filter(isRecord).map((element) => ({ ...element, source: 'elements' }));
 }
 
@@ -288,12 +278,9 @@ function toViewNodeElement(view: Record<string, unknown>): ElementRecord | undef
     return undefined;
   }
 
-  const labels = accessibilityLabel.split(/\s+/).filter(Boolean);
-  const primaryLabel = labels[0] ?? accessibilityLabel;
   const className = typeof view.class === 'string' ? view.class : 'view';
 
   return {
-    id: primaryLabel,
     label: accessibilityLabel,
     type: className.replace(/^RCT/, '').toLowerCase(),
     value: '',
@@ -310,7 +297,9 @@ function toViewNodeElement(view: Record<string, unknown>): ElementRecord | undef
 function mergeInteractiveTargets(primary: ElementRecord[], fallback: ElementRecord[]): ElementRecord[] {
   const merged = new Map<string, ElementRecord>();
 
-  for (const element of [...primary, ...fallback]) {
+  const uniqueFallback = fallback.filter((element) => !primary.some((known) =>
+    known.label === element.label && known.frame === element.frame));
+  for (const element of [...primary, ...uniqueFallback]) {
     const key = `${element.source}:${element.id ?? ''}:${element.label ?? ''}:${element.frame ?? ''}`;
     if (!merged.has(key)) {
       merged.set(key, element);
@@ -326,7 +315,9 @@ function selectSingleElement(
   field: ElementSearchField,
   exact: boolean,
 ): MatchedElement {
-  const ranked = rankElements(elements, query, field, exact);
+  const ranked = rankElements(elements.filter((element) =>
+    element.enabled !== false && element.enabled !== 'false' &&
+    element.visible !== false && element.visible !== 'false'), query, field, exact);
   if (ranked.length === 0) {
     throw new Error(`No element matched "${query}".`);
   }
@@ -349,6 +340,7 @@ function rankElements(
   exact = false,
 ): MatchedElement[] {
   const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) throw new Error('Element query cannot be empty.');
 
   return elements
     .map((element) => {
@@ -405,7 +397,8 @@ function scoreElementField(
     return 0;
   }
 
-  const rawValue = element[field];
+  const value = element[field];
+  const rawValue = Array.isArray(value) ? value.join(' ') : value;
   if (typeof rawValue !== 'string' || rawValue.trim() === '') {
     return 0;
   }
@@ -439,8 +432,8 @@ function centerPointFromFrame(frame: unknown): { x: number; y: number } | undefi
     return undefined;
   }
 
-  const parts = frame.split(',').map((part) => Number.parseFloat(part));
-  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) {
+  const parts = frame.split(',').map((part) => part.trim() === '' ? NaN : Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part)) || parts[2] <= 0 || parts[3] <= 0) {
     return undefined;
   }
 

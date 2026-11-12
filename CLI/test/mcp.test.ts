@@ -19,13 +19,13 @@ test('buildCandidateUrls keeps alternate discovery addresses in reachability ord
   );
 });
 
-test('extractCodes keeps code-like txt fields and probe version codes', () => {
+test('extractCodes exposes build metadata without pairing credentials', () => {
   assert.deepEqual(
     extractCodes(
       { bundleId: 'com.example.app', pin: '1234', token: 'abcd' },
       { build: '12', versionCode: 34 },
     ),
-    { pin: '1234', token: 'abcd', build: '12', versionCode: '34' },
+    { build: '12', versionCode: '34' },
   );
 });
 
@@ -46,4 +46,13 @@ test('buildArguments merges json args and repeated key value args', () => {
     buildArguments('{"text":"hello"}', ['clear=true', 'count=2']),
     { text: 'hello', clear: true, count: 2 },
   );
+});
+
+
+test('key-value arguments keep prototype-like keys as data', () => {
+  const args = buildArguments(undefined, ['__proto__={"injected":true}', 'constructor=literal']);
+  assert.equal(Object.getPrototypeOf(args), Object.prototype);
+  assert.equal(args.injected, undefined);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(args, '__proto__')?.value, { injected: true });
+  assert.equal(args.constructor, 'literal');
 });

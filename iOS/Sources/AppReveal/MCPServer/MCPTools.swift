@@ -120,11 +120,14 @@ func registerBuiltInTools() {
                 return AnyCodable(["error": "Invalid URL"])
             }
             #if os(iOS)
-            await UIApplication.shared.open(url)
+            let opened = await UIApplication.shared.open(url)
             #elseif os(macOS)
-            NSWorkspace.shared.open(url)
+            guard NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
+                return AnyCodable(["success": false, "error": "No application handles this URL"] as [String: Any])
+            }
+            let opened = NSWorkspace.shared.open(url)
             #endif
-            return AnyCodable(["success": true, "url": urlStr] as [String: Any])
+            return AnyCodable(["success": opened, "url": urlStr] as [String: Any])
         }
     ))
 
@@ -451,14 +454,16 @@ func registerBuiltInTools() {
                     let result = try await tool.handler(arguments)
                     let resultData = try JSONEncoder().encode(result)
                     let resultString = String(data: resultData, encoding: .utf8) ?? "{}"
-                    results.append(["index": index, "tool": toolName, "result": resultString])
+                    results.append(["index": index, "tool": toolName, "result": resultString, "success": !result.isToolFailure(for: toolName)])
+                    if stopOnError && result.isToolFailure(for: toolName) { break }
                 } catch {
                     results.append(["index": index, "tool": toolName, "error": error.localizedDescription])
                     if stopOnError { break }
                 }
             }
 
-            return AnyCodable(["results": results, "count": results.count] as [String: Any])
+            return AnyCodable(["results": results, "count": results.count,
+                              "success": !results.contains { AnyCodable($0).isToolFailure }] as [String: Any])
         }
     ))
 
@@ -881,11 +886,12 @@ private func registerIOSBuiltInTools() {
                 return AnyCodable(["success": true, "text": text] as [String: Any])
             } catch {
                 if let elementId = params?["element_id"]?.stringValue,
-                   let target = await WebViewBridge.shared.findDOMElementTarget(id: elementId, windowId: windowId),
-                   WebViewBridge.shared.typeText(text, in: target, clear: false, windowId: windowId) {
+                   let target = await WebViewBridge.shared.findDOMElementTarget(id: elementId, windowId: windowId) {
+                    let dom = await WebViewBridge.shared.typeTextResult(text, in: target, clear: false, windowId: windowId)
                     return AnyCodable([
-                        "success": true,
+                        "success": dom["success"] as? Bool == true,
                         "text": text,
+                        "dom": dom,
                         "target": "webview_dom"
                     ] as [String: Any])
                 }
@@ -916,10 +922,11 @@ private func registerIOSBuiltInTools() {
                 try InteractionEngine.shared.clear(elementId: elementId, windowId: windowId)
                 return AnyCodable(["success": true] as [String: Any])
             } catch {
-                if let target = await WebViewBridge.shared.findDOMElementTarget(id: elementId, windowId: windowId),
-                   WebViewBridge.shared.clearText(in: target, windowId: windowId) {
+                if let target = await WebViewBridge.shared.findDOMElementTarget(id: elementId, windowId: windowId) {
+                    let dom = await WebViewBridge.shared.typeTextResult("", in: target, clear: true, windowId: windowId)
                     return AnyCodable([
-                        "success": true,
+                        "success": dom["success"] as? Bool == true,
+                        "dom": dom,
                         "target": "webview_dom"
                     ] as [String: Any])
                 }

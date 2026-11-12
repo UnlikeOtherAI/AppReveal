@@ -244,7 +244,7 @@ enum DOMSerializer {
                 if (children.length > 0) el.children = children;
                 return el;
             }
-            var r = root || document.body;
+            var r = root;
             if (!r) return JSON.stringify({error:'Root element not found'});
             return JSON.stringify(serialize(r, 0));
         })(\(rootExpr), \(maxDepth), \(visibleOnly))
@@ -460,6 +460,7 @@ enum DOMSerializer {
         (function() {
             var el = document.querySelector('\(escapeJS(selector))');
             if (!el) return JSON.stringify({error:'Element not found: \(escapeJS(selector))'});
+            if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') return JSON.stringify({error:'Element is disabled'});
             var rect = el.getBoundingClientRect();
             var x = rect.left + rect.width / 2;
             var y = rect.top + rect.height / 2;
@@ -474,10 +475,6 @@ enum DOMSerializer {
             el.dispatchEvent(new MouseEvent('mousedown', eventInit));
             el.dispatchEvent(new MouseEvent('mouseup', eventInit));
             el.click();
-            if (el.checked !== undefined) {
-                el.dispatchEvent(new Event('input', {bubbles:true}));
-                el.dispatchEvent(new Event('change', {bubbles:true}));
-            }
             return JSON.stringify({
                 success:true,
                 tag:el.tagName.toLowerCase(),
@@ -501,6 +498,9 @@ enum DOMSerializer {
             return JSON.stringify({ success: false, error: "no_dom_element", x, y });
           }
           const target = element.closest('button,a,input,textarea,select,label,[role="button"],[role="link"],[onclick]') || element;
+          if (target.matches(':disabled') || target.getAttribute('aria-disabled') === 'true') {
+            return JSON.stringify({success:false, error:'Element is disabled'});
+          }
           if (typeof target.focus === 'function') {
             try { target.focus({ preventScroll: true }); } catch (_) { target.focus(); }
           }
@@ -515,10 +515,6 @@ enum DOMSerializer {
             target.click();
           } else {
             target.dispatchEvent(new MouseEvent('click', eventInit));
-          }
-          if (target.checked !== undefined) {
-            target.dispatchEvent(new Event('input', { bubbles: true }));
-            target.dispatchEvent(new Event('change', { bubbles: true }));
           }
           return JSON.stringify({
             success: true,
@@ -541,19 +537,23 @@ enum DOMSerializer {
         (function() {
             var el = document.querySelector('\(escapeJS(selector))');
             if (!el) return JSON.stringify({error:'Element not found: \(escapeJS(selector))'});
+            if (el.matches(':disabled') || el.readOnly || el.getAttribute('aria-disabled') === 'true') {
+                return JSON.stringify({error:'Element is not editable'});
+            }
+            var isTextInput = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' &&
+                ['text','search','email','password','tel','url','number'].indexOf(el.type) >= 0);
+            if (!isTextInput && !el.isContentEditable) return JSON.stringify({error:'Element is not a text input'});
             el.focus();
-            var proto = el.tagName === 'TEXTAREA' ?
-                window.HTMLTextAreaElement.prototype :
-                window.HTMLInputElement.prototype;
-            var setter = Object.getOwnPropertyDescriptor(proto, 'value');
-            if (setter && setter.set) {
-                setter.set.call(el, \(clear ? "''" : "el.value") + '\(escapeJS(text))');
+            if (el.isContentEditable) {
+                el.textContent = \(clear ? "''" : "el.textContent") + '\(escapeJS(text))';
             } else {
-                el.value = \(clear ? "''" : "el.value") + '\(escapeJS(text))';
+                var proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+                var setter = Object.getOwnPropertyDescriptor(proto, 'value');
+                setter.set.call(el, \(clear ? "''" : "el.value") + '\(escapeJS(text))');
             }
             el.dispatchEvent(new Event('input', {bubbles:true}));
             el.dispatchEvent(new Event('change', {bubbles:true}));
-            return JSON.stringify({success:true, value:el.value});
+            return JSON.stringify({success:true, value:el.isContentEditable ? el.textContent : el.value});
         })()
         """
     }
@@ -565,7 +565,13 @@ enum DOMSerializer {
         (function() {
             var el = document.querySelector('\(escapeJS(selector))');
             if (!el || el.tagName !== 'SELECT') return JSON.stringify({error:'Select not found: \(escapeJS(selector))'});
-            el.value = '\(escapeJS(value))';
+            if (el.matches(':disabled')) return JSON.stringify({error:'Select is disabled'});
+            var option = Array.from(el.options).find(function(item) { return item.value === '\(escapeJS(value))'; });
+            if (!option || option.disabled || (option.parentElement.tagName === 'OPTGROUP' && option.parentElement.disabled)) {
+                return JSON.stringify({error:'Option not found or disabled'});
+            }
+            el.value = option.value;
+            el.dispatchEvent(new Event('input', {bubbles:true}));
             el.dispatchEvent(new Event('change', {bubbles:true}));
             return JSON.stringify({success:true, value:el.value});
         })()
@@ -579,7 +585,12 @@ enum DOMSerializer {
         (function() {
             var el = document.querySelector('\(escapeJS(selector))');
             if (!el) return JSON.stringify({error:'Element not found: \(escapeJS(selector))'});
+            if (el.tagName !== 'INPUT' || ['checkbox','radio'].indexOf(el.type) < 0) {
+                return JSON.stringify({error:'Element is not a checkbox or radio'});
+            }
+            if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') return JSON.stringify({error:'Element is disabled'});
             if (el.checked !== \(checked)) el.click();
+            if (el.checked !== \(checked)) return JSON.stringify({success:false, error:'Toggle did not reach the requested state', checked:el.checked});
             return JSON.stringify({success:true, checked:el.checked});
         })()
         """
@@ -592,7 +603,7 @@ enum DOMSerializer {
         (function() {
             var el = document.querySelector('\(escapeJS(selector))');
             if (!el) return JSON.stringify({error:'Element not found: \(escapeJS(selector))'});
-            el.scrollIntoView({behavior:'smooth',block:'center'});
+            el.scrollIntoView({behavior:'instant',block:'center'});
             var rect = el.getBoundingClientRect();
             return JSON.stringify({success:true, rect:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height)}});
         })()

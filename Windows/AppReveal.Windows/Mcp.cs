@@ -66,6 +66,15 @@ internal sealed class McpRouter
         var id = hasId ? idNode?.DeepClone() : null;
         var method = Json.ReadString(request, "method") ?? "";
 
+        if (idNode is not null && idNode.GetValueKind() is not (JsonValueKind.String or JsonValueKind.Number))
+        {
+            return Error(null, -32600, "Invalid request: id must be a string, number, or null");
+        }
+        if (Json.ReadString(request, "jsonrpc") != "2.0" || string.IsNullOrEmpty(method)
+            || (request["params"] is JsonNode parameters && parameters is not JsonObject && parameters is not JsonArray))
+        {
+            return Error(id, -32600, "Invalid request: jsonrpc, method, or params is invalid");
+        }
         if (!hasId)
         {
             return null;
@@ -111,7 +120,36 @@ internal sealed class McpRouter
             throw new McpUnknownToolException(name);
         }
 
+        ValidateArguments(tool.Definition.InputSchema, arguments);
         return await tool.Handler(arguments, cancellationToken);
+    }
+
+    private static void ValidateArguments(JsonObject schema, JsonObject? arguments)
+    {
+        foreach (var required in schema["required"] as JsonArray ?? new JsonArray())
+        {
+            var name = required!.GetValue<string>();
+            if (arguments?[name] is null) throw new McpInvalidParamsException($"{name} is required");
+        }
+        foreach (var property in schema["properties"] as JsonObject ?? new JsonObject())
+        {
+            if (arguments is null || !arguments.TryGetPropertyValue(property.Key, out var value)) continue;
+            var definition = (JsonObject)property.Value!;
+            var kind = value?.GetValueKind() ?? JsonValueKind.Null;
+            var valid = Json.ReadString(definition, "type") switch
+            {
+                "string" => kind == JsonValueKind.String,
+                "number" => kind == JsonValueKind.Number,
+                "integer" => value is JsonValue number && number.TryGetValue<int>(out _),
+                "boolean" => kind is JsonValueKind.True or JsonValueKind.False,
+                "object" => value is JsonObject,
+                "array" => value is JsonArray,
+                _ => true
+            };
+            if (!valid) throw new McpInvalidParamsException($"Invalid type for {property.Key}");
+            if (definition["enum"] is JsonArray choices && !choices.Any(choice => JsonNode.DeepEquals(choice, value)))
+                throw new McpInvalidParamsException($"Invalid value for {property.Key}");
+        }
     }
 
     private async ValueTask<JsonObject> HandleToolCallAsync(JsonObject? parameters, CancellationToken cancellationToken)
@@ -128,16 +166,28 @@ internal sealed class McpRouter
         }
 
         var arguments = parameters?["arguments"] as JsonObject;
-        var result = await CallToolAsync(toolName, arguments, cancellationToken);
-        return ToolCallResult(toolName, result);
+        try
+        {
+            var result = await CallToolAsync(toolName, arguments, cancellationToken);
+            return ToolCallResult(toolName, result);
+        }
+        catch (Exception ex) when (ex is not McpInvalidParamsException and not McpUnknownToolException and not OperationCanceledException)
+        {
+            return TextToolResult(new JsonObject { ["success"] = false, ["error"] = "tool_error", ["message"] = ex.Message }, true);
+        }
     }
+
+    internal static bool IsToolFailure(JsonNode? result) => result is JsonObject value
+        && (Json.ReadBool(value, "success") == false || Json.ReadBool(value, "isError") == true
+            || !string.IsNullOrWhiteSpace(Json.ReadString(value, "error")));
 
     private static JsonObject ToolCallResult(string toolName, JsonNode result)
     {
+        if (IsToolFailure(result)) return TextToolResult(result, true);
         if (!string.Equals(toolName, "screenshot", StringComparison.Ordinal)
             || result is not JsonObject screenshot)
         {
-            return TextToolResult(result);
+            return TextToolResult(result, IsToolFailure(result));
         }
 
         var imageData = Json.ReadString(screenshot, "image");
@@ -230,6 +280,7 @@ internal sealed class McpRouter
 
 internal sealed class McpServer
 {
+    private const int MaxBodyBytes = 1024 * 1024;
     private const string SessionTokenHeaderName = "X-AppReveal-Session";
     private const string SessionTokenQueryName = "appreveal_session_token";
 
@@ -417,11 +468,29 @@ internal sealed class McpServer
                 return;
             }
 
-            using var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding ?? Encoding.UTF8);
-            var body = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            // Bound chunked requests too; ContentLength64 may be -1.
+            using var bodyStream = new MemoryStream();
+            var buffer = new byte[8192];
+            int read;
+            while ((read = await context.Request.InputStream.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                if (bodyStream.Length + read > MaxBodyBytes)
+                {
+                    await WriteResponseAsync(context.Response, 413, JsonRpcError(null, -32600, "Request body too large"), "application/json", corsOrigin, cancellationToken);
+                    return;
+                }
+                bodyStream.Write(buffer, 0, read);
+            }
+            string body;
+            try { body = new UTF8Encoding(false, true).GetString(bodyStream.ToArray()); }
+            catch (DecoderFallbackException)
+            {
+                await WriteResponseAsync(context.Response, 400, JsonRpcError(null, -32700, "Body must be UTF-8"), "application/json", corsOrigin, cancellationToken);
+                return;
+            }
             if (string.IsNullOrWhiteSpace(body))
             {
-                await WriteResponseAsync(context.Response, 400, JsonRpcError(null, -32600, "Empty body"), "application/json", corsOrigin, cancellationToken);
+                await WriteResponseAsync(context.Response, 400, JsonRpcError(null, -32700, "Empty body"), "application/json", corsOrigin, cancellationToken);
                 return;
             }
 

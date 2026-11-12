@@ -42,8 +42,8 @@ final class IOSWindowProvider: WindowProvider {
     }
 
     func windowsForInteraction(windowId: String? = nil) -> [WindowRef] {
-        if let windowId, let window = window(id: windowId) {
-            return [window]
+        if let windowId {
+            return window(id: windowId).map { [$0] } ?? []
         }
 
         return allWindows()

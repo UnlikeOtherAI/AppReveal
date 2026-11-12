@@ -22,7 +22,7 @@ Your App (debug build)                    External Agent
 3. Platforms with a discovery backend advertise `_appreveal._tcp` on the LAN
 4. Agent discovers the service, or is given the localhost URL, and calls MCP tools
 
-Full AppReveal integrations share the same core MCP surface across platforms. Foundation targets advertise only implemented built-ins and host-registered provider tools; desktop targets such as macOS and Windows add window and menu tools when those providers are available.
+The tables below describe the cross-platform tool vocabulary; the running target’s `tools/list` is authoritative for availability and parameters. Foundation targets advertise only implemented built-ins and host-registered provider tools; desktop targets such as macOS and Windows add window and menu tools when those providers are available.
 
 ## Quick start
 
@@ -160,7 +160,7 @@ See [Windows guide](docs/windows.md) for the native C# and Tauri/Rust setup note
 | `dismiss_modal` | Dismiss the topmost modal |
 | `open_deeplink` | Open a URL in the app |
 
-All native UI tools and all web view tools accept an optional `window_id` parameter from `list_windows`. If omitted, AppReveal targets the current key window.
+Window targeting is platform-specific. Use `tools/list` to check whether a tool accepts `window_id`, and obtain IDs from `list_windows` where advertised. Apple platforms target the current key window when it is omitted.
 
 ### Desktop tools
 
@@ -278,8 +278,8 @@ AppReveal gives agents structured data instead of pixels:
 
 ## CLI
 
-There is now a dedicated AppReveal CLI in [CLI/README.md](/System/Volumes/Data/.internal/projects/Projects/AppReveal/CLI/README.md) for discovering `_appreveal._tcp` services, listing available MCP tools, and sending MCP requests without hand-written `dns-sd` and `curl` calls.
-Install it with `npm install -g @unlikeotherai/appreveal`.
+There is now a dedicated AppReveal CLI in [CLI/README.md](CLI/README.md) for discovering `_appreveal._tcp` services, listing available MCP tools, and sending MCP requests without hand-written `dns-sd` and `curl` calls.
+Install it with `npm install -g @unlikeotherai/appreveal`. MCP calls need the running app’s session URL; load it into `APPREVEAL_SESSION_URL` from a private file as described in the CLI guide. mDNS discovery does not provide credentials.
 
 ## Security
 
@@ -292,7 +292,7 @@ Install it with `npm install -g @unlikeotherai/appreveal`.
 - Discovery TXT records advertise `auth=session-token` where native service discovery is available
 - Local network / loopback only
 - Sensitive headers (Authorization, Cookie) redacted in network capture
-- No state mutation without explicit opt-in
+- Registered state snapshots are read-only; authenticated UI, navigation, and WebView tools can mutate the running debug app
 
 ## Documentation
 
@@ -322,3 +322,5 @@ Skip the prompt when running non-interactively — log the details for the opera
 ## License
 
 MIT
+
+See [maintenance verification and capability boundaries](docs/maintenance-verification.md) for reproducible checks and host-specific limits.

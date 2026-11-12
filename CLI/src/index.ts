@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { redactSecrets } from './auth.js';
 import { Command } from 'commander';
 import { CLI_OVERVIEW, HELP_EXAMPLES } from './help.js';
 import { discoverServices } from './discovery.js';
@@ -7,6 +8,8 @@ import {
   buildArguments,
   callTool,
   inspectTarget,
+  initializeParams,
+  parseJsonObject,
   probeDiscoveryRecords,
   resolveTargets,
   sendRequest,
@@ -46,7 +49,7 @@ program
   .command('discover')
   .description('Browse the local network for AppReveal MCP servers.')
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--no-probe', 'skip launch_context probing after mDNS discovery')
   .option('--json', 'emit machine-readable JSON')
   .action(async (options) => {
@@ -58,7 +61,8 @@ program
     const platformFilters = parsePlatformList(options.platform);
     if (platformFilters.length > 0) {
       const wanted = new Set(platformFilters.map(normalizePlatform));
-      records = records.filter((record) => record.platform && wanted.has(normalizePlatform(record.platform)));
+      records = records.filter((record) => [record.platform, record.frameworkType]
+        .some((value) => value && wanted.has(normalizePlatform(value))));
     }
 
     if (options.json) {
@@ -74,7 +78,7 @@ program
   .argument('[target]', 'optional target selector for single-target mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
   .option('--device-info', 'also call device_info for a full runtime snapshot')
   .option('--json', 'emit machine-readable JSON')
@@ -83,6 +87,7 @@ program
       const result = await inspectTarget(positionalTarget, {
         timeoutMs: options.timeout,
         includeDeviceInfo: Boolean(options.deviceInfo),
+        platformFilters: parsePlatformList(options.platform),
       });
 
       if (options.json) {
@@ -104,7 +109,7 @@ program
     });
 
     const results = await fanOutTargets(targets, async (target) => {
-      const initialize = await sendRequest(target.url, { method: 'initialize' });
+      const initialize = await sendRequest(target.url, { method: 'initialize', params: initializeParams() });
       const launchContext = await callTool(target.url, 'launch_context');
       const tools = await sendRequest(target.url, { method: 'tools/list' });
       const deviceInfo = options.deviceInfo ? await callTool(target.url, 'device_info') : undefined;
@@ -116,6 +121,8 @@ program
         tools: tools.result ?? {},
       };
     });
+
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
 
     if (options.json) {
       printJson(results);
@@ -131,7 +138,7 @@ program
   .argument('[target]', 'optional target selector for single-target mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
   .option('--json', 'emit machine-readable JSON')
   .action(async (positionalTarget, options) => {
@@ -149,6 +156,8 @@ program
       return response.result ?? {};
     });
 
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
+
     if (options.json) {
       printJson(results);
       return;
@@ -162,10 +171,10 @@ program
   .alias('query')
   .description('Call a normal MCP tool on one or more targets.')
   .argument('<first>', 'either the tool name or a single-target selector in backward-compatible mode')
-  .argument('[second]', 'either the target selector or the tool name in backward-compatible mode')
+  .argument('[second]', 'the tool name in backward-compatible <target> <tool> mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--arg <key=value>', 'single tool argument; repeatable', collectRepeatedOption, [])
   .option('--args <json>', 'JSON object with tool arguments')
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
@@ -186,6 +195,8 @@ program
       return result.decoded;
     });
 
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
+
     if (options.json) {
       printJson(results);
       return;
@@ -203,10 +214,10 @@ program
   .command('request')
   .description('Send a raw MCP JSON-RPC request to one or more targets.')
   .argument('<first>', 'either the raw MCP method or a single-target selector in backward-compatible mode')
-  .argument('[second]', 'either the target selector or the raw method in backward-compatible mode')
+  .argument('[second]', 'the method in backward-compatible <target> <method> mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--params <json>', 'JSON object with request params')
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
   .option('--json', 'emit machine-readable JSON')
@@ -224,10 +235,12 @@ program
     const results = await fanOutTargets(targets, async (target) => {
       const response = await sendRequest(target.url, {
         method,
-        params: options.params ? JSON.parse(options.params) : undefined,
+        params: options.params ? parseJsonObject(options.params) : undefined,
       });
       return response.result ?? response;
     });
+
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
 
     if (options.json) {
       printJson(results);
@@ -243,7 +256,7 @@ program
   .argument('[target]', 'optional target selector for single-target mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
   .option('--limit <count>', 'max elements to show per target', parseInteger, DEFAULT_ELEMENT_LIMIT)
   .option('--json', 'emit machine-readable JSON')
@@ -257,6 +270,8 @@ program
       probeDiscovery: true,
     });
     const results = await snapshotTargets(targets, { elementLimit: options.limit });
+
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
 
     if (options.json) {
       printJson(results);
@@ -273,7 +288,7 @@ program
   .argument('[target]', 'optional target selector for single-target mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--field <field>', 'match field: any, id, label, value, type, actions', 'any')
   .option('--limit <count>', 'max matches to show per target', parseInteger, DEFAULT_ELEMENT_LIMIT)
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
@@ -292,6 +307,8 @@ program
       limit: options.limit,
     });
 
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
+
     if (options.json) {
       printJson(results);
       return;
@@ -307,7 +324,7 @@ program
   .argument('[target]', 'optional target selector for single-target mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--field <field>', 'match field: any, id, label, value, type, actions', 'any')
   .option('--exact', 'require exact equality instead of prefix/contains matching')
   .option('--timeout <ms>', 'discovery timeout in milliseconds', parseInteger, DEFAULT_DISCOVERY_TIMEOUT_MS)
@@ -326,6 +343,8 @@ program
       exact: Boolean(options.exact),
     });
 
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
+
     if (options.json) {
       printJson(results);
       return;
@@ -341,7 +360,7 @@ program
   .argument('[target]', 'optional target selector for single-target mode')
   .option('--target <selector>', 'repeatable target selector', collectRepeatedOption, [])
   .option('--all', 'select all discovered targets')
-  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, flutter, reactnative')
+  .option('--platform <list>', 'comma-separated platform filter: ios, macos, android, windows, linux, flutter, reactnative, tauri')
   .option('--element <query>', 'match an element before typing; omit to type into the focused field')
   .option('--field <field>', 'match field when --element is used: any, id, label, value, type, actions', 'any')
   .option('--exact', 'require exact equality instead of prefix/contains matching')
@@ -362,6 +381,8 @@ program
       exact: Boolean(options.exact),
     });
 
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
+
     if (options.json) {
       printJson(results);
       return;
@@ -372,13 +393,13 @@ program
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${message}\n`);
+  process.stderr.write(`${redactSecrets(message)}\n`);
   process.exitCode = 1;
 });
 
 function parseInteger(value: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  const parsed = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed) || parsed <= 0 || parsed > 2_147_483_647) {
     throw new Error(`Invalid integer value: ${value}`);
   }
   return parsed;
@@ -421,7 +442,7 @@ function parseTargetedVerbArguments(
     return { tool: second, positionalTarget: first };
   }
 
-  if (options.all || options.target.length > 0) {
+  if (options.all || options.target.length > 0 || process.env.APPREVEAL_SESSION_URL) {
     return { tool: first };
   }
 

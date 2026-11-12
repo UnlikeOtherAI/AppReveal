@@ -457,7 +457,16 @@ private fun evalAndWrap(
 ): JsonElement =
     try {
         val result = WebViewBridge.evaluate(js, webViewId)
-        JsonObject().apply { addProperty(resultKey, result) }
+        val parsed =
+            try {
+                com.google.gson.JsonParser.parseString(result)
+            } catch (_: Exception) {
+                null
+            }
+        JsonObject().apply {
+            addProperty(resultKey, result)
+            if (parsed?.isJsonObject == true && parsed.asJsonObject.has("error")) add("error", parsed.asJsonObject.get("error"))
+        }
     } catch (e: Exception) {
         webViewError(e.message ?: "Evaluation failed")
     }

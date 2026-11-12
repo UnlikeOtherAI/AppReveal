@@ -1,4 +1,6 @@
 import 'package:appreveal/appreveal.dart';
+// Retain compatibility with Flutter versions before the UI package split.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 class SignUpScreen extends StatefulWidget {

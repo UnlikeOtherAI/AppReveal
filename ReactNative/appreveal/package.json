@@ -6,7 +6,8 @@
   "types": "src/index",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test": "node --test tests/*.test.cjs"
   },
   "peerDependencies": {
     "react": "*",

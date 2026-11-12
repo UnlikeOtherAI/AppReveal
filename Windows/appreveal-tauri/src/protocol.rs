@@ -273,13 +273,35 @@ fn handle_tool_call(registry: &ToolRegistry, request: JsonRpcRequest) -> JsonRpc
         .and_then(|value| tool_call_result(tool_name, value))
     {
         Ok(result) => JsonRpcResponse::success(id, result),
-        Err(error) => JsonRpcResponse::error(id, RpcError::internal_error(error.to_string())),
+        Err(AppRevealError::InvalidParams(message)) => {
+            JsonRpcResponse::error(id, RpcError::invalid_params(message))
+        }
+        Err(error) => JsonRpcResponse::success(
+            id,
+            json!({
+                "isError": true,
+                "content": [{ "type": "text", "text": error.to_string() }]
+            }),
+        ),
     }
 }
 
+pub(crate) fn is_tool_failure(value: &Value) -> bool {
+    value.get("success").and_then(Value::as_bool) == Some(false)
+        || value.get("isError").and_then(Value::as_bool) == Some(true)
+        || value
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| !error.trim().is_empty())
+}
+
 fn tool_call_result(tool_name: &str, value: Value) -> Result<Value> {
+    if is_tool_failure(&value) {
+        return text_tool_result(value, true);
+    }
     if tool_name != "screenshot" {
-        return text_tool_result(value, false);
+        let failed = is_tool_failure(&value);
+        return text_tool_result(value, failed);
     }
 
     let Some(screenshot) = value.as_object() else {
@@ -347,6 +369,50 @@ fn text_tool_result(value: Value, is_error: bool) -> Result<Value> {
 mod tests {
     use super::*;
     use crate::{registry_with_builtins, ProviderRegistry, Tool};
+
+    #[test]
+    fn empty_network_error_is_success_but_nonempty_error_is_failure() {
+        for error in ["", " \t\n"] {
+            let value = json!({"success":true,"error":error,"statusCode":200});
+            assert!(!is_tool_failure(&value));
+            assert_ne!(
+                tool_call_result("get_network_call_detail", value).unwrap()["isError"],
+                true
+            );
+        }
+        assert!(is_tool_failure(&json!({"error":" timeout "})));
+        assert!(is_tool_failure(&json!({"success":false,"error":""})));
+    }
+
+    #[test]
+    fn returned_tool_failure_is_an_mcp_error() {
+        let result = tool_call_result(
+            "tap_element",
+            json!({"success":false,"error":"target_disabled"}),
+        )
+        .unwrap();
+        assert_eq!(result["isError"], true);
+    }
+
+    #[test]
+    fn invalid_tool_arguments_are_not_internal_errors() {
+        let registry = ToolRegistry::new();
+        registry
+            .register(crate::Tool::new("invalid", "invalid", json!({}), |_| {
+                Err(AppRevealError::InvalidParams("text required".to_string()))
+            }))
+            .unwrap();
+        let response = handle_request(
+            &registry,
+            JsonRpcRequest {
+                jsonrpc: Some("2.0".into()),
+                id: Some(json!(1)),
+                method: "tools/call".into(),
+                params: Some(json!({"name":"invalid"})),
+            },
+        );
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
 
     #[test]
     fn initialize_returns_appreveal_server_info() {

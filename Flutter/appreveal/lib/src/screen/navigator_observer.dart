@@ -10,49 +10,42 @@ import 'package:flutter/widgets.dart';
 /// )
 /// ```
 class AppRevealNavigatorObserver extends NavigatorObserver {
-  final _stack = <String>[];
-  String _currentRoute = '/';
+  final _routes = <Route<dynamic>>[];
 
-  String get currentRoute => _currentRoute;
-  List<String> get routeStack => List.unmodifiable(_stack);
+  String get currentRoute => _routes.isEmpty ? '/' : _routeName(_routes.last);
+  Route<dynamic>? get currentRouteObject => _routes.lastOrNull;
+  List<String> get routeStack => List.unmodifiable(_routes.map(_routeName));
+  List<String> get presentedModals => List.unmodifiable(
+      _routes.whereType<PopupRoute<dynamic>>().map(_routeName));
 
-  /// Returns the [NavigatorState] if a navigator is attached.
   NavigatorState? get navigatorState => navigator;
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    final name = _routeName(route);
-    _stack.add(name);
-    _currentRoute = name;
+    _routes.add(route);
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (_stack.isNotEmpty) _stack.removeLast();
-    _currentRoute = _stack.isNotEmpty ? _stack.last : '/';
+    _routes.remove(route);
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    if (newRoute != null) {
-      final name = _routeName(newRoute);
-      if (_stack.isNotEmpty) {
-        _stack[_stack.length - 1] = name;
-      } else {
-        _stack.add(name);
-      }
-      _currentRoute = name;
+    final index = oldRoute == null ? -1 : _routes.indexOf(oldRoute);
+    if (index < 0) return;
+    if (newRoute == null) {
+      _routes.removeAt(index);
+    } else {
+      _routes[index] = newRoute;
     }
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    final name = _routeName(route);
-    _stack.remove(name);
-    _currentRoute = _stack.isNotEmpty ? _stack.last : '/';
+    _routes.remove(route);
   }
 
-  static String _routeName(Route<dynamic> route) {
-    return route.settings.name ?? route.runtimeType.toString();
-  }
+  static String _routeName(Route<dynamic> route) =>
+      route.settings.name ?? route.runtimeType.toString();
 }

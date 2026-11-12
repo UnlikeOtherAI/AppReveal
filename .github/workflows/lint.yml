@@ -1,21 +1,105 @@
-name: Lint
+name: Checks
 
 on:
   pull_request:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  changes:
+    name: Detect changed build inputs
+    runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.paths.outputs.swift }}
+      android: ${{ steps.paths.outputs.android }}
+      flutter: ${{ steps.paths.outputs.flutter }}
+      windows: ${{ steps.paths.outputs.windows }}
+      tauri: ${{ steps.paths.outputs.tauri }}
+      reactnative: ${{ steps.paths.outputs.reactnative }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: paths
+        with:
+          predicate-quantifier: every
+          filters: |
+            swift:
+              - '{Package.swift,iOS/**,example/iOS/**,example/macOS/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            android:
+              - '{Android/**,example/Android/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            flutter:
+              - 'Flutter/**'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            windows:
+              - '{Windows/AppReveal.Windows/**,Windows/verification/dotnet/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            tauri:
+              - '{Windows/appreveal-tauri/**,Windows/verification/tauri/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+            reactnative:
+              - '{ReactNative/**,Android/gradlew*,Android/gradle/wrapper/**}'
+              - '!**/*.md'
+              - '!**/LICENSE'
+
   swift:
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     name: Build, test, and lint (iOS/macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: brew install swiftlint
+      - run: brew install swiftlint xcodegen
       - run: cd iOS && swiftlint lint --strict
-      - run: cd iOS && swift test
+      - run: swift test
+      - name: Compile iOS-only source
+        working-directory: iOS
+        run: xcodebuild -scheme AppReveal -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO build
+      - name: Select an existing iPhone simulator
+        run: |
+          simulator_id="$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          candidates = [device for runtime, devices in json.load(sys.stdin)["devices"].items()
+                        if "iOS-" in runtime and int(runtime.split("iOS-")[1].split("-")[0]) >= 16
+                        for device in devices if device.get("isAvailable") and ".iPhone-" in device.get("deviceTypeIdentifier", "")]
+          if not candidates:
+              sys.exit("No compatible existing iPhone simulator is available")
+          print(sorted(candidates, key=lambda device: device["state"] != "Booted")[0]["udid"])
+          ')"
+          echo "APPREVEAL_TEST_SIMULATOR=$simulator_id" >> "$GITHUB_ENV"
+      - name: Generate hosted iOS test project
+        run: xcodegen generate --spec example/iOS/AppRevealExample/project.yml
+      - name: Test UIKit and SwiftUI in the example app
+        run: |
+          xcodebuild \
+            -project example/iOS/AppRevealExample/AppRevealExample.xcodeproj \
+            -scheme AppRevealExample \
+            -destination "id=$APPREVEAL_TEST_SIMULATOR" \
+            -derivedDataPath .build/ci/ios-hosted \
+            -resultBundlePath .build/ci/ios-hosted-tests.xcresult \
+            -jobs 4 -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO test
+      - name: Preserve hosted test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-hosted-test-results
+          path: .build/ci/ios-hosted-tests.xcresult
+          if-no-files-found: ignore
 
   android:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     name: Build and lint (Android)
     runs-on: ubuntu-latest
     steps:
@@ -30,9 +114,11 @@ jobs:
           # sdkmanager releases no longer provide.
           packages: platform-tools
       - run: cd Android && chmod +x gradlew && ./gradlew ktlintCheck :appreveal:testDebugUnitTest :appreveal:assembleDebug :appreveal:lintDebug
-      - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug
+      - run: cd example/Android && chmod +x gradlew && ./gradlew :app:assembleDebug :app:assembleRelease
 
   flutter:
+    needs: changes
+    if: needs.changes.outputs.flutter == 'true'
     name: Analyze and test (Flutter)
     runs-on: ubuntu-latest
     steps:
@@ -42,8 +128,36 @@ jobs:
           channel: stable
       - run: cd Flutter/appreveal && flutter pub get && flutter analyze --fatal-warnings
       - run: cd Flutter/appreveal && flutter test
+      - run: cd Flutter/example && flutter pub get && flutter analyze --fatal-infos
+
+  flutter_windows:
+    needs: changes
+    if: needs.changes.outputs.flutter == 'true'
+    name: Example MCP smoke (Flutter Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+        working-directory: Flutter/example
+      - name: Build the real example verification entry point
+        working-directory: Flutter/example
+        run: flutter build windows --debug -t tool/verify_mcp.dart --dart-define=APPREVEAL_SOURCE_REVISION=${{ github.sha }}
+      - name: Verify app interactions over authenticated MCP HTTP
+        working-directory: Flutter/example
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path build/windows/x64/runner/Debug/appreveal_example.exe).Path
+          $app = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          if (-not $app.WaitForExit(180000)) { throw 'Flutter MCP verification timed out' }
+          if ($app.ExitCode -ne 0) { throw "Flutter MCP verification failed: $($app.ExitCode)" }
 
   windows:
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
     name: Build (.NET Windows)
     runs-on: windows-latest
     steps:
@@ -51,17 +165,29 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj
+      - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj --configuration Debug
+      - run: dotnet build Windows/AppReveal.Windows/AppReveal.Windows.csproj --configuration Release
+      - run: dotnet run --project Windows/verification/dotnet -- --protocol
 
   tauri:
-    name: Test (Tauri/Rust)
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.tauri == 'true'
+    name: Test (Tauri/Rust, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml -- --test-threads=1
+      - run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml --features mdns -- --test-threads=1
+      - if: runner.os == 'Windows'
+        run: cargo test --manifest-path Windows/appreveal-tauri/Cargo.toml --features tauri -j 2
 
   reactnative:
-    name: ESLint (React Native)
+    needs: changes
+    if: needs.changes.outputs.reactnative == 'true'
+    name: Lint and typecheck (React Native)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -73,11 +199,56 @@ jobs:
           node-version: 20
           cache: pnpm
           cache-dependency-path: ReactNative/appreveal/pnpm-lock.yaml
-      - run: cd ReactNative/appreveal && pnpm install --frozen-lockfile && pnpm lint
+      - run: cd ReactNative/appreveal && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test
+
+  reactnative_ios:
+    needs: changes
+    if: needs.changes.outputs.reactnative == 'true'
+    name: Compile and test (React Native iOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the Swift native library
+        run: |
+          mkdir -p ReactNative/appreveal/build
+          xcrun swiftc -swift-version 5 -emit-module -module-name AppRevealRN \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -target arm64-apple-ios16.0-simulator ReactNative/appreveal/ios/*.swift \
+            -emit-module-path ReactNative/appreveal/build/AppRevealRN.swiftmodule
+      - name: Run Foundation contracts
+        run: |
+          swiftc -swift-version 5 \
+            ReactNative/appreveal/ios/AnyCodable.swift \
+            ReactNative/appreveal/ios/CapturedRequest.swift \
+            ReactNative/appreveal/ios/NetworkObserver.swift \
+            ReactNative/appreveal/ios/ToolResult.swift \
+            ReactNative/appreveal/tests/NativeContractChecks.swift \
+            -o ReactNative/appreveal/build/native-contract-checks
+          ReactNative/appreveal/build/native-contract-checks
+
+  reactnative_android:
+    needs: changes
+    if: needs.changes.outputs.reactnative == 'true'
+    name: Build and test (React Native Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: chmod +x Android/gradlew && Android/gradlew -p ReactNative/appreveal/android testDebugUnitTest assembleDebug lintDebug --max-workers=2 --console=plain
 
   cli:
-    name: ESLint (CLI)
-    runs-on: ubuntu-latest
+    name: CLI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -88,4 +259,12 @@ jobs:
           node-version: 20
           cache: pnpm
           cache-dependency-path: CLI/pnpm-lock.yaml
-      - run: cd CLI && pnpm install --frozen-lockfile && pnpm lint
+      - run: pnpm install --frozen-lockfile
+        working-directory: CLI
+      - run: pnpm lint
+        working-directory: CLI
+      - run: pnpm typecheck
+        working-directory: CLI
+      # test builds dist first and drives the actual executable over HTTP.
+      - run: pnpm test
+        working-directory: CLI

@@ -24,6 +24,10 @@ targets:
       properties:
         CFBundleDisplayName: AppReveal Example
         LSRequiresIPhoneOS: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.appreveal.example
+            CFBundleURLSchemes:
+              - appreveal
         NSLocalNetworkUsageDescription: AppReveal uses the local network for debug MCP connections.
         NSBonjourServices:
           - _appreveal._tcp
@@ -42,3 +46,25 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.appreveal.example
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
+
+  AppRevealExampleTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: AppRevealExample
+      - package: AppReveal
+        product: AppReveal
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  AppRevealExample:
+    build:
+      targets:
+        AppRevealExample: all
+    test:
+      targets:
+        - AppRevealExampleTests

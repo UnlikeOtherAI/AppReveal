@@ -57,7 +57,9 @@ final class ElementInventory {
         var resolvedTargets: [(view: NSView?, appRevealId: String?, point: CGPoint?, label: String)] = []
         for match in matches {
             if let tappable = Self.findTappableAncestor(of: match.view) {
-                resolvedTargets.append((tappable, nil, nil, match.text))
+                if !resolvedTargets.contains(where: { $0.view === tappable }) {
+                    resolvedTargets.append((tappable, nil, nil, match.text))
+                }
             }
         }
 
@@ -127,8 +129,13 @@ final class ElementInventory {
         var current: NSView? = view
         var depth = 0
         while let v = current, depth < 50 {
+            if let control = v as? NSControl, !control.isEnabled { return nil }
             if v is NSButton || v is NSSegmentedControl { return v }
-            if v is NSControl { return v }
+            if let field = v as? NSTextField {
+                if field.isEditable && field.isEnabled { return v }
+            } else if let control = v as? NSControl, !(v is NSTableView), control.isEnabled {
+                return v
+            }
             if v is NSTableRowView || v is NSTableCellView { return v }
             current = v.superview
             depth += 1
@@ -176,7 +183,7 @@ final class ElementInventory {
         let finalId = count == 0 ? resolvedId : "\(resolvedId)_\(count)"
 
         let windowFrame = view.convert(view.bounds, to: nil)
-        let layoutGuideFrame = view.convert(view.safeAreaRect, to: nil)
+        let layoutGuideFrame = view.convert(view.safeAreaRect.intersection(view.bounds), to: nil)
         let safeAreaInsets = Self.makeSafeAreaInsets(
             view.safeAreaInsets,
             layoutDirection: view.userInterfaceLayoutDirection
@@ -189,7 +196,7 @@ final class ElementInventory {
             value: view.accessibilityValue() as? String,
             enabled: (view as? NSControl)?.isEnabled ?? true,
             visible: !view.isHiddenOrHasHiddenAncestor,
-            tappable: view is NSControl || view is NSTableView,
+            tappable: Self.findTappableAncestor(of: view) != nil,
             frame: Self.makeFrame(windowFrame),
             safeAreaInsets: safeAreaInsets,
             safeAreaLayoutGuideFrame: Self.makeFrame(layoutGuideFrame),
@@ -241,10 +248,11 @@ final class ElementInventory {
 
     private func availableActions(for view: NSView) -> [String] {
         var actions: [String] = []
-        if view is NSControl || view is NSTableView {
+        if Self.findTappableAncestor(of: view) != nil {
             actions.append("tap")
         }
-        if view is NSTextView || (view as? NSTextField)?.isEditable == true {
+        if (view as? NSTextView)?.isEditable == true ||
+            ((view as? NSTextField)?.isEditable == true && (view as? NSTextField)?.isEnabled == true) {
             actions.append("type")
             actions.append("clear")
         }
@@ -300,7 +308,7 @@ final class ElementInventory {
         guard depth < maxDepth else { return [] }
 
         let windowFrame = view.convert(view.bounds, to: nil)
-        let layoutGuideFrame = view.convert(view.safeAreaRect, to: nil)
+        let layoutGuideFrame = view.convert(view.safeAreaRect.intersection(view.bounds), to: nil)
         var node: [String: Any] = [
             "class": String(describing: type(of: view)),
             "frame": "\(Int(windowFrame.origin.x)),\(Int(windowFrame.origin.y)),\(Int(windowFrame.size.width)),\(Int(windowFrame.size.height))",
@@ -400,10 +408,10 @@ final class ElementInventory {
 
     private static func makeFrame(_ rect: CGRect) -> ElementInfo.ElementFrame {
         ElementInfo.ElementFrame(
-            x: rect.origin.x,
-            y: rect.origin.y,
-            width: rect.size.width,
-            height: rect.size.height
+            x: rect.origin.x.isFinite ? rect.origin.x : 0,
+            y: rect.origin.y.isFinite ? rect.origin.y : 0,
+            width: rect.size.width.isFinite ? rect.size.width : 0,
+            height: rect.size.height.isFinite ? rect.size.height : 0
         )
     }
 
@@ -455,7 +463,7 @@ final class ElementInventory {
                     type: entry.type,
                     label: entry.label,
                     value: nil,
-                    enabled: true,
+                    enabled: entry.enabled,
                     visible: !frame.isEmpty,
                     tappable: entry.isTappable,
                     frame: Self.makeFrame(frame),
