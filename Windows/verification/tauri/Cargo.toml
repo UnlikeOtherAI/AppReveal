@@ -1,0 +1,12 @@
+[package]
+name = "appreveal-windows-verification"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+appreveal-tauri = { path = "../../appreveal-tauri", features = ["tauri"] }
+tauri = { version = "2" }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

@@ -1,5 +1,7 @@
 use crate::error::AppRevealError;
-use crate::providers::{current_executable_name, default_device_name};
+use crate::providers::{
+    current_executable_name, default_device_name, desktop_model_name, platform_name,
+};
 use crate::{
     registry_with_builtins, start_server, ProviderRegistry, Result, ServerConfig, ServerHandle,
     Tool, ToolRegistry, WindowInfo,
@@ -230,6 +232,7 @@ where
     let mut properties = Map::new();
     properties.insert("id".to_string(), json!({ "type": "string" }));
     properties.insert("elementId".to_string(), json!({ "type": "string" }));
+    properties.insert("element_id".to_string(), json!({ "type": "string" }));
     properties.insert("selector".to_string(), json!({ "type": "string" }));
     properties.insert("window_id".to_string(), json!({ "type": "string" }));
     registry.register(Tool::new(
@@ -237,7 +240,8 @@ where
         "Tap a Tauri WebView DOM element by AppReveal ID, DOM id, data-testid, or CSS selector.",
         object_schema(properties),
         move |arguments| {
-            let target = required_string_arg(arguments, &["id", "elementId", "selector"])?;
+            let target =
+                required_string_arg(arguments, &["id", "elementId", "element_id", "selector"])?;
             let window_id = optional_string_arg(arguments, &["window_id", "windowId"]);
             interact_with_dom(&app, "tap_element", &target, None, window_id.as_deref())
         },
@@ -273,7 +277,7 @@ where
     properties.insert("window_id".to_string(), json!({ "type": "string" }));
     registry.register(Tool::new(
         "tap_point",
-        "Tap a point inside a Tauri WebView. Screen coordinates are converted to WebView-local DOM coordinates when possible.",
+        "Tap a point in logical screen coordinates (the rect returned by get_elements). Points outside the selected WebView are rejected.",
         object_schema(properties),
         move |arguments| {
             let x = required_number_arg(arguments, "x")?;
@@ -291,6 +295,7 @@ where
     let mut properties = Map::new();
     properties.insert("id".to_string(), json!({ "type": "string" }));
     properties.insert("elementId".to_string(), json!({ "type": "string" }));
+    properties.insert("element_id".to_string(), json!({ "type": "string" }));
     properties.insert("selector".to_string(), json!({ "type": "string" }));
     properties.insert("text".to_string(), json!({ "type": "string" }));
     properties.insert("window_id".to_string(), json!({ "type": "string" }));
@@ -299,16 +304,16 @@ where
         "Type text into a Tauri WebView DOM input, textarea, select, or contenteditable element.",
         object_schema(properties),
         move |arguments| {
-            let target = required_string_arg(arguments, &["id", "elementId", "selector"])?;
-            let text = required_string_arg(arguments, &["text"])?;
+            let target =
+                required_string_arg(arguments, &["id", "elementId", "element_id", "selector"])?;
+            let text = arguments
+                .and_then(|value| value.get("text"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    AppRevealError::InvalidParams("text must be a string".to_string())
+                })?;
             let window_id = optional_string_arg(arguments, &["window_id", "windowId"]);
-            interact_with_dom(
-                &app,
-                "type_text",
-                &target,
-                Some(&text),
-                window_id.as_deref(),
-            )
+            interact_with_dom(&app, "type_text", &target, Some(text), window_id.as_deref())
         },
     ))
 }
@@ -320,6 +325,7 @@ where
     let mut properties = Map::new();
     properties.insert("id".to_string(), json!({ "type": "string" }));
     properties.insert("elementId".to_string(), json!({ "type": "string" }));
+    properties.insert("element_id".to_string(), json!({ "type": "string" }));
     properties.insert("selector".to_string(), json!({ "type": "string" }));
     properties.insert("window_id".to_string(), json!({ "type": "string" }));
     registry.register(Tool::new(
@@ -327,7 +333,8 @@ where
         "Clear text in a Tauri WebView DOM input, textarea, select, or contenteditable element.",
         object_schema(properties),
         move |arguments| {
-            let target = required_string_arg(arguments, &["id", "elementId", "selector"])?;
+            let target =
+                required_string_arg(arguments, &["id", "elementId", "element_id", "selector"])?;
             let window_id = optional_string_arg(arguments, &["window_id", "windowId"]);
             interact_with_dom(&app, "clear_text", &target, None, window_id.as_deref())
         },
@@ -386,8 +393,15 @@ where
     let mut flattened = Vec::new();
     let mut webviews = Vec::new();
 
-    for (label, window) in filtered_webview_windows(app, window_id) {
-        let snapshot = eval_json(&window, DOM_SNAPSHOT_JS.to_string())?;
+    let windows = filtered_webview_windows(app, window_id);
+    if window_id.is_some() && windows.is_empty() {
+        return Ok(json!({ "success": false, "error": "window_not_found" }));
+    }
+    for (label, window) in windows {
+        let snapshot = eval_json(
+            &window,
+            dom_action_script("snapshot", None, None, None, None),
+        )?;
         let origin = window_css_origin(&window);
         let mut elements = Vec::new();
 
@@ -464,16 +478,16 @@ where
     R: Runtime,
 {
     let (resolved_window_id, resolved_target) = resolve_appreveal_dom_target(target, window_id);
-    for (label, window) in filtered_webview_windows(app, resolved_window_id.as_deref()) {
+    let windows = filtered_webview_windows(app, resolved_window_id.as_deref());
+    if windows.is_empty() {
+        return Ok(json!({"success": false, "error": "window_not_found", "action": action}));
+    }
+    for (label, window) in windows {
         let script = dom_action_script(action, Some(&resolved_target), text, None, None);
         let mut result = eval_json(&window, script)?;
         result["windowId"] = json!(label);
         result["target"] = json!("webview_dom");
-        if result
-            .get("success")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
+        if result.get("error").and_then(Value::as_str) != Some("target_not_found") {
             return Ok(result);
         }
     }
@@ -505,23 +519,16 @@ where
         }));
     }
 
-    let selected = windows
-        .iter()
-        .find_map(|(label, window)| {
-            local_point_if_inside(window, x, y).map(|point| (label, window, point))
-        })
-        .or_else(|| {
-            windows
-                .first()
-                .map(|(label, window)| (label, window, (x, y)))
-        });
+    let selected = windows.iter().find_map(|(label, window)| {
+        local_point_if_inside(window, x, y).map(|point| (label, window, point))
+    });
 
     let Some((label, window, point)) = selected else {
         return Ok(json!({
             "success": false,
             "target": "webview_dom",
             "action": "tap_point",
-            "error": "window_not_found"
+            "error": "point_outside_window"
         }));
     };
 
@@ -619,11 +626,17 @@ where
         AppRevealError::Tool("Timed out waiting for Tauri WebView JavaScript result".to_string())
     })?;
     let value: Value = serde_json::from_str(&payload)?;
-    if let Some(inner) = value.as_str() {
-        serde_json::from_str(inner).map_err(AppRevealError::from)
+    let value = if let Some(inner) = value.as_str() {
+        serde_json::from_str(inner)?
     } else {
-        Ok(value)
+        value
+    };
+    if !value.is_object() {
+        return Err(AppRevealError::Tool(
+            "WebView evaluation did not return a DOM result object".to_string(),
+        ));
     }
+    Ok(value)
 }
 
 fn filtered_webview_windows<R>(
@@ -633,14 +646,17 @@ fn filtered_webview_windows<R>(
 where
     R: Runtime,
 {
-    app.webview_windows()
+    let mut windows: Vec<_> = app
+        .webview_windows()
         .into_iter()
         .filter(|(label, _)| {
             window_id
                 .map(|window_id| window_id == label)
                 .unwrap_or(true)
         })
-        .collect()
+        .collect();
+    windows.sort_by(|(left, _), (right, _)| left.cmp(right));
+    windows
 }
 
 fn resolve_appreveal_dom_target(
@@ -649,7 +665,8 @@ fn resolve_appreveal_dom_target(
 ) -> (Option<String>, String) {
     if let Some((window_id, index)) = target
         .strip_prefix("web.")
-        .and_then(|rest| rest.split_once('.'))
+        .and_then(|rest| rest.rsplit_once('.'))
+        .filter(|(_, index)| index.parse::<u64>().is_ok())
     {
         return (
             explicit_window_id
@@ -852,24 +869,6 @@ where
         .collect()
 }
 
-fn platform_name() -> &'static str {
-    match std::env::consts::OS {
-        "macos" => "macOS",
-        "windows" => "Windows",
-        "linux" => "Linux",
-        value => value,
-    }
-}
-
-fn desktop_model_name() -> &'static str {
-    match std::env::consts::OS {
-        "macos" => "Mac",
-        "windows" => "Windows PC",
-        "linux" => "Linux PC",
-        _ => "Desktop",
-    }
-}
-
 fn dom_action_script(
     action: &str,
     target: Option<&str>,
@@ -877,304 +876,10 @@ fn dom_action_script(
     x: Option<f64>,
     y: Option<f64>,
 ) -> String {
-    let action = serde_json::to_string(action).expect("action serializes");
-    let target = serde_json::to_string(&target).expect("target serializes");
-    let text = serde_json::to_string(&text).expect("text serializes");
-    let x = x
-        .map(|value| value.to_string())
-        .unwrap_or_else(|| "null".to_string());
-    let y = y
-        .map(|value| value.to_string())
-        .unwrap_or_else(|| "null".to_string());
-
     format!(
-        r#"
-(() => {{
-  const action = {action};
-  const target = {target};
-  const inputText = {text};
-  const pointX = {x};
-  const pointY = {y};
-  const interactiveSelector = [
-    'a[href]',
-    'button',
-    'input',
-    'textarea',
-    'select',
-    'summary',
-    '[role="button"]',
-    '[role="link"]',
-    '[role="checkbox"]',
-    '[role="radio"]',
-    '[role="switch"]',
-    '[tabindex]:not([tabindex="-1"])',
-    '[contenteditable="true"]',
-    '[contenteditable=""]',
-    '[data-testid]',
-    '[data-test]',
-    '[aria-label]'
-  ].join(',');
-  const cssEscape = value => {{
-    if (window.CSS && CSS.escape) return CSS.escape(String(value));
-    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  }};
-  const visible = element => {{
-    if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
-    const rect = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
-    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-  }};
-  const label = element => (
-    element.getAttribute('aria-label') ||
-    element.getAttribute('title') ||
-    element.getAttribute('placeholder') ||
-    element.innerText ||
-    element.value ||
-    element.textContent ||
-    ''
-  ).trim().replace(/\s+/g, ' ');
-  const selectorFor = element => {{
-    if (element.id) return '#' + cssEscape(element.id);
-    for (const attr of ['data-testid', 'data-test', 'name', 'aria-label']) {{
-      const value = element.getAttribute(attr);
-      if (value) return `[${{attr}}="${{cssEscape(value)}}"]`;
-    }}
-    const parts = [];
-    let current = element;
-    while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {{
-      let part = current.tagName.toLowerCase();
-      const parent = current.parentElement;
-      if (parent) {{
-        const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
-        if (siblings.length > 1) part += `:nth-of-type(${{siblings.indexOf(current) + 1}})`;
-      }}
-      parts.unshift(part);
-      current = parent;
-    }}
-    return parts.length ? parts.join(' > ') : element.tagName.toLowerCase();
-  }};
-  const roleFor = element => {{
-    const explicit = element.getAttribute('role');
-    if (explicit) return explicit;
-    const tag = element.tagName.toLowerCase();
-    if (tag === 'button') return 'button';
-    if (tag === 'a') return 'link';
-    if (tag === 'select') return 'combobox';
-    if (tag === 'textarea') return 'textbox';
-    if (tag === 'input') {{
-      const type = (element.getAttribute('type') || 'text').toLowerCase();
-      if (type === 'checkbox') return 'checkbox';
-      if (type === 'radio') return 'radio';
-      if (type === 'submit' || type === 'button') return 'button';
-      return 'textbox';
-    }}
-    return tag;
-  }};
-  const actionsFor = element => {{
-    const actions = ['tap'];
-    const tag = element.tagName.toLowerCase();
-    const type = (element.getAttribute('type') || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || element.isContentEditable) actions.push('type_text', 'clear_text');
-    if (tag === 'select') actions.push('select');
-    if (type === 'checkbox' || type === 'radio' || element.getAttribute('role') === 'switch') actions.push('toggle');
-    return actions;
-  }};
-  const descriptor = (element, index = null) => {{
-    const rect = element.getBoundingClientRect();
-    return {{
-      index,
-      id: element.id || element.getAttribute('data-testid') || element.getAttribute('data-test') || element.getAttribute('name') || (index === null ? null : String(index)),
-      selector: selectorFor(element),
-      tag: element.tagName.toLowerCase(),
-      role: roleFor(element),
-      type: element.getAttribute('type') || null,
-      label: label(element),
-      text: (element.innerText || element.textContent || '').trim().replace(/\s+/g, ' '),
-      value: 'value' in element ? element.value : null,
-      enabled: !element.disabled && element.getAttribute('aria-disabled') !== 'true',
-      visible: visible(element),
-      rect: {{ x: rect.left, y: rect.top, width: rect.width, height: rect.height }},
-      actions: actionsFor(element)
-    }};
-  }};
-  const elements = () => Array.from(document.querySelectorAll(interactiveSelector)).filter(visible);
-  const findTarget = () => {{
-    if (action === 'tap_point') return document.elementFromPoint(pointX, pointY);
-    if (!target) return null;
-    const all = elements();
-    if (target.startsWith('index:')) {{
-      const index = Number.parseInt(target.slice('index:'.length), 10);
-      return Number.isFinite(index) ? all[index] : null;
-    }}
-    try {{
-      const selected = document.querySelector(target);
-      if (selected) return selected;
-    }} catch (_) {{}}
-    const normalized = target.trim().toLowerCase();
-    return all.find((element, index) => {{
-      const descriptorForElement = descriptor(element, index);
-      const candidates = [
-        String(index),
-        descriptorForElement.id,
-        descriptorForElement.selector,
-        element.getAttribute('data-testid'),
-        element.getAttribute('data-test'),
-        element.getAttribute('name'),
-        descriptorForElement.label,
-        descriptorForElement.text
-      ].filter(Boolean).map(value => String(value).trim().toLowerCase());
-      return candidates.includes(normalized);
-    }});
-  }};
-  const dispatchInput = element => {{
-    element.dispatchEvent(new InputEvent('input', {{ bubbles: true, inputType: 'insertText', data: inputText || '' }}));
-    element.dispatchEvent(new Event('change', {{ bubbles: true }}));
-  }};
-  const dispatchClick = element => {{
-    element.scrollIntoView({{ block: 'center', inline: 'center' }});
-    const rect = element.getBoundingClientRect();
-    const clientX = action === 'tap_point' ? pointX : rect.left + rect.width / 2;
-    const clientY = action === 'tap_point' ? pointY : rect.top + rect.height / 2;
-    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {{
-      const event = type.startsWith('pointer')
-        ? new PointerEvent(type, {{ bubbles: true, cancelable: true, clientX, clientY, pointerId: 1, pointerType: 'mouse', isPrimary: true }})
-        : new MouseEvent(type, {{ bubbles: true, cancelable: true, clientX, clientY, button: 0 }});
-      element.dispatchEvent(event);
-    }}
-  }};
-
-  const element = findTarget();
-  if (!element) return {{ success: false, action, error: 'target_not_found' }};
-
-  if (action === 'type_text' || action === 'clear_text') {{
-    element.focus();
-    if (element.isContentEditable) {{
-      element.textContent = action === 'clear_text' ? '' : `${{element.textContent || ''}}${{inputText || ''}}`;
-    }} else if ('value' in element) {{
-      element.value = action === 'clear_text' ? '' : `${{element.value || ''}}${{inputText || ''}}`;
-    }} else {{
-      return {{ success: false, action, error: 'target_not_editable', element: descriptor(element) }};
-    }}
-    dispatchInput(element);
-  }} else {{
-    dispatchClick(element);
-  }}
-
-  return {{ success: true, action, element: descriptor(element) }};
-}})()
-"#
+        "({DOM_BRIDGE_JS})({})",
+        json!({ "action": action, "target": target, "text": text, "x": x, "y": y })
     )
 }
 
-const DOM_SNAPSHOT_JS: &str = r#"
-(() => {
-  const interactiveSelector = [
-    'a[href]',
-    'button',
-    'input',
-    'textarea',
-    'select',
-    'summary',
-    '[role="button"]',
-    '[role="link"]',
-    '[role="checkbox"]',
-    '[role="radio"]',
-    '[role="switch"]',
-    '[tabindex]:not([tabindex="-1"])',
-    '[contenteditable="true"]',
-    '[contenteditable=""]',
-    '[data-testid]',
-    '[data-test]',
-    '[aria-label]'
-  ].join(',');
-  const cssEscape = value => {
-    if (window.CSS && CSS.escape) return CSS.escape(String(value));
-    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  };
-  const visible = element => {
-    if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
-    const rect = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
-    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-  };
-  const label = element => (
-    element.getAttribute('aria-label') ||
-    element.getAttribute('title') ||
-    element.getAttribute('placeholder') ||
-    element.innerText ||
-    element.value ||
-    element.textContent ||
-    ''
-  ).trim().replace(/\s+/g, ' ');
-  const selectorFor = element => {
-    if (element.id) return '#' + cssEscape(element.id);
-    for (const attr of ['data-testid', 'data-test', 'name', 'aria-label']) {
-      const value = element.getAttribute(attr);
-      if (value) return `[${attr}="${cssEscape(value)}"]`;
-    }
-    const parts = [];
-    let current = element;
-    while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
-      let part = current.tagName.toLowerCase();
-      const parent = current.parentElement;
-      if (parent) {
-        const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
-        if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
-      }
-      parts.unshift(part);
-      current = parent;
-    }
-    return parts.length ? parts.join(' > ') : element.tagName.toLowerCase();
-  };
-  const roleFor = element => {
-    const explicit = element.getAttribute('role');
-    if (explicit) return explicit;
-    const tag = element.tagName.toLowerCase();
-    if (tag === 'button') return 'button';
-    if (tag === 'a') return 'link';
-    if (tag === 'select') return 'combobox';
-    if (tag === 'textarea') return 'textbox';
-    if (tag === 'input') {
-      const type = (element.getAttribute('type') || 'text').toLowerCase();
-      if (type === 'checkbox') return 'checkbox';
-      if (type === 'radio') return 'radio';
-      if (type === 'submit' || type === 'button') return 'button';
-      return 'textbox';
-    }
-    return tag;
-  };
-  const actionsFor = element => {
-    const actions = ['tap'];
-    const tag = element.tagName.toLowerCase();
-    const type = (element.getAttribute('type') || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || element.isContentEditable) actions.push('type_text', 'clear_text');
-    if (tag === 'select') actions.push('select');
-    if (type === 'checkbox' || type === 'radio' || element.getAttribute('role') === 'switch') actions.push('toggle');
-    return actions;
-  };
-  const elements = Array.from(document.querySelectorAll(interactiveSelector)).filter(visible);
-  return {
-    url: location.href,
-    title: document.title,
-    viewport: { width: innerWidth, height: innerHeight },
-    elements: elements.map((element, index) => {
-      const rect = element.getBoundingClientRect();
-      return {
-        index,
-        id: element.id || element.getAttribute('data-testid') || element.getAttribute('data-test') || element.getAttribute('name') || String(index),
-        selector: selectorFor(element),
-        tag: element.tagName.toLowerCase(),
-        role: roleFor(element),
-        type: element.getAttribute('type') || null,
-        label: label(element),
-        text: (element.innerText || element.textContent || '').trim().replace(/\s+/g, ' '),
-        value: 'value' in element ? element.value : null,
-        enabled: !element.disabled && element.getAttribute('aria-disabled') !== 'true',
-        visible: true,
-        rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
-        actions: actionsFor(element)
-      };
-    })
-  };
-})()
-"#;
+const DOM_BRIDGE_JS: &str = include_str!("dom_bridge.js");

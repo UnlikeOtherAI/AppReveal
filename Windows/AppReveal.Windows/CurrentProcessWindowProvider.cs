@@ -79,7 +79,7 @@ public sealed class CurrentProcessWindowProvider :
 
     public object? GetViewTree(string? windowId, int? maxDepth)
     {
-        var depth = Math.Clamp(maxDepth ?? DefaultTreeDepth, 0, DefaultTreeDepth);
+        var depth = Math.Clamp(maxDepth ?? DefaultTreeDepth, 0, 200);
         return WithRoot(windowId, root =>
         {
             var remaining = MaxTreeNodes;
@@ -171,7 +171,7 @@ public sealed class CurrentProcessWindowProvider :
                     return false;
                 }
 
-                ClickOrInvoke(next);
+                if (!ClickOrInvoke(next)) return false;
                 currentScope = next;
                 Thread.Sleep(75);
             }
@@ -192,8 +192,8 @@ public sealed class CurrentProcessWindowProvider :
             "scroll" => Scroll(args),
             "scroll_to_element" => ScrollToElement(args),
             "select_tab" => SelectTab(args),
-            "navigate_back" => NavigateBack(),
-            "dismiss_modal" => DismissModal(),
+            "navigate_back" => SendNavigationKey("navigate_back", args),
+            "dismiss_modal" => SendNavigationKey("dismiss_modal", args),
             "open_deeplink" => OpenDeeplink(args),
             _ => ToolFailure(tool, "unknown_tool", $"Unknown Windows interaction tool: {tool}")
         };
@@ -251,105 +251,78 @@ public sealed class CurrentProcessWindowProvider :
         }) ?? ToolFailure("tap_text", "provider_unavailable", "No active window is available.");
     }
 
-    private static JsonNode TapPoint(JsonObject? args)
+    private JsonNode TapPoint(JsonObject? args)
     {
         var x = Json.ReadDouble(args, "x");
         var y = Json.ReadDouble(args, "y");
-        if (x is null || y is null)
+        if (x is null || y is null || !double.IsFinite(x.Value) || !double.IsFinite(y.Value)
+            || x < int.MinValue || x > int.MaxValue || y < int.MinValue || y > int.MaxValue)
         {
-            return ToolFailure("tap_point", "missing_argument", "x and y are required");
+            return ToolFailure("tap_point", "invalid_argument", "Finite screen coordinates x and y are required");
         }
-
-        Mouse.LeftClick(new Point((int)Math.Round(x.Value), (int)Math.Round(y.Value)));
+        if (!TryResolveWindowHandle(Json.ReadString(args, "window_id"), out var handle))
+            return ToolFailure("tap_point", "window_not_found", "No app window is available");
+        var point = new Point((int)Math.Round(x.Value), (int)Math.Round(y.Value));
+        var hit = NativeMethods.WindowFromPoint(point);
+        NativeMethods.GetWindowThreadProcessId(hit, out var pid);
+        if (pid != (uint)Environment.ProcessId || NativeMethods.GetAncestor(hit, 2) != handle)
+            return ToolFailure("tap_point", "target_outside_window", "The point is not inside the selected app window");
+        Mouse.LeftClick(point);
         return ToolSuccess("tap_point", ("x", x.Value), ("y", y.Value));
     }
 
     private JsonNode TypeText(JsonObject? args)
     {
         var text = Json.ReadString(args, "text");
-        if (text is null)
-        {
-            return ToolFailure("type_text", "missing_argument", "text is required");
-        }
-
-        var elementId = Json.ReadString(args, "element_id");
-        if (!string.IsNullOrWhiteSpace(elementId))
-        {
-            return WithRoot(Json.ReadString(args, "window_id"), root =>
-            {
-                var element = FindElementById(root, elementId!);
-                if (element is null)
-                {
-                    return ToolFailure("type_text", "not_found", $"No element found with id '{elementId}'.");
-                }
-
-                if (SetElementValue(element, text))
-                {
-                    return ToolSuccess("type_text", ("element_id", elementId), ("text", text));
-                }
-
-                ClickOrInvoke(element);
-                Keyboard.Type(text);
-                return ToolSuccess("type_text", ("element_id", elementId), ("text", text));
-            }) ?? ToolFailure("type_text", "provider_unavailable", "No active window is available.");
-        }
-
-        Keyboard.Type(text);
-        return ToolSuccess("type_text", ("text", text));
+        return text is null
+            ? ToolFailure("type_text", "missing_argument", "text is required")
+            : EditText("type_text", args, text);
     }
 
-    private JsonNode ClearText(JsonObject? args)
+    private JsonNode ClearText(JsonObject? args) => EditText("clear_text", args, string.Empty);
+
+    private JsonNode EditText(string tool, JsonObject? args, string text)
     {
-        var elementId = Json.ReadString(args, "element_id");
-        if (!string.IsNullOrWhiteSpace(elementId))
+        return WithRoot(Json.ReadString(args, "window_id"), root =>
         {
-            return WithRoot(Json.ReadString(args, "window_id"), root =>
-            {
-                var element = FindElementById(root, elementId!);
-                if (element is null)
-                {
-                    return ToolFailure("clear_text", "not_found", $"No element found with id '{elementId}'.");
-                }
-
-                if (!SetElementValue(element, string.Empty))
-                {
-                    ClickOrInvoke(element);
-                    Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-                    Keyboard.Press(VirtualKeyShort.DELETE);
-                }
-
-                return ToolSuccess("clear_text", ("element_id", elementId));
-            }) ?? ToolFailure("clear_text", "provider_unavailable", "No active window is available.");
-        }
-
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
-        Keyboard.Press(VirtualKeyShort.DELETE);
-        return ToolSuccess("clear_text");
+            var id = Json.ReadString(args, "element_id");
+            var element = string.IsNullOrWhiteSpace(id)
+                ? EnumerateDescendants(root, true).Select(item => item.Element)
+                    .FirstOrDefault(item => item.Properties.HasKeyboardFocus.ValueOrDefault)
+                : FindElementById(root, id);
+            if (element is null) return ToolFailure(tool, "not_found", "No matching app text field is available");
+            if (!SafeIsEnabled(element)) return ToolFailure(tool, "target_disabled", "The text field is disabled");
+            // A failed ValuePattern must not fall back to global keystrokes: those can
+            // mutate a different app or a read-only control while reporting success.
+            if (!SetElementValue(element, text))
+                return ToolFailure(tool, "target_not_editable", "The target does not expose a writable UI Automation ValuePattern");
+            return ToolSuccess(tool, ("element_id", id), ("text", text), ("value", ElementValue(element)));
+        }) ?? ToolFailure(tool, "window_not_found", "No app window is available");
     }
 
-    private static JsonNode Scroll(JsonObject? args)
+    private JsonNode Scroll(JsonObject? args)
     {
         var direction = Json.ReadString(args, "direction")?.Trim().ToLowerInvariant() ?? "down";
-        var amount = Math.Max(1, Json.ReadInt(args, "amount") ?? 5);
-        switch (direction)
+        if (direction is not ("up" or "down" or "left" or "right"))
+            return ToolFailure("scroll", "invalid_argument", "direction must be up, down, left, or right");
+        var amount = Math.Clamp(Json.ReadInt(args, "amount") ?? 5, 1, 100);
+        return WithRoot(Json.ReadString(args, "window_id"), root =>
         {
-            case "up":
-                Mouse.Scroll(amount);
-                break;
-            case "down":
-                Mouse.Scroll(-amount);
-                break;
-            case "left":
-                Mouse.HorizontalScroll(-amount);
-                break;
-            case "right":
-                Mouse.HorizontalScroll(amount);
-                break;
-            default:
-                return ToolFailure("scroll", "invalid_argument", "direction must be up, down, left, or right");
-        }
-
-        return ToolSuccess("scroll", ("direction", direction), ("amount", amount));
+            var id = Json.ReadString(args, "element_id");
+            var target = id is null ? EnumerateDescendants(root, true).Select(item => item.Element)
+                .FirstOrDefault(item => item.Patterns.Scroll.PatternOrDefault is not null) : FindElementById(root, id);
+            var pattern = target?.Patterns.Scroll.PatternOrDefault;
+            if (pattern is null) return ToolFailure("scroll", "unsupported", "No UI Automation ScrollPattern is available for the target");
+            var horizontal = direction is "left" or "right";
+            var before = horizontal ? pattern.HorizontalScrollPercent.Value : pattern.VerticalScrollPercent.Value;
+            var step = direction is "up" or "left" ? ScrollAmount.SmallDecrement : ScrollAmount.SmallIncrement;
+            for (var i = 0; i < amount; i++)
+                pattern.Scroll(horizontal ? step : ScrollAmount.NoAmount, horizontal ? ScrollAmount.NoAmount : step);
+            var after = horizontal ? pattern.HorizontalScrollPercent.Value : pattern.VerticalScrollPercent.Value;
+            return before != after
+                ? ToolSuccess("scroll", ("direction", direction), ("scrollPercent", after))
+                : ToolFailure("scroll", "not_scrolled", "The target did not scroll (it may be at its boundary)");
+        }) ?? ToolFailure("scroll", "window_not_found", "No app window is available");
     }
 
     private JsonNode ScrollToElement(JsonObject? args)
@@ -368,8 +341,9 @@ public sealed class CurrentProcessWindowProvider :
                 return ToolFailure("scroll_to_element", "not_found", $"No element found with id '{elementId}'.");
             }
 
-            TryScrollIntoView(element);
-            return ToolSuccess("scroll_to_element", ("element_id", elementId));
+            return TryScrollIntoView(element) && !SafeIsOffscreen(element)
+                ? ToolSuccess("scroll_to_element", ("element_id", elementId))
+                : ToolFailure("scroll_to_element", "not_scrolled", "The target could not be brought into view");
         }) ?? ToolFailure("scroll_to_element", "provider_unavailable", "No active window is available.");
     }
 
@@ -399,16 +373,14 @@ public sealed class CurrentProcessWindowProvider :
         }) ?? ToolFailure("select_tab", "provider_unavailable", "No active window is available.");
     }
 
-    private static JsonNode NavigateBack()
+    private JsonNode SendNavigationKey(string tool, JsonObject? args)
     {
-        Keyboard.TypeSimultaneously(VirtualKeyShort.ALT, VirtualKeyShort.LEFT);
-        return ToolSuccess("navigate_back");
-    }
-
-    private static JsonNode DismissModal()
-    {
-        Keyboard.Press(VirtualKeyShort.ESCAPE);
-        return ToolSuccess("dismiss_modal");
+        if (!TryResolveWindowHandle(Json.ReadString(args, "window_id"), out var handle)
+            || NativeMethods.GetForegroundWindow() != handle)
+            return ToolFailure(tool, "window_not_focused", "Focus the app window before sending navigation keys");
+        if (tool == "navigate_back") Keyboard.TypeSimultaneously(VirtualKeyShort.ALT, VirtualKeyShort.LEFT);
+        else Keyboard.Type(VirtualKeyShort.ESCAPE);
+        return ToolSuccess(tool, ("input_sent", true));
     }
 
     private static JsonNode OpenDeeplink(JsonObject? args)
@@ -425,8 +397,13 @@ public sealed class CurrentProcessWindowProvider :
 
     private static bool ClickOrInvoke(UiElement element)
     {
+        if (!SafeIsEnabled(element) || SafeIsOffscreen(element)) return false;
         try
         {
+            var selection = element.Patterns.SelectionItem.PatternOrDefault;
+            if (selection is not null) { selection.Select(); return selection.IsSelected.Value; }
+            var toggle = element.Patterns.Toggle.PatternOrDefault;
+            if (toggle is not null) { toggle.Toggle(); return true; }
             var invoke = element.Patterns.Invoke.PatternOrDefault;
             if (invoke is not null)
             {
@@ -473,7 +450,7 @@ public sealed class CurrentProcessWindowProvider :
             }
 
             pattern.SetValue(value);
-            return true;
+            return pattern.Value.Value == value;
         }
         catch
         {
@@ -493,14 +470,19 @@ public sealed class CurrentProcessWindowProvider :
         }
     }
 
-    private static void TryScrollIntoView(UiElement element)
+    private static bool TryScrollIntoView(UiElement element)
     {
         try
         {
-            element.Patterns.ScrollItem.PatternOrDefault?.ScrollIntoView();
+            if (!SafeIsOffscreen(element)) return true;
+            var pattern = element.Patterns.ScrollItem.PatternOrDefault;
+            if (pattern is null) return false;
+            pattern.ScrollIntoView();
+            return !SafeIsOffscreen(element);
         }
         catch
         {
+            return false;
         }
     }
 
@@ -753,6 +735,10 @@ public sealed class CurrentProcessWindowProvider :
 
     private static string ElementId(UiElement element, int index)
     {
+        // Runtime IDs distinguish repeated AutomationIds and are shared by inventory,
+        // tree, menu and interaction calls, independently of traversal order.
+        var runtimeId = element.Properties.RuntimeId.ValueOrDefault;
+        if (runtimeId is { Length: > 0 }) return "uia:runtime:" + string.Join(".", runtimeId);
         var automationId = SafeAutomationId(element);
         if (!string.IsNullOrWhiteSpace(automationId))
         {
@@ -969,6 +955,12 @@ public sealed class CurrentProcessWindowProvider :
 
         [DllImport("user32.dll")]
         public static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr WindowFromPoint(Point point);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetAncestor(IntPtr handle, uint flags);
 
         [DllImport("user32.dll")]
         public static extern bool SetForegroundWindow(IntPtr hWnd);

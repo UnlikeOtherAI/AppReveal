@@ -3,12 +3,12 @@ use crate::protocol::{handle_request, parse_json_rpc_request, JsonRpcResponse, R
 use crate::registry::ToolRegistry;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 #[cfg(feature = "mdns")]
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -402,6 +402,10 @@ fn handle_connection(
     registry: ToolRegistry,
     config: ServerConfig,
 ) -> std::io::Result<()> {
+    // Winsock inherits the listener's nonblocking mode on accepted sockets.
+    // The HTTP parser uses bounded blocking reads and must wait for later packets.
+    stream.set_nonblocking(false)?;
+    stream.set_write_timeout(Some(config.read_timeout))?;
     let request = match read_http_request(&mut stream, &config) {
         Ok(request) => request,
         Err(error) => {
@@ -814,7 +818,10 @@ fn is_authorized(config: &ServerConfig, request: &HttpRequest) -> bool {
 
 fn read_bearer_token(value: &str) -> Option<&str> {
     let prefix = "bearer ";
-    if value.len() <= prefix.len() || !value[..prefix.len()].eq_ignore_ascii_case(prefix) {
+    if !value
+        .get(..prefix.len())
+        .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+    {
         return None;
     }
 
@@ -898,20 +905,9 @@ fn is_loopback_origin(origin: &str) -> bool {
 
 fn create_session_token() -> String {
     let mut bytes = [0u8; 32];
-    if getrandom::fill(&mut bytes).is_ok() {
-        return hex_encode(&bytes);
-    }
-
-    let fallback = format!(
-        "{}:{}:{:?}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or_default(),
-        thread::current().id()
-    );
-    hex_encode(fallback.as_bytes())
+    // Never substitute predictable process/time data for an authentication token.
+    getrandom::fill(&mut bytes).expect("OS randomness is required for AppReveal session tokens");
+    hex_encode(&bytes)
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -979,7 +975,9 @@ fn read_required_http_line<R: BufRead>(
     eof_message: &'static str,
 ) -> std::result::Result<String, HttpReadError> {
     let mut line = Vec::new();
-    let bytes_read = reader.read_until(b'\n', &mut line)?;
+    let bytes_read = reader
+        .take((MAX_HTTP_LINE_SIZE + 1) as u64)
+        .read_until(b'\n', &mut line)?;
     if bytes_read == 0 {
         return Err(HttpReadError::BadRequest(eof_message.to_string()));
     }
@@ -1324,6 +1322,43 @@ mod tests {
         assert!(rejected.starts_with("HTTP/1.1 401 Unauthorized"));
         assert!(accepted_with_header.starts_with("HTTP/1.1 200 OK"));
         assert!(accepted_with_query.starts_with("HTTP/1.1 200 OK"));
+    }
+
+    #[test]
+    fn server_waits_for_fragmented_authenticated_body() {
+        let mut app = AppReveal::new();
+        let addr = app
+            .start(ServerConfig::default().with_session_token("test-token"))
+            .unwrap();
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(stream, "POST / HTTP/1.1\r\nhost: {addr}\r\nx-appreveal-session: test-token\r\ncontent-length: {}\r\n\r\n", body.len()).unwrap();
+        // HTTP clients can send headers and body in separate TCP packets.
+        std::thread::sleep(Duration::from_millis(100));
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+    }
+
+    #[test]
+    fn unicode_authorization_cannot_panic_and_valid_request_recovers() {
+        let mut app = AppReveal::new();
+        let addr = app
+            .start(ServerConfig::default().with_session_token("test-token"))
+            .unwrap();
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+        let response = send_raw(addr, &format!("POST / HTTP/1.1\r\nhost: {addr}\r\nauthorization: aaaaaa🦕\r\ncontent-length: {}\r\n\r\n{body}", body.len()));
+        assert!(response.starts_with("HTTP/1.1 401"));
+        assert!(post_json_with_session(addr, "test-token", body).starts_with("HTTP/1.1 200"));
+    }
+
+    #[test]
+    fn http_line_reader_is_bounded_before_allocation() {
+        let mut reader = std::io::Cursor::new(vec![b'x'; MAX_HTTP_LINE_SIZE * 3]);
+        assert!(read_required_http_line(&mut reader, "eof").is_err());
+        assert_eq!(reader.position(), (MAX_HTTP_LINE_SIZE + 1) as u64);
     }
 
     fn insecure_config() -> ServerConfig {

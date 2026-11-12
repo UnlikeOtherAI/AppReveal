@@ -199,7 +199,8 @@ impl ProviderRegistry {
 
     pub fn network_calls(&self, query: NetworkQuery) -> Value {
         let limit = query.limit;
-        self.network_provider()
+        let mut result = self
+            .network_provider()
             .map(|provider| provider(query))
             .unwrap_or_else(|| {
                 json!({
@@ -207,7 +208,32 @@ impl ProviderRegistry {
                     "count": 0,
                     "limit": limit
                 })
-            })
+            });
+        if let Some(calls) = result.get_mut("calls").and_then(Value::as_array_mut) {
+            calls.truncate(limit);
+            for call in calls {
+                for key in [
+                    "requestHeaders",
+                    "responseHeaders",
+                    "request_headers",
+                    "response_headers",
+                ] {
+                    if let Some(headers) = call.get_mut(key).and_then(Value::as_object_mut) {
+                        for (name, value) in headers {
+                            if sensitive_header(name) {
+                                *value = json!("[REDACTED]");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if result.get("count").is_some() {
+            if let Some(count) = result.get("calls").and_then(Value::as_array).map(Vec::len) {
+                result["count"] = json!(count);
+            }
+        }
+        result
     }
 
     fn value_from<F>(&self, pick: F) -> Option<Value>
@@ -253,6 +279,17 @@ impl ProviderRegistry {
     }
 }
 
+fn sensitive_header(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    matches!(
+        name.as_str(),
+        "authorization" | "proxy-authorization" | "cookie" | "set-cookie" | "api-key" | "x-api-key"
+    ) || name.contains("token")
+        || name.contains("secret")
+        || name.contains("session")
+        || name.ends_with("-key")
+}
+
 pub(crate) fn default_launch_context() -> Value {
     let app_name = current_executable_name();
     windows_launch_context(
@@ -272,7 +309,7 @@ pub(crate) fn default_device_info() -> Value {
     let device_name = default_device_name();
 
     json!({
-        "platform": "Windows",
+        "platform": platform_name(),
         "frameworkType": "tauri",
         "bundleId": launch_context["bundleId"].clone(),
         "applicationId": launch_context["applicationId"].clone(),
@@ -283,8 +320,8 @@ pub(crate) fn default_device_info() -> Value {
         "build": launch_context["build"].clone(),
         "versionCode": launch_context["versionCode"].clone(),
         "deviceName": device_name,
-        "deviceModel": "Windows PC",
-        "systemName": "Windows",
+        "deviceModel": desktop_model_name(),
+        "systemName": platform_name(),
         "systemVersion": std::env::consts::OS,
         "processName": process_name,
         "processId": process_id,
@@ -298,16 +335,34 @@ pub(crate) fn default_device_info() -> Value {
                 .unwrap_or_else(|| "unknown".to_string())
         },
         "os": {
-            "platform": "Windows",
+            "platform": platform_name(),
             "family": std::env::consts::FAMILY,
             "name": std::env::consts::OS,
             "arch": std::env::consts::ARCH
         },
         "device": {
             "name": device_name,
-            "model": "Windows PC"
+            "model": desktop_model_name()
         }
     })
+}
+
+pub(crate) fn platform_name() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "macOS",
+        "windows" => "Windows",
+        "linux" => "Linux",
+        value => value,
+    }
+}
+
+pub(crate) fn desktop_model_name() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "Mac",
+        "windows" => "Windows PC",
+        "linux" => "Linux PC",
+        _ => "Desktop",
+    }
 }
 
 pub(crate) fn default_device_name() -> String {
@@ -350,11 +405,11 @@ pub(crate) fn windows_launch_context(
         "versionName": version,
         "build": build,
         "versionCode": 0,
-        "platform": "Windows",
+        "platform": platform_name(),
         "frameworkType": framework_type,
-        "systemName": "Windows",
+        "systemName": platform_name(),
         "systemVersion": std::env::consts::OS,
-        "deviceModel": "Windows PC",
+        "deviceModel": desktop_model_name(),
         "deviceName": default_device_name(),
         "processName": process_name,
         "processId": std::process::id()
@@ -366,10 +421,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn network_headers_are_redacted_without_mutating_the_provider_snapshot() {
+        let providers = ProviderRegistry::new();
+        let source = json!({"count":1,"calls":[{"requestHeaders":{"Authorization":"private", "X-Session-Key":"private", "Accept":"application/json"},"responseHeaders":{"Set-Cookie":"private"}}]});
+        let snapshot = source.clone();
+        providers.set_network_provider(move |_| snapshot.clone());
+        let result = providers.network_calls(NetworkQuery { limit: 1 });
+        assert_eq!(
+            result["calls"][0]["requestHeaders"]["Authorization"],
+            "[REDACTED]"
+        );
+        assert_eq!(
+            result["calls"][0]["requestHeaders"]["X-Session-Key"],
+            "[REDACTED]"
+        );
+        assert_eq!(
+            result["calls"][0]["responseHeaders"]["Set-Cookie"],
+            "[REDACTED]"
+        );
+        assert_eq!(
+            result["calls"][0]["requestHeaders"]["Accept"],
+            "application/json"
+        );
+        assert_eq!(
+            source["calls"][0]["requestHeaders"]["Authorization"],
+            "private"
+        );
+        assert_eq!(
+            providers.network_calls(NetworkQuery { limit: 0 })["count"],
+            0
+        );
+        assert!(providers.network_calls(NetworkQuery { limit: 0 })["calls"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
     fn launch_context_exposes_normalized_windows_keys() {
         let context = default_launch_context();
 
-        assert_eq!(context["platform"], "Windows");
+        assert_eq!(context["platform"], platform_name());
         assert_eq!(context["frameworkType"], "tauri");
         assert!(context["bundleId"].is_string());
         assert_eq!(context["applicationId"], context["bundleId"]);
@@ -381,7 +473,7 @@ mod tests {
     fn device_info_repeats_discovery_summary_at_top_level() {
         let info = default_device_info();
 
-        assert_eq!(info["platform"], "Windows");
+        assert_eq!(info["platform"], platform_name());
         assert_eq!(info["frameworkType"], "tauri");
         assert_eq!(info["bundleId"], info["app"]["bundleId"]);
         assert_eq!(info["appName"], info["app"]["appName"]);

@@ -37,3 +37,24 @@ Known limits:
   extension points.
 - DOM tools operate on Tauri WebViews through JavaScript evaluation and require
   the target page to allow normal in-page DOM event dispatch.
+
+Interaction contracts:
+
+- DOM IDs identify a node for the lifetime of its document and survive insertion
+  or reordering of other nodes. Refresh the inventory after page navigation.
+- `tap_text` treats its argument as literal accessible text, not a CSS selector.
+  Element targeting supports `id`, `elementId`, `element_id`, or `selector`.
+- Disabled, hidden, obscured and read-only controls return tool errors. Typing
+  inserts at the input selection when available; selecting uses an exact option
+  value. Password values are excluded from the inventory.
+- `tap_point` takes logical screen coordinates from `get_elements.rect` and
+  rejects points outside the WebView. It does not guess that an out-of-window
+  screen point was intended as a local point.
+- DOM events are synthetic (`isTrusted == false`); apps requiring trusted events,
+  closed shadow roots or cross-origin frames need host-specific tooling.
+- Neither `scroll` nor WebView navigation/history, evaluation, screenshots or
+  native menu activation is advertised by the generic Tauri bridge. These remain
+  host-extension gaps rather than successful no-ops.
+- Both returned failures and handler exceptions are MCP tool errors. Invalid
+  parameters remain JSON-RPC `-32602`. Batch recursion and more than 100 actions
+  are rejected, and `stop_on_error` honors returned DOM/provider failures.
